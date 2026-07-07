@@ -777,3 +777,83 @@ function setGlobalAcademicPeriodBySuperAdmin(tahun, semester) {
   logAudit('SET_GLOBAL_TAHUN_SA', getLoginEmail(), tahun + ' | ' + semester);
   return res;
 }
+
+function syncAllUsersAcademicPeriodToDefault(tahun, semester, onlyActive) {
+  ensureAcademicSchema_();
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+
+  let targetTahun = String(tahun || '').trim();
+  let targetSemester = String(semester || '').trim();
+  const activeOnly = onlyActive !== false;
+
+  if (!targetTahun || !targetSemester) {
+    const g = getGlobalAcademicPeriod_();
+    targetTahun = targetTahun || String((g && g.tahun_pelajaran) || '').trim();
+    targetSemester = targetSemester || String((g && g.semester) || '').trim();
+  }
+  if (!targetTahun || !targetSemester) throw new Error('Periode target tidak valid');
+
+  ensureAcademicYearExists_(targetTahun, targetSemester, false);
+
+  const shSet = sheet('SETTING');
+  const shUsers = sheet('USERS');
+  if (!shSet || shSet.getLastRow() < 2) throw new Error('Sheet SETTING belum memiliki data');
+
+  const users = shUsers ? shUsers.getDataRange().getValues() : [];
+  const userStatus = {};
+  for (let i = 1; i < users.length; i++) {
+    const em = String(users[i][0] || '').toLowerCase().trim();
+    if (!em) continue;
+    userStatus[em] = String(users[i][2] || 'inactive').toLowerCase().trim();
+  }
+
+  const rows = shSet.getDataRange().getValues();
+  const h = rows[0].map(function(x) { return String(x || '').toLowerCase().trim(); });
+  const iEmail = h.indexOf('email');
+  const iTa = h.indexOf('tahun_pelajaran_aktif');
+  const iSem = h.indexOf('semester_aktif');
+  if (iEmail === -1 || iTa === -1 || iSem === -1) throw new Error('Kolom SETTING belum lengkap');
+
+  let updated = 0;
+  let skippedInactive = 0;
+  let skippedNoEmail = 0;
+  const actor = getLoginEmail();
+
+  for (let i = 1; i < rows.length; i++) {
+    const email = String(rows[i][iEmail] || '').toLowerCase().trim();
+    if (!email) {
+      skippedNoEmail++;
+      continue;
+    }
+    if (activeOnly && userStatus[email] && userStatus[email] !== 'active') {
+      skippedInactive++;
+      continue;
+    }
+
+    const currTa = String(rows[i][iTa] || '').trim();
+    const currSem = String(rows[i][iSem] || '').trim();
+    if (currTa === targetTahun && currSem.toLowerCase() === targetSemester.toLowerCase()) continue;
+
+    shSet.getRange(i + 1, iTa + 1).setValue(targetTahun);
+    shSet.getRange(i + 1, iSem + 1).setValue(targetSemester);
+    updated++;
+  }
+
+  invalidateCache_('SETTING');
+  invalidateDashboardCache_();
+  logAudit('SYNC_USER_PERIODE_DEFAULT', actor,
+    'target=' + targetTahun + '|' + targetSemester +
+    ' updated=' + updated +
+    ' skipped_inactive=' + skippedInactive +
+    ' skipped_no_email=' + skippedNoEmail +
+    ' active_only=' + activeOnly);
+
+  return {
+    success: true,
+    target: { tahun_pelajaran: targetTahun, semester: targetSemester },
+    updated: updated,
+    skipped_inactive: skippedInactive,
+    skipped_no_email: skippedNoEmail,
+    active_only: activeOnly
+  };
+}

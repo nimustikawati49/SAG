@@ -95,6 +95,55 @@ function saveGlobalAcademicPeriodUI() {
     .setGlobalAcademicPeriodBySuperAdmin(tahun, semester);
 }
 
+function _confirmBulkSyncAcademic_(tahun, semester, activeOnly) {
+  const msg = 'Sinkronkan semua guru ke periode ' + tahun + ' | ' + semester + '?';
+  const detail = activeOnly
+    ? 'Hanya user status active yang akan diperbarui.'
+    : 'Semua user pada sheet SETTING akan diperbarui.';
+
+  if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
+    return Swal.fire({
+      title: 'Set Default Semua Guru?',
+      html: '<div style="font-size:13px">' + msg + '<br><span style="color:#6b7280">' + detail + '</span></div>',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Sinkronkan',
+      cancelButtonText: 'Batal'
+    }).then(function(res){ return !!res.isConfirmed; });
+  }
+  return Promise.resolve(confirm(msg + '\n' + detail));
+}
+
+function syncAllUsersAcademicPeriodUI() {
+  const tahun = (document.getElementById('saGlobalTahun') || {}).value || '';
+  const semester = (document.getElementById('saGlobalSemester') || {}).value || '';
+  const activeOnly = !!((document.getElementById('saSyncActiveOnly') || {}).checked);
+
+  if (!tahun || !semester) {
+    if (typeof showToast === 'function') showToast('⚠️ Pilih periode global terlebih dahulu', 'warning');
+    else alert('Pilih periode global terlebih dahulu');
+    return;
+  }
+
+  _confirmBulkSyncAcademic_(tahun, semester, activeOnly).then(function(ok){
+    if (!ok) return;
+    google.script.run
+      .withSuccessHandler(function(res){
+        const info = '✅ Sinkron selesai. Updated: ' + (res.updated || 0) +
+          ', Skip Inactive: ' + (res.skipped_inactive || 0) +
+          ', Skip No Email: ' + (res.skipped_no_email || 0);
+        if (typeof showToast === 'function') showToast(info, 'success', 7000);
+        else alert(info);
+        loadAcademicGlobalPanel();
+      })
+      .withFailureHandler(function(err){
+        if (typeof showToast === 'function') showToast('❌ ' + (err.message || err), 'error');
+        else alert('❌ ' + (err.message || err));
+      })
+      .syncAllUsersAcademicPeriodToDefault(tahun, semester, activeOnly);
+  });
+}
+
 function renderGuruPeriodTable_(rows) {
   const body = document.getElementById('saGuruPeriodBody');
   if (!body) return;
