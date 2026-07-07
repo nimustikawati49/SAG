@@ -1,0 +1,8 @@
+.claspignore
+.clasp.json
+README.md
+node_modules/**
+.git/**
+*.md
+__*.js
+watch.ps1

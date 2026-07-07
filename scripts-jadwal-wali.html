@@ -1,0 +1,1280 @@
+<script>
+/**
+ * Render jadwal mengajar – modern, responsive, minimalis.
+ * Layout: kolom per hari, scroll horizontal di mobile, fill di desktop.
+ * Tidak ada JS branching mobile/desktop – murni CSS responsive.
+ */
+function _renderJadwalGrid_(obj, container){
+  try { window._lastJadwalData = obj; } catch(e){}
+  try { _scheduleJadwalNotif_(obj); } catch(e){}
+
+  var semuaHari = ['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
+  var hariAktif = semuaHari.filter(function(h){ return obj && obj[h] && obj[h].length > 0; });
+
+  /* ── Empty state ─────────────────────────────────── */
+  if(!hariAktif.length){
+    container.innerHTML =
+      '<div style="text-align:center;padding:32px 16px">' +
+        '<div style="font-size:38px;margin-bottom:10px">📭</div>' +
+        '<p style="color:#6b7280;font-size:13px;margin:0 0 16px">Belum ada jadwal untuk semester ini.</p>' +
+        '<button onclick="showTab(\'setting\');setTimeout(function(){' +
+          'var el=document.getElementById(\'settingJadwalSection\');' +
+          'if(el)el.scrollIntoView({behavior:\'smooth\'})},300)" ' +
+          'style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;' +
+          'border-radius:10px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;' +
+          'box-shadow:0 4px 14px rgba(99,102,241,.35)">➕ Tambah Jadwal</button>' +
+      '</div>';
+    return;
+  }
+
+  /* ── Inject styles once ─────────────────────────── */
+  if(!document.getElementById('jwCss')){
+    var _s = document.createElement('style');
+    _s.id = 'jwCss';
+    _s.textContent =
+      '@keyframes jwPulse{0%,100%{box-shadow:0 4px 16px rgba(99,102,241,.35)}50%{box-shadow:0 8px 28px rgba(99,102,241,.55)}}' +
+      '@keyframes jwDot{0%,100%{opacity:1}50%{opacity:.3}}' +
+      /* wrapper: horizontal scroll on mobile, natural on desktop */
+      '.jw-wrap{display:flex;gap:0;overflow-x:auto;overflow-y:visible;' +
+        'overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;' +
+        'scroll-snap-type:x mandatory;' +
+        'border-radius:14px;border:1px solid #e5e7eb;background:#fff}' +
+      '.jw-wrap::-webkit-scrollbar{height:3px}' +
+      '.jw-wrap::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:99px}' +
+      /* each day column – fixed width on mobile, grow on desktop */
+      '.jw-col{flex:0 0 148px;scroll-snap-align:start;display:flex;flex-direction:column;border-right:1px solid #f0f0f0;min-width:0}' +
+      '.jw-col:last-child{border-right:none}' +
+      '.jw-col.jw-today{background:linear-gradient(180deg,#f5f3ff 0%,#fff 60%)}' +
+      /* day header */
+      '.jw-head{padding:9px 8px;text-align:center;border-bottom:1px solid #f0f0f0}' +
+      '.jw-col.jw-today .jw-head{background:linear-gradient(135deg,#6366f1,#818cf8);border-bottom:none}' +
+      '.jw-head-day{font-size:12px;font-weight:800;letter-spacing:.5px;color:#6b7280}' +
+      '.jw-col.jw-today .jw-head-day{color:#fff}' +
+      '.jw-head-date{font-size:10px;color:rgba(255,255,255,.8);margin-top:2px}' +
+      /* slots */
+      '.jw-slots{padding:8px 6px;display:flex;flex-direction:column;gap:6px;flex:1}' +
+      '.jw-slot{border-radius:9px;padding:9px 9px;cursor:default;transition:transform .12s}' +
+      '.jw-slot:active{transform:scale(.96)}' +
+      '.jw-slot-kelas{font-weight:700;font-size:12px}' +
+      '.jw-slot-mapel{font-size:11px;margin-top:2px}' +
+      '.jw-slot-time{font-size:10px;margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}' +
+      '.jw-now-badge{padding:1px 6px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.3px;background:rgba(255,255,255,.22)}' +
+      '.jw-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#fff;animation:jwDot 1.2s infinite;flex-shrink:0}' +
+      /* desktop: columns grow to fill */
+      '@media(min-width:540px){.jw-col{flex:1}}' +
+      /* dark mode */
+      'body.dark .jw-wrap{background:#1f2937;border-color:#374151}' +
+      'body.dark .jw-col{border-color:#374151}' +
+      'body.dark .jw-col.jw-today{background:linear-gradient(180deg,#312e81 0%,#1f2937 60%)}' +
+      'body.dark .jw-head{border-color:#374151}' +
+      'body.dark .jw-head-day{color:#9ca3af}' +
+      'body.dark .jw-slot-mapel{color:#9ca3af!important}' +
+      'body.dark .jw-slot-time{color:#6b7280!important}';
+    document.head.appendChild(_s);
+  }
+
+  /* ── Helpers ────────────────────────────────────── */
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function _pad(n){ return n<10?'0'+n:''+n; }
+
+  var now        = new Date();
+  var _hMap      = {1:'SENIN',2:'SELASA',3:'RABU',4:'KAMIS',5:'JUMAT',6:'SABTU'};
+  var hariIni    = _hMap[now.getDay()] || null;
+  var curMin     = now.getHours()*60 + now.getMinutes();
+  var todayDate  = _pad(now.getDate())+'/'+_pad(now.getMonth()+1);
+  var _abbr      = {SENIN:'Senin',SELASA:'Selasa',RABU:'Rabu',KAMIS:'Kamis',JUMAT:'Jumat',SABTU:'Sabtu'};
+
+  var palette = [
+    {bg:'#6366f1',light:'#ede9fe',text:'#4338ca'},
+    {bg:'#0ea5e9',light:'#e0f2fe',text:'#0369a1'},
+    {bg:'#10b981',light:'#d1fae5',text:'#065f46'},
+    {bg:'#f59e0b',light:'#fef3c7',text:'#92400e'},
+    {bg:'#ef4444',light:'#fee2e2',text:'#991b1b'},
+    {bg:'#a855f7',light:'#f3e8ff',text:'#6b21a8'},
+    {bg:'#ec4899',light:'#fce7f3',text:'#9d174d'},
+    {bg:'#14b8a6',light:'#ccfbf1',text:'#134e4a'}
+  ];
+  var clrMap = {}, ci = 0;
+  hariAktif.forEach(function(h){
+    (obj[h]||[]).forEach(function(item){
+      if(!clrMap[item.mapel]) clrMap[item.mapel] = palette[ci++ % palette.length];
+    });
+  });
+
+  /* ── Build HTML ─────────────────────────────────── */
+  var html = '<div class="jw-wrap" id="jwWrap">';
+
+  hariAktif.forEach(function(h, hi){
+    var isToday = (h === hariIni);
+    html += '<div class="jw-col'+(isToday?' jw-today':'')+'" data-hari="'+h+'">';
+
+    /* header */
+    html += '<div class="jw-head">' +
+      '<div class="jw-head-day">'+_abbr[h]+'</div>' +
+      (isToday ? '<div class="jw-head-date">'+todayDate+'</div>' : '') +
+    '</div>';
+
+    /* slots */
+    html += '<div class="jw-slots">';
+    (obj[h]||[]).forEach(function(item){
+      var sMin=0, eMin=1440;
+      try{
+        var sp=item.jam_mulai.split(':'); sMin=Number(sp[0])*60+Number(sp[1]);
+        var ep=item.jam_selesai.split(':'); eMin=Number(ep[0])*60+Number(ep[1]);
+      }catch(e){}
+      var isNow = isToday && curMin>=sMin && curMin<=eMin;
+      var clr   = clrMap[item.mapel] || palette[0];
+
+      var slotBg, kelasClr, mapelClr, timeClr;
+      if(isNow){
+        slotBg   = 'background:'+clr.bg+';animation:jwPulse 2s ease-in-out infinite;';
+        kelasClr = 'color:#fff;';
+        mapelClr = 'color:rgba(255,255,255,.85);';
+        timeClr  = 'color:rgba(255,255,255,.7);';
+      } else {
+        slotBg   = 'background:'+clr.light+';border-left:3px solid '+clr.bg+';';
+        kelasClr = 'color:'+clr.text+';';
+        mapelClr = 'color:#6b7280;';
+        timeClr  = 'color:#9ca3af;';
+      }
+
+      html += '<div class="jw-slot" style="'+slotBg+'">' +
+        '<div class="jw-slot-kelas" style="'+kelasClr+'">'+_esc(item.kelas)+'</div>' +
+        '<div class="jw-slot-mapel" style="'+mapelClr+'">'+_esc(item.mapel)+'</div>' +
+        '<div class="jw-slot-time" style="'+timeClr+'">' +
+          (isNow
+            ? '<span class="jw-dot"></span>'+_esc(item.jam_mulai)+'&#8211;'+_esc(item.jam_selesai)+
+              ' <span class="jw-now-badge">SEKARANG</span>'
+            : _esc(item.jam_mulai)+'&#8211;'+_esc(item.jam_selesai)
+          ) +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div></div>'; /* .jw-slots / .jw-col */
+  });
+
+  html += '</div>'; /* .jw-wrap */
+  container.innerHTML = html;
+
+  /* Scroll hari ini ke tengah pada mobile */
+  setTimeout(function(){
+    var wrap    = document.getElementById('jwWrap');
+    var todayEl = wrap && wrap.querySelector('.jw-col.jw-today');
+    if(todayEl && wrap) todayEl.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+  }, 80);
+}
+
+function loadJadwalMengajar(){
+  // Fungsi ini dipanggil setelah save jadwal untuk refresh dashboard
+  // Tidak dipakai saat init — jadwal sudah bundled di getDashboardAllData()
+  var container = document.getElementById('jadwalGridContainer');
+  if(!container) return;
+  container.innerHTML = '<p class="muted">⏳ Memuat ulang jadwal...</p>';
+  google.script.run
+    .withSuccessHandler(function(allData){
+      if(!allData) return;
+      var obj = allData.jadwal || {};
+      _renderJadwalGrid_(obj, container);
+    })
+    .withFailureHandler(function(err){
+      console.error('[JADWAL] reload failed:', err);
+      container.innerHTML = '<p class="muted" style="color:#ef4444">\u274C Gagal muat ulang jadwal: '+(err&&err.message?err.message:'Refresh halaman')+'</p>';
+    })
+    .getDashboardAllData();
+}
+
+/**
+ * Dedicated jadwal loader — calls getDashboardJadwal() directly.
+ * Called from showTab('dashboard') so jadwal always renders independently.
+ */
+function loadJadwalDashboard_(){
+  var container = document.getElementById('jadwalGridContainer');
+  if(!container) return;
+  // Only show loading if still showing placeholder
+  if(container.innerHTML.indexOf('Memuat jadwal') !== -1){
+    container.innerHTML = '<p class="muted">\u23F3 Memuat jadwal...</p>';
+  }
+
+  // Safety timeout: jika 15 detik belum ada response, tampilkan pesan & tombol reload
+  var _jwTimer = setTimeout(function(){
+    var c3 = document.getElementById('jadwalGridContainer');
+    if(c3 && c3.innerHTML.indexOf('Memuat jadwal') !== -1){
+      c3.innerHTML =
+        '<div style="text-align:center;padding:20px 10px">' +
+          '<div style="font-size:28px;margin-bottom:8px">⏱️</div>' +
+          '<p style="color:#6b7280;font-size:13px;margin:0 0 12px">Server lambat merespons.</p>' +
+          '<button onclick="loadJadwalDashboard_()" style="background:#6366f1;color:#fff;border:none;' +
+            'border-radius:8px;padding:8px 18px;font-size:13px;cursor:pointer">🔄 Coba Lagi</button>' +
+        '</div>';
+    }
+  }, 15000);
+
+  google.script.run
+    .withSuccessHandler(function(obj){
+      clearTimeout(_jwTimer);
+      var c2 = document.getElementById('jadwalGridContainer');
+      if(!obj || obj._error) {
+        console.warn('[JADWAL] getDashboardJadwal error:', obj && obj._error);
+        if(c2) c2.innerHTML =
+          '<div style="text-align:center;padding:20px 10px">' +
+            '<div style="font-size:32px;margin-bottom:8px">📭</div>' +
+            '<p style="color:#6b7280;font-size:13px;margin:0 0 12px">Belum ada jadwal untuk semester ini.</p>' +
+            '<button onclick="showTab(\'setting\')" style="background:#6366f1;color:#fff;border:none;' +
+              'border-radius:8px;padding:8px 18px;font-size:13px;cursor:pointer">➕ Tambah Jadwal</button>' +
+          '</div>';
+        return;
+      }
+      if(!c2) return;
+      try {
+        _renderJadwalGrid_(obj, c2);
+      } catch(renderErr) {
+        console.error('[JADWAL] _renderJadwalGrid_ threw:', renderErr);
+        c2.innerHTML =
+          '<div style="text-align:center;padding:16px">' +
+            '<p style="color:#ef4444;font-size:13px;margin:0 0 8px">⚠️ Gagal render jadwal: ' +
+              (renderErr && renderErr.message ? renderErr.message : 'JS Error') + '</p>' +
+            '<button onclick="loadJadwalDashboard_()" style="background:#6366f1;color:#fff;border:none;' +
+              'border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer">🔄 Coba Lagi</button>' +
+          '</div>';
+      }
+    })
+    .withFailureHandler(function(err){
+      clearTimeout(_jwTimer);
+      console.error('[JADWAL] getDashboardJadwal failed:', err && err.message);
+      var c2 = document.getElementById('jadwalGridContainer');
+      if(c2) c2.innerHTML =
+        '<div style="text-align:center;padding:16px">' +
+          '<p style="color:#ef4444;font-size:13px;margin:0 0 8px">⚠️ ' +
+            (err && err.message ? err.message : 'Gagal memuat jadwal') + '</p>' +
+          '<button onclick="loadJadwalDashboard_()" style="background:#6366f1;color:#fff;border:none;' +
+            'border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer">🔄 Coba Lagi</button>' +
+        '</div>';
+    })
+    .getDashboardJadwal();
+}
+
+function saveJadwalUI(){
+
+  const btn = document.querySelector('#setting button.btn.btn-primary');
+
+  const data = {
+    hari: jadwal_hari.value,
+    kelas: jadwal_kelas.value.trim(),
+    mapel: jadwal_mapel.value.trim(),
+    jam_mulai: jadwal_mulai.value,
+    jam_selesai: jadwal_selesai.value
+  };
+
+  if(!data.kelas || !data.mapel || !data.jam_mulai || !data.jam_selesai){
+    showToast('⚠️ Lengkapi semua field jadwal (kelas, mapel, jam mulai, jam selesai)', 'warning');
+    return;
+  }
+
+  // 🔒 disable tombol + animasi loading
+  if(btn){
+    btn.disabled = true;
+    btn.classList.add("btn-saving");
+    btn.innerText = "⏳ Menyimpan...";
+  }
+
+  startProgress(); // ✅ aktifkan progress bar
+
+  google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      if(btn){
+        btn.disabled = false;
+        btn.classList.remove("btn-saving");
+        btn.innerText = "💾 Simpan Jadwal";
+      }
+      showToast('❌ Gagal simpan jadwal: ' + err.message, 'error');
+    })
+    .withSuccessHandler(res=>{
+
+      if(res.bentrok){
+        endProgress();
+        if(btn){
+          btn.disabled = false;
+          btn.classList.remove("btn-saving");
+          btn.innerText = "💾 Simpan Jadwal";
+        }
+
+        showToast('⚠️ Jadwal bentrok dengan: ' + res.konflik.kelas + ' (' + res.konflik.jam + ')', 'warning', 6000);
+        return;
+      }
+
+      google.script.run
+        .withFailureHandler(err=>{
+          endProgress();
+          if(btn){
+            btn.disabled = false;
+            btn.classList.remove("btn-saving");
+            btn.innerText = "💾 Simpan Jadwal";
+          }
+          showToast('❌ Gagal simpan jadwal: ' + err.message, 'error');
+        })
+        .withSuccessHandler(()=>{
+
+          endProgress(); // ✅ progress selesai
+
+          // 🎉 ANIMASI SUKSES
+          const list = document.getElementById("jadwalList");
+          if(list){
+            list.classList.add("save-success");
+            setTimeout(()=>{
+              list.classList.remove("save-success");
+            },600);
+          }
+
+          // 🔄 reset form
+          jadwal_kelas.value = '';
+          jadwal_mapel.value = '';
+          jadwal_mulai.value = '';
+          jadwal_selesai.value = '';
+
+          // 🔄 reload data
+          loadJadwalSetting();
+          loadJadwalMengajar();
+
+          // 🔓 aktifkan tombol kembali
+          if(btn){
+            btn.disabled = false;
+            btn.classList.remove("btn-saving");
+            btn.innerText = "💾 Simpan Jadwal";
+          }
+
+        })
+        .saveJadwalSemester(data);
+
+    })
+    .previewBentrokJadwal(data);
+}
+function loadJadwalSetting(){
+
+  google.script.run
+    .withSuccessHandler(data=>{
+
+      if(!data || data.length === 0){
+        document.getElementById("jadwalList").innerHTML =
+          '<p class="muted">📭 Belum ada jadwal.</p>';
+        return;
+      }
+
+      let html = `
+        <table class="jadwal-table">
+          <tr>
+            <th>Hari</th>
+            <th>Kelas</th>
+            <th>Mapel</th>
+            <th>Jam</th>
+            <th>Aksi</th>
+          </tr>
+      `;
+
+      data.forEach(j=>{
+
+        html += `
+          <tr id="row-${j.row}">
+            <td>${j.hari}</td>
+            <td>${j.kelas}</td>
+            <td>${j.mapel}</td>
+            <td>${j.jam_mulai} - ${j.jam_selesai}</td>
+            <td>
+              <button onclick="editInline(${j.row})">✏️</button>
+              <button onclick="deleteJadwalAdvanced(${j.row})">🗑️</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += "</table>";
+
+      document.getElementById("jadwalList").innerHTML = html;
+
+    })
+    .getJadwalForSetting();
+}
+
+function editInline(row){
+
+  const tr = document.getElementById("row-"+row);
+  tr.classList.add("jadwal-editing");
+
+  const hari  = tr.children[0].innerText;
+  const kelas = tr.children[1].innerText;
+  const mapel = tr.children[2].innerText;
+  const jam   = tr.children[3].innerText.split(" - ");
+
+  tr.innerHTML = `
+    <td>
+      <select id="edit_hari_${row}">
+        ${['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU']
+          .map(h=>`<option ${h===hari?'selected':''}>${h}</option>`)
+          .join('')}
+      </select>
+    </td>
+
+    <td><input id="edit_kelas_${row}" value="${kelas}"></td>
+    <td><input id="edit_mapel_${row}" value="${mapel}"></td>
+
+    <td>
+      <input type="time" id="edit_mulai_${row}" value="${jam[0]}">
+      -
+      <input type="time" id="edit_selesai_${row}" value="${jam[1]}">
+    </td>
+
+    <td>
+      <button id="btnSave_${row}" onclick="saveInlineAdvanced(${row})">✔️</button>
+      <button onclick="loadJadwalSetting()">✖️</button>
+    </td>
+  `;
+}
+
+function saveInlineAdvanced(row){
+
+  const tr = document.getElementById("row-"+row);
+  const btn = document.getElementById("btnSave_"+row);
+
+  btn.classList.add("btn-saving");
+
+  const data = {
+    hari: document.getElementById("edit_hari_"+row).value,
+    kelas: document.getElementById("edit_kelas_"+row).value,
+    mapel: document.getElementById("edit_mapel_"+row).value,
+    jam_mulai: document.getElementById("edit_mulai_"+row).value,
+    jam_selesai: document.getElementById("edit_selesai_"+row).value
+  };
+
+  google.script.run
+    .withSuccessHandler(()=>{
+
+      tr.classList.remove("jadwal-editing");
+      tr.classList.add("save-success");
+
+      setTimeout(()=>{
+        loadJadwalSetting();
+        loadJadwalMengajar();
+      },400);
+
+    })
+    .withFailureHandler(err=>{
+      alert("⚠ " + err.message);
+      btn.classList.remove("btn-saving");
+    })
+    .updateJadwalSemester(row,data);
+}
+
+function checkInlineConflict(row){
+
+  const hari  = document.getElementById("edit_hari_"+row).value;
+  const mulai = document.getElementById("edit_mulai_"+row).value;
+  const selesai = document.getElementById("edit_selesai_"+row).value;
+
+  if(!mulai || !selesai) return;
+
+  const toMin = t=>{
+    const [h,m] = t.split(':').map(Number);
+    return h*60 + m;
+  };
+
+  const startNew = toMin(mulai);
+  const endNew   = toMin(selesai);
+
+  document.querySelectorAll("#jadwalList tr").forEach(tr=>{
+
+    if(!tr.id || tr.id === "row-"+row) return;
+
+    const cols = tr.children;
+    if(!cols[0]) return;
+
+    const hariOld = cols[0].innerText;
+    if(hariOld !== hari) return;
+
+    const jamText = cols[3]?.innerText;
+    if(!jamText) return;
+
+    const jamOld = jamText.split(" - ");
+    const startOld = toMin(jamOld[0]);
+    const endOld   = toMin(jamOld[1]);
+
+    if(startNew < endOld && endNew > startOld){
+      document.getElementById("row-"+row)
+        .classList.add("jadwal-conflict");
+    }
+  });
+}
+
+function highlightToday(){
+
+  const todayIndex = new Date().getDay(); 
+  // 1=SENIN, 2=SELASA... (0=MINGGU)
+
+  const mapHari = {
+    1:'SENIN',
+    2:'SELASA',
+    3:'RABU',
+    4:'KAMIS',
+    5:'JUMAT',
+    6:'SABTU'
+  };
+
+  const todayName = mapHari[todayIndex];
+  if(!todayName) return;
+
+  document.querySelectorAll(".jadwal-header")
+    .forEach(th=>{
+      if(th.innerText === todayName){
+        th.classList.add("hari-today");
+      }
+    });
+}
+
+/* ================= TOOLTIP JADWAL ================= */
+
+let tooltipBox = null;
+
+document.addEventListener("mouseover", function(e){
+
+  const item = e.target.closest(".jadwal-item");
+  if(!item) return;
+
+  if(!tooltipBox){
+    tooltipBox = document.createElement("div");
+    tooltipBox.className = "tooltip-box";
+    document.body.appendChild(tooltipBox);
+  }
+
+  tooltipBox.innerHTML = `
+    <strong>${item.dataset.mapel}</strong><br>
+    Kelas: ${item.dataset.kelas}<br>
+    Jam: ${item.dataset.jam}
+  `;
+
+  tooltipBox.style.left = e.pageX + 12 + "px";
+  tooltipBox.style.top  = e.pageY + 12 + "px";
+  tooltipBox.style.opacity = 1;
+});
+
+document.addEventListener("mousemove", function(e){
+  if(tooltipBox){
+    tooltipBox.style.left = e.pageX + 12 + "px";
+    tooltipBox.style.top  = e.pageY + 12 + "px";
+  }
+});
+
+document.addEventListener("mouseout", function(e){
+  if(e.target.closest(".jadwal-item") && tooltipBox){
+    tooltipBox.style.opacity = 0;
+  }
+});
+
+function deleteJadwalAdvanced(row){
+
+  if(!confirm("Yakin hapus jadwal ini?")) return;
+
+  const tr = document.getElementById("row-"+row);
+  if(tr){
+    tr.classList.add("row-deleting");
+  }
+
+  setTimeout(()=>{
+
+    google.script.run
+      .withSuccessHandler(()=>{
+        loadJadwalSetting();
+        loadJadwalMengajar();
+      })
+      .withFailureHandler(err=>{
+        alert("❌ Gagal hapus jadwal:\n" + err.message);
+        loadJadwalSetting();
+      })
+      .deleteJadwalSemester(row);
+
+  },250);
+}
+
+function loadListJadwal(){
+
+  google.script.run
+    .withSuccessHandler(data=>{
+
+      if(!data.length){
+        document.getElementById('listJadwalSetting').innerHTML =
+          '<p class="muted">Belum ada jadwal.</p>';
+        return;
+      }
+
+      let html = `
+        <table class="table-jadwal">
+          <tr>
+            <th>Hari</th>
+            <th>Kelas</th>
+            <th>Mapel</th>
+            <th>Jam</th>
+            <th>Aksi</th>
+          </tr>
+      `;
+
+      data.forEach(d=>{
+        html += `
+          <tr>
+            <td>${d.hari}</td>
+            <td>${d.kelas}</td>
+            <td>${d.mapel}</td>
+            <td>${d.jam_mulai} - ${d.jam_selesai}</td>
+            <td>
+              <button onclick="hapusJadwal(${d.rowIndex})">
+                🗑
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</table>';
+
+      document.getElementById('listJadwalSetting').innerHTML = html;
+
+    })
+    .getJadwalForSetting();
+}
+
+function hapusJadwal(rowIndex){
+
+  if(!confirm('Yakin ingin menghapus jadwal ini?')) return;
+
+  google.script.run
+    .withSuccessHandler(()=>{
+      loadListJadwal();
+      loadJadwalMengajar(); // refresh dashboard
+    })
+    .deleteJadwalSemester(rowIndex);
+}
+
+
+/* =====================================================
+   JURNAL GURU WALI – FRONTEND JS v1.0
+   (loadJurnalGuruWali, loadInfoGuruWali, loadSiswaBinaan
+    didefinisikan di scripts-dashboard.html agar always-available)
+   ===================================================== */
+
+function autoFillHariWali(dateStr){
+  if(!dateStr) return;
+  const hariMap = {
+    0:'MINGGU', 1:'SENIN', 2:'SELASA', 3:'RABU',
+    4:'KAMIS',  5:'JUMAT', 6:'SABTU'
+  };
+  const d = new Date(dateStr + 'T00:00:00');
+  const el = document.getElementById('gwHari');
+  if(el) el.value = hariMap[d.getDay()] || '';
+}
+
+let isSavingJurnalWali = false;
+
+/* ── Photo pick + compress helpers ── */
+var _gwFotos = { 1: null, 2: null }; // stored compressed data URLs
+
+function gwPickFoto_(slot, input){
+  const file = input.files[0];
+  if(!file) return;
+  _gwCompressFoto_(file, function(dataUrl){
+    _gwFotos[slot] = { data: dataUrl, type: 'image/jpeg', name: file.name };
+    const preview = document.getElementById('gwFotoPreview'+slot);
+    const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+    const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+    if(preview){ preview.src = dataUrl; preview.style.display = 'block'; }
+    if(placeholder) placeholder.style.display = 'none';
+    if(removeBtn) removeBtn.style.display = 'block';
+  });
+}
+
+function gwRemoveFoto_(slot){
+  _gwFotos[slot] = null;
+  const input  = document.getElementById('gwFotoInput'+slot);
+  const preview= document.getElementById('gwFotoPreview'+slot);
+  const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+  const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+  if(input)  { input.value = ''; }
+  if(preview){ preview.src = ''; preview.style.display = 'none'; }
+  if(placeholder) placeholder.style.display = 'block';
+  if(removeBtn) removeBtn.style.display = 'none';
+}
+
+function gwOpenLightbox_(url){
+  const lb  = document.getElementById('gwLightbox');
+  const img = document.getElementById('gwLightboxImg');
+  if(!lb || !img) return;
+  // Use full-res Drive URL, not thumbnail
+  const match = url.match(/[?&]id=([\/\w-]+)/);
+  img.src = match ? 'https://drive.google.com/uc?export=view&id='+match[1] : url;
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function gwCloseLightbox_(){
+  const lb = document.getElementById('gwLightbox');
+  if(lb) lb.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function gwResetFilter_(){
+  const b = document.getElementById('gwFilterBulan');
+  const f = document.getElementById('gwFilterFokus');
+  if(b) b.value = '';
+  if(f) f.selectedIndex = 0;
+  renderRiwayatGuruWali();
+}
+
+/**
+ * Client-side image compression using Canvas.
+ * Target: ≤500KB, max 1200px wide, JPEG quality 0.75
+ */
+function _gwCompressFoto_(file, callback){
+  const MAX_W = 1200;
+  const QUALITY = 0.75;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      let w = img.width, h = img.height;
+      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', QUALITY));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function simpanJurnalWali(){
+  if(isSavingJurnalWali) return;
+
+  const tgl    = document.getElementById('gwTanggal').value;
+  const hari   = document.getElementById('gwHari').value.trim();
+  const mulai  = document.getElementById('gwWaktuMulai').value;
+  const selesai= document.getElementById('gwWaktuSelesai').value;
+  const fokus  = document.getElementById('gwFokus').value;
+  const topik  = document.getElementById('gwTopik').value.trim();
+  const catatan= document.getElementById('gwCatatan').value.trim();
+  const tindak = document.getElementById('gwTindakLanjut').value.trim();
+
+  if(!tgl || !mulai || !selesai || !fokus || !topik){
+    alert('⚠️ Lengkapi semua field yang bertanda *');
+    return;
+  }
+  if(mulai >= selesai){
+    alert('⚠️ Waktu selesai harus lebih besar dari waktu mulai');
+    return;
+  }
+
+  isSavingJurnalWali = true;
+  const btn = document.getElementById('btnSimpanJurnalWali');
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
+  startProgress();
+
+  // Collect compressed photos
+  const fotos = [_gwFotos[1], _gwFotos[2]].filter(Boolean);
+
+  const payload = {
+    tanggal           : tgl,
+    hari              : hari.toUpperCase(),
+    waktu_mulai       : mulai,
+    waktu_selesai     : selesai,
+    fokus_pendampingan: fokus,
+    topik_pendampingan: topik,
+    catatan           : catatan  || '-',
+    tindak_lanjut     : tindak   || '-',
+    fotos             : fotos
+  };
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      endProgress();
+      isSavingJurnalWali = false;
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
+      if(res && res.status){
+        showToast('✅ Jurnal berhasil disimpan', 'success');
+        resetFormGuruWali();
+        loadRiwayatGuruWali();
+      }else{
+        showToast('❌ Gagal menyimpan jurnal', 'error');
+      }
+    })
+    .withFailureHandler(err=>{
+      endProgress();
+      isSavingJurnalWali = false;
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
+      showToast('❌ ' + err.message, 'error');
+    })
+    .simpanJurnalGuruWali(payload);
+}
+
+function resetFormGuruWali(){
+  ['gwWaktuMulai','gwWaktuSelesai','gwTopik',
+   'gwCatatan','gwTindakLanjut']
+    .forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+  const fokus = document.getElementById('gwFokus');
+  if(fokus) fokus.selectedIndex = 0;
+  // reset ke hari ini
+  const tglEl = document.getElementById('gwTanggal');
+  if(tglEl){
+    tglEl.value = new Date().toISOString().slice(0,10);
+    autoFillHariWali(tglEl.value);
+  }
+  // reset photo slots
+  gwRemoveFoto_(1);
+  gwRemoveFoto_(2);
+}
+
+let riwayatGuruWaliData = [];
+
+function loadStatusArsipWali(){
+  const el   = document.getElementById('statusArsipWali');
+  const warn = document.getElementById('warningArsipWali');
+  const btn  = document.getElementById('btnArsipWali');
+  if(!el) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      if(!res.activeTahun){
+        el.innerHTML = '❌ Tahun pelajaran belum diset di pengaturan.';
+        return;
+      }
+      if(res.sudahArsip){
+        el.innerHTML = `🔒 Jurnal guru wali tahun <b>${res.activeTahun}</b> sudah diarsipkan.`;
+        if(btn) btn.disabled = true;
+        return;
+      }
+      el.innerHTML = `📅 Data tersimpan: <b>${res.totalTahun}</b> tahun pelajaran. Tahun aktif: <b>${res.activeTahun}</b>`;
+      if(warn && res.perluArsip) warn.style.display = 'block';
+      if(btn) btn.disabled = false;
+    })
+    .withFailureHandler(err => {
+      if(el) el.innerHTML = `<span class="muted">❌ ${err.message}</span>`;
+    })
+    .getStatusArsipJurnalWali();
+}
+
+function arsipJurnalWaliUI(){
+  if(!confirm('Arsip jurnal guru wali tahun aktif?\nData akan DIHAPUS dari sheet dan disimpan ke Google Drive.\n\nLanjutkan?')) return;
+  const btn = document.getElementById('btnArsipWali');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Mengarsipkan...'; }
+  google.script.run
+    .withSuccessHandler(res => {
+      alert(`✅ ${res.jumlah} entri jurnal guru wali tahun ${res.tahun} berhasil diarsipkan ke Google Drive.`);
+      if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
+      loadStatusArsipWali();
+      loadRiwayatGuruWali();
+    })
+    .withFailureHandler(err => {
+      alert('❌ Arsip gagal: ' + err.message);
+      if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
+    })
+    .arsipJurnalGuruWali();
+}
+
+function loadRiwayatGuruWali(){
+  const tbody = document.getElementById('riwayatGuruWaliBody');
+  if(!tbody) return;
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="muted">⏳ Memuat...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(data=>{
+      riwayatGuruWaliData = data || [];
+      renderRiwayatGuruWali();
+    })
+    .withFailureHandler(err=>{
+      const tbody2 = document.getElementById('riwayatGuruWaliBody');
+      if(tbody2)
+        tbody2.innerHTML =
+          `<tr><td colspan="8" class="muted">❌ ${err.message}</td></tr>`;
+    })
+    .getRiwayatJurnalGuruWali();
+}
+
+function renderRiwayatGuruWali(){
+  const tbody = document.getElementById('riwayatGuruWaliBody');
+  if(!tbody) return;
+
+  // --- filter values ---
+  const filterBulan = (document.getElementById('gwFilterBulan')  || {}).value || '';
+  const filterFokus = (document.getElementById('gwFilterFokus')  || {}).value || '';
+
+  // --- filter data ---
+  let filtered = (riwayatGuruWaliData || []).filter(r => {
+    if(filterBulan && !(r.iso_tanggal || '').startsWith(filterBulan)) return false;
+    if(filterFokus && r.fokus_pendampingan !== filterFokus) return false;
+    return true;
+  });
+
+  // --- update count badge ---
+  const countEl = document.getElementById('gwFilterCount');
+  if(countEl){
+    if(filterBulan || filterFokus){
+      countEl.textContent = filtered.length + ' entri';
+      countEl.style.display = 'inline';
+    } else {
+      countEl.textContent = '';
+      countEl.style.display = 'none';
+    }
+  }
+
+  // --- cek bulan berjalan (pakai data asli, bukan filtered) ---
+  const box = document.getElementById('gwPesanBulanIni');
+  if(box){
+    const nowYM = new Date().toISOString().slice(0,7);
+    const adaBulanIni = riwayatGuruWaliData.some(
+      r => r.iso_tanggal && r.iso_tanggal.slice(0,7) === nowYM
+    );
+    box.innerHTML = adaBulanIni ? '' : `
+      <div class="card"
+           style="background:#fff7ed;border-left:6px solid #f97316;
+                  padding:14px;margin-bottom:14px">
+        <b>⚠️ Belum ada kegiatan pendampingan bulan ini</b>
+      </div>`;
+  }
+
+  if(!filtered || filtered.length === 0){
+    tbody.innerHTML =
+      '<tr><td colspan="8" class="muted">📭 ' +
+      (filterBulan || filterFokus ? 'Tidak ada jurnal sesuai filter.' : 'Belum ada jurnal pendampingan.') +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((r, i)=>{
+    // Build thumbnail HTML from comma-separated Drive URLs
+    let dokHtml = '-';
+    if(r.dokumentasi && r.dokumentasi !== '-'){
+      const urls = r.dokumentasi.split(',').map(u=>u.trim()).filter(Boolean);
+      if(urls.length > 0){
+        dokHtml = urls.map(url=>{
+          // Extract file ID for thumbnail URL
+          const match = url.match(/[?&]id=([\w-]+)/);
+          const thumbUrl = match
+            ? 'https://drive.google.com/thumbnail?id='+match[1]+'&sz=w90'
+            : url;
+          return `<span onclick="gwOpenLightbox_('${url.replace(/'/g,"\\'")}')"\n            title="Lihat foto" style="cursor:zoom-in;display:inline-block;">
+            <img src="${thumbUrl}" alt="Foto" loading="lazy"
+              style="width:44px;height:36px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;transition:transform .15s"
+              onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''"
+              onerror="this.style.display='none'">
+          </span>`;
+        }).join('<span style="width:4px;display:inline-block"></span>');
+      }
+    }
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td class="left">${r.tanggal || '-'}</td>
+        <td style="white-space:nowrap">${r.waktu || '-'}</td>
+        <td><span class="badge">${r.fokus_pendampingan || '-'}</span></td>
+        <td class="left">${r.topik_pendampingan || '-'}</td>
+        <td class="left">${r.catatan || '-'}</td>
+        <td class="left">${r.tindak_lanjut || '-'}</td>
+        <td style="white-space:nowrap">${dokHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function cetakLaporanGuruWali(){
+  if(!riwayatGuruWaliData || riwayatGuruWaliData.length === 0){
+    alert('⚠️ Belum ada jurnal untuk dicetak');
+    return;
+  }
+
+  // Apply current filter so print matches what user sees
+  const filterBulan = (document.getElementById('gwFilterBulan') || {}).value || '';
+  const filterFokus = (document.getElementById('gwFilterFokus') || {}).value || '';
+  let dataCetak = riwayatGuruWaliData.filter(r => {
+    if(filterBulan && !(r.iso_tanggal || '').startsWith(filterBulan)) return false;
+    if(filterFokus && r.fokus_pendampingan !== filterFokus) return false;
+    return true;
+  });
+  if(dataCetak.length === 0){ dataCetak = riwayatGuruWaliData; }
+
+  const namaGuru = document.getElementById('gwNamaGuru').innerText || '-';
+  const nip      = document.getElementById('gwNip').innerText      || '-';
+
+  const baris = dataCetak.map((r, i)=>{
+    // Build photo thumbnails for print
+    let photoHtml = '-';
+    if(r.dokumentasi && r.dokumentasi !== '-'){
+      const imgs = r.dokumentasi.split(',').map(u => u.trim()).filter(Boolean).map(u => {
+        const m = u.match(/[?&]id=([\w-]+)/);
+        return m
+          ? `<img src="https://drive.google.com/thumbnail?id=${m[1]}&sz=w120" style="max-width:110px;max-height:90px;border-radius:4px;margin:2px;object-fit:cover" crossorigin="anonymous">`
+          : '';
+      }).join('');
+      if(imgs) photoHtml = `<div style="display:flex;flex-wrap:wrap;gap:4px">${imgs}</div>`;
+    }
+    return `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${r.tanggal || '-'}</td>
+      <td style="text-align:center;white-space:nowrap">${r.waktu || '-'}</td>
+      <td style="text-align:center">${r.fokus_pendampingan || '-'}</td>
+      <td>${r.topik_pendampingan || '-'}</td>
+      <td>${r.catatan || '-'}</td>
+      <td>${r.tindak_lanjut || '-'}</td>
+      <td>${photoHtml}</td>
+    </tr>
+  `}).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Jurnal Guru Wali</title>
+  <style>
+    *{ box-sizing:border-box; }
+    body{ font-family:Arial,sans-serif; font-size:12px;
+          margin:24px; color:#111; }
+    h2{ text-align:center; font-size:16px; margin-bottom:4px; }
+    p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }
+    table{ width:100%; border-collapse:collapse; margin-top:8px; }
+    th,td{ border:1px solid #bbb; padding:7px 6px;
+           vertical-align:top; font-size:11px; }
+    th{ background:#eef2ff; font-weight:700; text-align:center; }
+    .ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }
+    .ttd-box{ text-align:center; min-width:220px; }
+    .ttd-box p{ margin:2px 0; }
+    .garis-ttd{ margin-top:68px; border-top:1px solid #333;
+                padding-top:4px; font-weight:700; }
+    .btn-cetak{ display:block; margin:20px auto 0;
+                padding:10px 28px; background:#6C63FF;
+                color:#fff; border:none; border-radius:8px;
+                cursor:pointer; font-size:14px; }
+    @media print{
+      .btn-cetak{ display:none; }
+    }
+  </style>
+</head>
+<body>
+  <h2>JURNAL PENDAMPINGAN GURU WALI</h2>
+  <p class="sub">${namaGuru} &nbsp;&bull;&nbsp; NIP: ${nip}</p>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30px">No</th>
+        <th>Hari/Tanggal</th>
+        <th style="white-space:nowrap">Waktu</th>
+        <th>Fokus Pendampingan</th>
+        <th>Topik Pendampingan</th>
+        <th>Catatan</th>
+        <th>Tindak Lanjut</th>
+        <th>Dokumentasi</th>
+      </tr>
+    </thead>
+    <tbody>${baris}</tbody>
+  </table>
+  <div class="ttd-wrap">
+    <div class="ttd-box">
+      <p><b>Mengetahui</b></p>
+      <p>Guru Wali</p>
+      <div class="garis-ttd">
+        ${namaGuru}<br>
+        <span style="font-weight:normal">NIP. ${nip}</span>
+      </div>
+    </div>
+  </div>
+  <button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=960,height=720');
+  if(!win){
+    alert('Popup diblokir browser.\nAktifkan popup untuk halaman ini lalu coba lagi.');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+}
+
+/* ===== END JURNAL GURU WALI ===== */
+
+/* ===== JADWAL LIVE-REFRESH & BROWSER NOTIFICATIONS ===== */
+
+/**
+ * Request browser notification permission once when app loads.
+ * Called from loadJurnalGuruWali().
+ */
+function _requestNotifPermission_(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+}
+
+/**
+ * Schedule browser notifications 15 minutes before each class today.
+ * Re-scheduled every time jadwal is rendered (live-refresh).
+ */
+function _scheduleJadwalNotif_(jadwalObj){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  // Clear existing timers
+  if(window._jadwalNotifTimers){
+    window._jadwalNotifTimers.forEach(clearTimeout);
+  }
+  window._jadwalNotifTimers = [];
+  if(!jadwalObj) return;
+
+  var hariMap = {1:'SENIN',2:'SELASA',3:'RABU',4:'KAMIS',5:'JUMAT',6:'SABTU'};
+  var hariIni = hariMap[new Date().getDay()];
+  var items   = (jadwalObj && jadwalObj[hariIni]) || [];
+
+  items.forEach(function(item){
+    try{
+      var sp = (item.jam_mulai || '').split(':');
+      if(sp.length < 2) return;
+      var classDate = new Date();
+      classDate.setHours(Number(sp[0]), Number(sp[1]), 0, 0);
+      var notifTime = classDate.getTime() - 15 * 60 * 1000; // 15 min before
+      var delay     = notifTime - Date.now();
+      if(delay > 0 && delay < 86400000){ // only schedule future events today
+        var t = setTimeout(function(){
+          try{
+            new Notification('\uD83D\uDD14 Kelas Segera Dimulai!', {
+              body: (item.kelas || '') + ' \u2014 ' + (item.mapel || '') +
+                    '\n15 menit lagi pukul ' + item.jam_mulai,
+              icon: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/emoji.svg'
+            });
+          }catch(e){}
+        }, delay);
+        window._jadwalNotifTimers.push(t);
+      }
+    }catch(e){}
+  });
+}
+
+/**
+ * Live-refresh jadwal grid every 60 seconds so "SEKARANG" highlight stays current.
+ */
+if(!window._jadwalLiveRefreshStarted){
+  window._jadwalLiveRefreshStarted = true;
+  setInterval(function(){
+    var container = document.getElementById('jadwalGridContainer');
+    if(!container || !window._lastJadwalData) return;
+    _renderJadwalGrid_(window._lastJadwalData, container);
+  }, 60000);
+}
+
+/* ===== END LIVE-REFRESH & NOTIFICATIONS ===== */
+
+/* =====================================================
+   SISWA BINAAN – IMPORT / DOWNLOAD TEMPLATE
+   ===================================================== */
+
+function downloadTemplateSiswaBinaan(){
+  const csv = 'nama_siswa,nis,kelas,tahun_masuk,status\n' +
+              '(contoh) Budi Santoso,1001,10A,2024,aktif\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(
+    new Blob([csv], { type: 'text/csv' })
+  );
+  a.download = 'template_siswa_binaan.csv';
+  a.click();
+}
+
+function resetFileSiswaBinaan(){
+  const el = document.getElementById('fileSiswaBinaan');
+  if(el) el.value = '';
+}
+
+function uploadSiswaBinaan(){
+  const f = document.getElementById('fileSiswaBinaan').files[0];
+  if(!f){
+    alert('⚠️ Pilih file terlebih dahulu');
+    return;
+  }
+
+  const btn = document.getElementById('btnImportSiswaBinaan');
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Mengupload...'; }
+  startProgress();
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text   = e.target.result;
+    const lines  = text.trim().split('\n');
+    const header = lines[0].split(',').map(s => s.trim().toLowerCase());
+
+    // Validasi kolom
+    const required = ['nama_siswa','nis','kelas','tahun_masuk','status'];
+    const missing  = required.filter(c => !header.includes(c));
+    if(missing.length > 0){
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      alert('❌ Kolom tidak lengkap: ' + missing.join(', '));
+      return;
+    }
+
+    const rows = lines.slice(1)
+      .map(l => l.split(',').map(s => s.trim()))
+      .filter(r => r.length > 1 && r[0]); // skip baris kosong
+
+    if(rows.length === 0){
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      alert('⚠️ File tidak berisi data siswa');
+      return;
+    }
+
+    // kirim: [{nama_siswa, nis, kelas, tahun_masuk, status}, ...]
+    const payload = rows.map(r => {
+      const obj = {};
+      header.forEach((h, i) => { obj[h] = r[i] || ''; });
+      return obj;
+    });
+
+    google.script.run
+      .withSuccessHandler(res => {
+        endProgress();
+        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        if(res && res.status){
+          alert('✅ ' + res.imported + ' siswa berhasil diimport');
+          resetFileSiswaBinaan();
+          loadSiswaBinaan();
+          loadInfoGuruWali();
+        }else{
+          alert('❌ Gagal import: ' + (res ? res.msg : 'Unknown error'));
+        }
+      })
+      .withFailureHandler(err => {
+        endProgress();
+        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        alert('❌ ' + err.message);
+      })
+      .importSiswaBinaan(payload);
+  };
+  reader.readAsText(f);
+}
+
+
+/* ================================================================
+   MODUL INPUT & PENGOLAHAN NILAI SISWA  v2
+   ================================================================ */
+
+/** State terpusat modul nilai */
+let nilaiState = {
+  kelas: '', mapel: '', tahun: '', semester: '',
+  rows: [],
+  dataVersion: 0,
+  setting: { nilai_min_target: 60, nilai_max_target: 95, kkm: 70 },
+  locked: true,
+  focusKomponen: 'all',
+  cetakPreviewOk: false,
+  isDirty: false,
+  lastAutosaveAt: 0
+};
+
+const NILAI_INPUT_KEYS = ['tgs1','tgs2','tgs3','uh1','uh2','uh3','pts','pas','pat','nilai_remedial'];
+
+/** Dipanggil saat tab Input Nilai pertama kali dibuka */
+</script>

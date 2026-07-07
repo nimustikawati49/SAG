@@ -1,0 +1,2807 @@
+
+<!-- VERSI: 2026-03-09-REV1 -->
+<!-- ===== DASHBOARD PROGRESS BAR (fixed, top) ===== -->
+<div id="dashProgressBar" aria-hidden="true"></div>
+
+<!-- ===== TOAST CONTAINER ===== -->
+<div id="toastContainer"></div>
+
+<!-- ===== OFFLINE BANNER ===== -->
+<div id="offlineBanner" style="display:none">
+  ⚡ Tidak ada koneksi internet — beberapa fitur mungkin tidak berfungsi
+</div>
+
+<!-- ===== HAMBURGER (mobile toggle) ===== -->
+<button id="sbHamburger" onclick="toggleSidebar_()" title="Buka Menu">☰</button>
+
+<!-- ===== SIDEBAR OVERLAY (mobile backdrop) ===== -->
+<div id="sbOverlay" onclick="closeSidebar_()"></div>
+
+<!-- ===================================================================
+     SIDEBAR v3 — Collapsible, Submenu, Tooltip, SaaS-style
+     =================================================================== -->
+<nav id="appSidebar" role="navigation" aria-label="Navigasi Utama">
+
+  <!-- BRAND -->
+  <div id="sbBrand">
+    <div id="sbLogoCont">
+      <img id="sbLogo" alt="Logo Sekolah">
+      <span id="sbLogoIcon">🏫</span>
+    </div>
+    <div id="sbAppTitle" class="sb-expand-only">Sistem Akademik<br>Guru</div>
+    <button id="sbCollapseBtn" onclick="toggleSbCollapse_()" title="Collapse sidebar"
+      style="margin-left:auto;flex-shrink:0">
+      <span id="sbCollapseIcon">◀</span>
+    </button>
+  </div>
+
+  <!-- GREETING (hidden when collapsed) -->
+  <div id="sbGreeting" class="sb-expand-only">
+    <div id="greetingText" class="sb-greeting-name">Selamat Datang 😊</div>
+    <div id="greetingDate" class="sb-greeting-date"></div>
+  </div>
+
+  <!-- NAV ITEMS -->
+  <div id="sbNav">
+
+    <!-- Dashboard (single item) -->
+    <button class="sb-item" data-tab="dashboard"
+            onclick="sbGo_('dashboard',function(){initDashboardMeta()})"
+            data-tooltip="Dashboard">
+      <span class="sb-icon">📊</span>
+      <span class="sb-label">Dashboard</span>
+    </button>
+
+    <!-- Rekap Sekolah (kepsek only) -->
+    <button class="sb-item kepsek-only" data-tab="rekapSekolah"
+            onclick="sbGo_('rekapSekolah',function(){if(typeof initDashboardKepsek==='function')initDashboardKepsek();})"
+            data-tooltip="Rekap Sekolah">
+      <span class="sb-icon">🏫</span>
+      <span class="sb-label">Rekap Sekolah</span>
+    </button>
+
+    <!-- Group: Pembelajaran -->
+    <div class="sb-group" id="sbgrp-pembelajaran">
+      <button class="sb-group-hd" onclick="toggleSbGroup_('pembelajaran')"
+              aria-expanded="false" data-tooltip="Pembelajaran">
+        <span class="sb-icon">📖</span>
+        <span class="sb-label">Pembelajaran</span>
+        <svg class="sb-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="sb-group-body" id="sbgb-pembelajaran">
+        <button class="sb-item sb-child" data-tab="jurnalku"
+                onclick="sbGo_('jurnalku')" data-tooltip="Jurnal">
+          <span class="sb-icon">📘</span>
+          <span class="sb-label">Jurnal</span>
+        </button>
+        <button class="sb-item sb-child" data-tab="modulAjar"
+                onclick="sbGo_('modulAjar',function(){initModulAjar()})"
+                data-tooltip="Modul Ajar">
+          <span class="sb-icon">📚</span>
+          <span class="sb-label">Modul Ajar</span>
+        </button>
+        <button class="sb-item sb-child admin-only" data-tab="inputNilai"
+                onclick="sbGo_('inputNilai',function(){initTabNilai()})"
+                data-tooltip="Input Nilai">
+          <span class="sb-icon">🎓</span>
+          <span class="sb-label">Input Nilai</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Group: Monitoring -->
+    <div class="sb-group" id="sbgrp-monitoring">
+      <button class="sb-group-hd" onclick="toggleSbGroup_('monitoring')"
+              aria-expanded="false" data-tooltip="Monitoring">
+        <span class="sb-icon">📈</span>
+        <span class="sb-label">Monitoring</span>
+        <svg class="sb-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="sb-group-body" id="sbgb-monitoring">
+        <button class="sb-item sb-child" data-tab="riwayat"
+                onclick="sbGo_('riwayat')" data-tooltip="Riwayat">
+          <span class="sb-icon">📑</span>
+          <span class="sb-label">Riwayat</span>
+        </button>
+        <button class="sb-item sb-child" data-tab="rekap"
+                onclick="sbGo_('rekap')" data-tooltip="Rekap">
+          <span class="sb-icon">📊</span>
+          <span class="sb-label">Rekap</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Group: Kelas -->
+    <div class="sb-group" id="sbgrp-kelas">
+      <button class="sb-group-hd" onclick="toggleSbGroup_('kelas')"
+              aria-expanded="false" data-tooltip="Kelas">
+        <span class="sb-icon">👥</span>
+        <span class="sb-label">Kelas</span>
+        <svg class="sb-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="sb-group-body" id="sbgb-kelas">
+        <button class="sb-item sb-child" data-tab="jurnalGuruWali"
+                onclick="sbGo_('jurnalGuruWali', function(){ loadJurnalGuruWali(); })" data-tooltip="Guru Wali">
+          <span class="sb-icon">👨‍🏫</span>
+          <span class="sb-label">Guru Wali</span>
+        </button>
+        <button class="sb-item sb-child admin-only" data-tab="catatanSiswa"
+                onclick="sbGo_('catatanSiswa', function(){ initCatatanSiswa(); })" data-tooltip="Catatan Siswa">
+          <span class="sb-icon">📝</span>
+          <span class="sb-label">Catatan Siswa</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Group: Sistem -->
+    <div class="sb-group" id="sbgrp-sistem">
+      <button class="sb-group-hd" onclick="toggleSbGroup_('sistem')"
+              aria-expanded="false" data-tooltip="Sistem">
+        <span class="sb-icon">⚙️</span>
+        <span class="sb-label">Sistem</span>
+        <svg class="sb-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="sb-group-body" id="sbgb-sistem">
+        <button class="sb-item sb-child" data-tab="setting"
+                onclick="sbGo_('setting',function(){loadSettingForm()})"
+                data-tooltip="Setting">
+          <span class="sb-icon">⚙️</span>
+          <span class="sb-label">Setting</span>
+        </button>
+        <button class="sb-item sb-child superadmin-only" data-tab="DashboardSuperAdmin"
+                onclick="sbGo_('DashboardSuperAdmin',function(){loadDashboardSuperAdmin()})"
+                data-tooltip="SuperAdmin">
+          <span class="sb-icon">👑</span>
+          <span class="sb-label">SuperAdmin</span>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- END #sbNav -->
+
+  <!-- FOOTER -->
+  <div id="sbFooter">
+    <button id="btnNotif" onclick="toggleNotifPanel()" data-tooltip="Notifikasi"
+            style="position:relative">
+      <span class="sb-icon">🔔</span>
+      <span class="sb-label">Notifikasi</span>
+      <span id="notifBadge" style="
+        display:none;position:absolute;top:6px;right:10px;
+        background:#ef4444;color:#fff;font-size:10px;font-weight:700;
+        border-radius:50%;width:16px;height:16px;line-height:16px;text-align:center
+      ">0</span>
+    </button>
+    <button id="btnDarkMode" onclick="toggleDarkMode()" data-tooltip="Dark Mode">
+      <span class="sb-icon">🌙</span>
+      <span class="sb-label">Dark Mode</span>
+    </button>
+    <button onclick="doLogout_()" class="sb-logout" data-tooltip="Keluar">
+      <span class="sb-icon">🚪</span>
+      <span class="sb-label">Keluar</span>
+    </button>
+  </div>
+
+</nav>
+<!-- END #appSidebar -->
+
+<!-- ===================================================================
+     MAIN AREA (sidebar offset + top profile bar + original container)
+     =================================================================== -->
+<div id="sbMain">
+
+  <!-- TOP PROFILE BAR -->
+  <div id="sbTopBar">
+    <div id="sbTopGrid">
+      <div class="sbTopItem">
+        <span class="sbTopLabel">Sekolah</span>
+        <span class="sbTopVal" id="sbTopSekolah">—</span>
+      </div>
+      <div class="sbTopItem">
+        <span class="sbTopLabel">Tahun</span>
+        <span class="sbTopVal" id="sbTopTahun">—</span>
+      </div>
+      <div class="sbTopItem">
+        <span class="sbTopLabel">Semester</span>
+        <span class="sbTopVal" id="sbTopSemester">—</span>
+      </div>
+      <div class="sbTopItem">
+        <span class="sbTopLabel">Mapel</span>
+        <span class="sbTopVal" id="sbTopMapel">—</span>
+      </div>
+      <div class="sbTopItem">
+        <span class="sbTopLabel">Guru</span>
+        <span class="sbTopVal" id="sbTopGuru">—</span>
+      </div>
+      <div class="sbTopItem" id="sbTopNipItem" style="display:none">
+        <span class="sbTopLabel">NIP</span>
+        <span class="sbTopVal" id="sbTopNip">—</span>
+      </div>
+    </div>
+  </div>
+
+<!-- original .container follows -->
+<div class="container">
+<!-- ================= HEADER FINAL ================= -->
+<div class="header-wrapper">
+  <div class="header-left">
+    <img id="appLogo" class="app-logo" style="display:none">
+  </div>
+  <div class="header-center">
+    <h2 id="appName">Sistem Akademik Guru</h2>
+    <div class="meta">
+      <span id="metaSekolah"></span>
+      <span id="metaTahun"></span>
+      <span id="metaSemester"></span>
+      <span id="metaMapel"></span>
+      <span id="metaGuru"></span>
+      <span id="badgeSuperAdmin" style="
+            display:none;
+            background:#facc15;
+            color:#92400e;
+            font-weight:700;
+            padding:4px 10px;
+            border-radius:999px;
+            font-size:12px;
+            box-shadow:0 4px 10px rgba(0,0,0,.2)
+          ">
+            👑 SuperAdmin
+          </span>
+      <span id="licenseBadge"
+      style="
+        display:none;
+        background:#fef3c7;
+        color:#92400e;
+        font-weight:700;
+        padding:4px 10px;
+        border-radius:999px;
+        font-size:12px;
+        box-shadow:0 6px 14px rgba(250,204,21,.45)
+      ">
+      </span>
+    </div>
+  </div>
+</div>
+<div class="divider"></div>
+<!-- ================= END HEADER ================= -->
+
+ <div class="card" style="padding:14px">
+  <div id="mainMenu" style="
+    display:none;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:10px;
+  ">
+
+    <!-- MENU UTAMA (KIRI) -->
+    <div class="menu" style="width:100%">
+      <button onclick="showTab('dashboard'); initDashboardMeta();">📊 Dashboard</button>
+      <button onclick="showTab('jurnalku')">📘 Jurnalku</button>
+      <button onclick="showTab('riwayat')">📑 Riwayat</button>
+      <button onclick="showTab('jurnalGuruWali')">👨‍🏫 Jurnal Guru Wali</button>
+      <button onclick="showTab('rekap')">📊 Rekap</button>
+      <button class="admin-only"
+              onclick="showTab('inputNilai'); initTabNilai();">📊 Input Nilai</button>
+      <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
+      <button class="superadmin-only"
+              onclick="showTab('DashboardSuperAdmin'); loadDashboardSuperAdmin();">
+        👑 SuperAdmin
+      </button>
+    </div>
+    <!-- HELPER (KANAN TERPISAH) -->
+    <div>
+      <button class="ghost"
+              onclick="openHelperModal()"
+              title="Petunjuk penggunaan aplikasi"
+              style="font-weight:600">
+        📖 Petunjuk
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="helperModal" style="
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:99999;
+">
+  <div style="
+    position:relative;
+    background:#fff;
+    width:90%;
+    max-width:560px;
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 30px 60px rgba(0,0,0,.35);
+  ">
+    <!-- TOMBOL X -->
+    <button onclick="closeHelperModal()"
+      style="
+        position:absolute;
+        top:14px;
+        right:14px;
+        background:#eef2ff;
+        color:#4338ca;
+        border:none;
+        border-radius:50%;
+        width:32px;
+        height:32px;
+        font-size:18px;
+        font-weight:700;
+        cursor:pointer;
+      ">×</button>
+    <h2 style="margin-top:0">📖 Panduan Penggunaan</h2>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button onclick="switchPanduan_('guru')" id="panduanBtnGuru" style="background:#ede9fe;color:#4338ca;border:none;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600">👨‍🏫 Guru</button>
+      <button onclick="switchPanduan_('kepsek')" id="panduanBtnKepsek" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer">🏫 Kepsek</button>
+      <button onclick="switchPanduan_('superadmin')" id="panduanBtnSA" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer">👑 SuperAdmin</button>
+    </div>
+    <div id="panduanGuru">
+    <ol style="line-height:1.7;font-size:14px">
+      <li>
+        <b>⚙️ Setting</b><br>
+        Lengkapi data jurnal (sekolah, tahun, semester, guru, mapel dan logo sekolah format png).
+      </li>
+      <li>
+        <b>👨‍🎓 Data Siswa</b><br>
+        Silahkan download template data siswa dan isi data siswa sesuai dengan jumlah siswa yang diajar. Lalu upload data siswa untuk keperluan absensi.
+      </li>
+       <li>
+        <b>🔄 Ganti Semester</b><br>
+        Gunakan saat terjadi pergantian semester dalam tahun yang sama yang ada di dalam menu setting.
+      </li>
+        <li>
+        <b>📊 Dashboard</b><br>
+        Pantau statistik jurnal dan rekap kehadiran siswa yang sudah tersimpan.
+      </li>
+      <li>
+        <b>📘 Jurnalku</b><br>
+        Silahkan isi jurnal harian pembelajaran dan absensi siswa dan foto minimal 1 foto dokumentasi pembelajaran.
+      </li>
+      <li>
+        <b>📑 Riwayat</b><br>
+        Lihat dan kelola jurnal yang sudah tersimpan, di dalam riwayat sudah isi ringkasan jurnal per pertemuan.
+      </li>
+      <li>
+        <b>📊 Rekap & Arsip</b><br>
+        Rekap jurnal satu tahun pelajaran dan lakukan arsip jika semester lengkap.
+      </li>
+      <li>
+        <b>📝 Catatan Siswa Binaan</b><br>
+        Catat perilaku atau prestasi penting untuk siswa binaan Anda di menu Kelas → Catatan Siswa.
+      </li>
+     </ol>
+    </div>
+    <div id="panduanKepsek" style="display:none">
+      <ol style="line-height:1.7;font-size:14px">
+        <li><b>🏫 Rekap Sekolah</b><br>Lihat rekap aktivitas seluruh guru di sekolah secara real-time.</li>
+        <li><b>⚠️ Early Warning</b><br>Pantau siswa dengan kehadiran di bawah ambang batas (default 75%).</li>
+        <li><b>📈 Charts & Grafik</b><br>Lihat tren jurnal mingguan dan distribusi kehadiran dalam grafik interaktif.</li>
+        <li><b>📋 Raport Absensi</b><br>Cetak atau ekspor raport kehadiran per siswa ke Excel atau PDF.</li>
+      </ol>
+    </div>
+    <div id="panduanSA" style="display:none">
+      <ol style="line-height:1.7;font-size:14px">
+        <li><b>👥 Manajemen User</b><br>Tambah, edit, dan nonaktifkan akun guru dari dashboard SuperAdmin.</li>
+        <li><b>🔑 Lisensi Sekolah</b><br>Set dan perpanjang lisensi school-wide dari dashboard SuperAdmin.</li>
+        <li><b>📢 Broadcast Notif</b><br>Kirim pengumuman ke seluruh guru via in-app notification.</li>
+        <li><b>🛰️ Deployment Tracker</b><br>Lacak semua deployment (sekolah) yang menggunakan sistem ini.</li>
+        <li><b>📝 Audit Log</b><br>Lihat riwayat aktivitas penting seluruh pengguna.</li>
+      </ol>
+    </div>
+    <!-- TOMBOL NAVIGASI CEPAT -->
+    <div style="
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:20px;
+      flex-wrap:wrap;
+    ">
+      <button class="ghost" onclick="goHelperTab('dashboard')">📊 Dashboard</button>
+      <button class="ghost" onclick="goHelperTab('jurnalku')">📘 Jurnalku</button>
+      <button class="ghost" onclick="goHelperTab('riwayat')">📑 Riwayat</button>
+      <button class="ghost" onclick="goHelperTab('rekap')">📊 Rekap</button>
+      <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
+      <button onclick="haptic('light'); openJurnalFocus()">+</button>
+      <button onclick="haptic('medium'); simpan()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================REKAP SEKOLAH (KEPSEK)============ -->
+<div id="rekapSekolah" class="card tab kepsek-only" data-tabid="rekapSekolah" style="display:none">
+  <div id="kepsekContainer">
+    <p class="muted">⏳ Memuat data rekap sekolah...</p>
+  </div>
+</div>
+
+<!-- ====================CATATAN SISWA============ -->
+<div id="catatanSiswa" class="card tab admin-only" data-tabid="catatanSiswa" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 style="margin:0">📝 Catatan Khusus Siswa Binaan</h2>
+      <p class="muted" style="margin:4px 0 0;font-size:13px">Catat perilaku, prestasi, atau informasi penting — hanya untuk siswa binaan Anda.</p>
+    </div>
+    <button onclick="openCatatanModal()" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">+ Tambah Catatan</button>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+    <select id="catatanKelasSelect" onchange="loadCatatanByKelas()" style="flex:1;max-width:220px">
+      <option value="">-- Pilih Kelas --</option>
+    </select>
+  </div>
+  <div id="catatanContainer">
+    <div class="alert-banner info" style="text-align:center;padding:20px">Pilih kelas untuk melihat catatan siswa binaan Anda.</div>
+  </div>
+</div>
+
+<!-- ====================DASHBOARD============ -->
+<div id="dashboard" class="card tab" data-tabid="dashboard" style="display:none">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:8px">
+    <h2 style="margin:0">📊 Dashboard</h2>
+    <span id="dashSyncTime" style="font-size:11px;color:#9ca3af"></span>
+  </div>
+  <!-- PROFILE SUMMARY -->
+      <div class="card" style="margin-top:24px">
+      <h3>📅 Jadwal Mengajar</h3>
+      <div id="jadwalGridContainer">
+        <p class="muted">⏳ Memuat jadwal...</p>
+      </div>
+    </div>
+<div class="profile-summary">
+  <div class="profile-card">
+    <div class="profile-title">📚 Kelas Diampu</div>
+    <div class="profile-value" id="metaKelas">0</div>
+  </div>
+
+  <div class="profile-card">
+    <div class="profile-title">👨‍🎓 Total Siswa</div>
+    <div class="profile-value" id="metaSiswa">0</div>
+  </div>
+</div>
+  <!-- FILTER -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+    <div>
+      <label>Tahun Pelajaran</label>
+      <select id="dashTahunFilter" style="min-width:160px"></select>
+    </div>
+    <div>
+      <label>Semester</label>
+      <select id="dashSemesterFilter" style="min-width:120px"></select>
+    </div>
+    <div>
+      <label>Dari</label>
+      <input type="date" id="dashDari">
+    </div>
+    <div>
+      <label>Sampai</label>
+      <input type="date" id="dashSampai">
+    </div>
+    <div style="align-self:end">
+      <button onclick="loadDashboardV4()">🔎 Terapkan</button>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="grid-dashboard">
+    <div class="card stat blue">
+      <div class="label">📘 Total Jurnal</div>
+      <div class="value" id="kpiJurnal">0</div>
+    </div>
+
+    <div class="card stat orange">
+      <div class="label">🏫 Total Kelas</div>
+      <div class="value" id="kpiKelas">0</div>
+    </div>
+
+    <div class="card stat green">
+      <div class="label">📊 Rata-rata Hadir</div>
+      <div class="value" id="kpiRata">0%</div>
+    </div>
+
+    <div class="card stat red">
+      <div class="label">⚠️ Kelas Risiko</div>
+      <div class="value" id="kpiRisiko">0</div>
+    </div>
+  </div>
+
+  <div class="dash-grid" style="margin-top:28px">
+
+    <div class="card">
+      <h3>📊 Kehadiran per Kelas</h3>
+      <canvas id="chartStackedV4"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>🏆 Ranking Kelas</h3>
+      <div id="rankingBox"></div>
+    </div>
+
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h3>🧠 Insight Otomatis</h3>
+    <ul id="insightBox"></ul>
+  </div>
+
+</div>
+
+
+  <!-- ================= JURNALKU ================= -->
+  <div class="card tab" id="jurnalku" data-tabid="jurnalku" style="display:none">
+    <h3>Jurnalku</h3>
+    <label>Tanggal</label>
+    <input type="date" id="tanggal">
+    <label>Kelas</label>
+    <select id="kelas" onchange="loadSiswa()"></select>
+    <label>Jam Ke</label>
+    <input type="number" id="jam_ke">
+    <label>Pertemuan Ke</label>
+    <select id="pertemuan"></select>
+    <label style="display:flex;align-items:center;justify-content:space-between">Materi <button type="button" onclick="openTemplateJurnal_()" style="font-size:11px;padding:4px 10px;border-radius:8px;background:#eef2ff;color:#4338ca;box-shadow:none;font-weight:600">📋 Pilih Template</button></label>
+    <textarea id="materi"></textarea>
+    <small class="helper">Bisa diisi teks atau link</small>
+    <label>Tujuan</label>
+    <textarea id="tujuan"></textarea>
+    <label>Asesmen</label>
+    <textarea id="asesmen"></textarea>
+    <small class="helper">Jika tidak ada asesmen isi "-"</small>
+    <div class="sub-title">Absensi Kehadiran</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Nama</th>
+            <th>JK</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="siswaBody"></tbody>
+      </table>
+    </div>
+        <hr style="margin:24px 0">
+        <h4>📸 Dokumentasi Pembelajaran</h4>
+        <p class="muted">
+          Upload 1–3 foto kegiatan pembelajaran.<br>
+          Ukuran bebas, akan otomatis dioptimalkan.
+        </p>
+        <input type="file" id="foto1" accept="image/*" onchange="previewFotoInput(this,'fotoPreview1')">
+        <img id="fotoPreview1" class="foto-preview" style="display:none" alt="Preview foto 1">
+        <input type="file" id="foto2" accept="image/*" onchange="previewFotoInput(this,'fotoPreview2')">
+        <img id="fotoPreview2" class="foto-preview" style="display:none" alt="Preview foto 2">
+        <input type="file" id="foto3" accept="image/*" onchange="previewFotoInput(this,'fotoPreview3')">
+        <img id="fotoPreview3" class="foto-preview" style="display:none" alt="Preview foto 3">
+        <small class="helper">
+          Minimal 1 foto · Maksimal 3 foto
+        </small>
+        <hr style="margin:24px 0">
+        <h4>✍️ Refleksi / Catatan Guru</h4>
+        <textarea id="refleksi"
+                  placeholder="Tuliskan refleksi pembelajaran, kendala, atau evaluasi pertemuan ini..."></textarea>
+        <small class="helper">
+          Contoh: respon siswa, kendala waktu, rencana perbaikan.
+        </small>
+    <button id="btnSimpanJurnal" onclick="simpan()">💾 Simpan Jurnal</button>
+        <div id="progressWrap">
+        <div id="progressBar"></div>
+    </div>
+  </div>
+
+  <!-- ================= RIWAYAT ================= -->
+  <div class="card tab" id="riwayat" data-tabid="riwayat" style="display:none">
+    <h3>Riwayat Jurnal</h3>
+
+    <!-- FILTER BAR -->
+    <div id="riwayatFilterBar">
+      <div>
+        <label>Dari Tanggal</label>
+        <input type="date" id="riwayatFilterDari" onchange="saveRiwayatFilterState()">
+      </div>
+      <div>
+        <label>Sampai</label>
+        <input type="date" id="riwayatFilterSampai" onchange="saveRiwayatFilterState()">
+      </div>
+      <div>
+        <label>Kelas</label>
+        <select id="riwayatFilterKelas" style="min-width:110px" onchange="saveRiwayatFilterState()">
+          <option value="">-- Semua --</option>
+        </select>
+      </div>
+      <div>
+        <label>Cari Materi</label>
+        <input type="text" id="riwayatFilterCari" placeholder="Keyword..." style="width:160px"
+               onkeydown="if(event.key==='Enter') loadRiwayat(1)"
+               oninput="saveRiwayatFilterState()">
+      </div>
+      <button onclick="loadRiwayat(1)">🔎 Cari</button>
+      <button class="ghost" onclick="resetRiwayatFilter()">✕ Reset</button>
+      <button class="ghost" onclick="loadRiwayat()">🔄 Refresh</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tanggal</th>
+            <th>Kelas</th>
+            <th>Pertemuan</th>
+            <th>Materi</th>
+            <th>Asesmen</th>
+            <th>Absensi</th>
+            <th>📸 Dokumentasi</th>
+            <th>✍️ Refleksi</th>
+            <th>Edit</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="riwayatBody"></tbody>
+      </table>
+      <div id="riwayatPagination"
+     style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap"></div>
+      <!-- ================= REKAP JURNAL SEMESTER ================= -->
+        <hr style="margin:28px 0">
+        <h3>📦 Rekap Jurnal Semester</h3>
+        <p class="muted">
+          Download rekap jurnal per semester pada tahun pelajaran yang sama.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button id="btnSemGanjil" onclick="exportSemester('ganjil')">
+            ⬇️ Download Semester Ganjil
+          </button>
+          <button id="btnSemGenap" onclick="exportSemester('genap')">
+            ⬇️ Download Semester Genap
+          </button>
+          <div id="exportSkeleton"
+             style="display:none; margin-top:12px; width:280px"
+            class="skeleton">
+          </div>
+        </div>
+
+      <hr style="margin:28px 0">
+          <!-- ================= EXPORT PER BULAN ================= -->
+          <h3>📅 Export Jurnal per Bulan</h3>
+          <p class="muted">Download jurnal untuk bulan dan tahun tertentu dalam format Excel.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <label style="font-size:12px">Bulan</label>
+              <select id="exportBulanSelect" style="min-width:140px">
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px">Tahun</label>
+              <input type="number" id="exportBulanTahun" style="width:90px" placeholder="2025"
+                value="">
+            </div>
+            <button onclick="doExportByBulan()">⬇️ Download Excel</button>
+          </div>
+          <div id="exportBulanInfo" style="margin-top:8px"></div>
+
+      <hr style="margin:28px 0">
+          <h3>📦 Arsip Jurnal Tahunan</h3>
+          <p id="infoArsipRiwayat" class="muted">
+            ⏳ Mengecek kelayakan arsip...
+          </p>
+          <button id="btnArsipRiwayat" disabled onclick="arsipTahunPelajaranUI()">
+            📦 Arsipkan Jurnal Tahun Pelajaran
+          </button>
+          <div class="table-wrap" id="arsipRiwayatList" style="margin-top:14px">
+            <p class="muted">📭 Belum ada arsip.</p>
+          </div>
+          <hr style="margin:28px 0">
+          <h3>💾 Backup Semester ke Sheet</h3>
+          <p class="muted">Salin data jurnal semester aktif ke sheet ARSIP sebagai cadangan permanen.</p>
+          <button id="btnBackupSemester" onclick="backupSemesterUI()">
+            💾 Backup Semester Sekarang
+          </button>
+          <div id="backupSemesterInfo" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ================= JURNAL GURU WALI ================= -->
+  <div class="card tab" id="jurnalGuruWali" data-tabid="jurnalGuruWali" style="display:none">
+    <h3>👨‍🏫 Jurnal Guru Wali</h3>
+
+    <!-- 1. INFO GURU WALI -->
+    <div class="card" style="background:#f8fafc;border-left:6px solid #6C63FF;margin-bottom:18px">
+      <h4 style="margin-top:0">📋 Informasi Guru Wali</h4>
+      <div class="profile-summary">
+        <div class="profile-card">
+          <div class="profile-title">👩‍🏫 Nama Guru</div>
+          <div class="profile-value" id="gwNamaGuru" style="font-size:18px">-</div>
+        </div>
+        <div class="profile-card">
+          <div class="profile-title">🔖 NIP</div>
+          <div class="profile-value" id="gwNip" style="font-size:18px">-</div>
+        </div>
+        <div class="profile-card">
+          <div class="profile-title">👨‍🎓 Jumlah Siswa Binaan</div>
+          <div class="profile-value" id="gwJumlahSiswa">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1b. IMPORT SISWA BINAAN -->
+    <div class="card" style="margin-bottom:18px;background:#f8fafc;border-left:6px solid #22c55e">
+      <h4 style="margin-top:0">📊 Import Data Siswa Binaan</h4>
+      <p class="muted" style="margin-top:0">
+        Download template, isi data siswa, lalu upload kembali.
+        Maksimal <b>20 siswa</b> per guru wali.<br>
+        Kolom wajib: <b>nama_siswa, nis, kelas, tahun_masuk, status</b>
+        &nbsp;&bull;&nbsp;Nilai status: <code>aktif</code> / <code>nonaktif</code>
+      </p>
+      <div class="grid-2">
+        <div class="box">
+          <h4>⬇️ Download Template</h4>
+          <p class="muted">File CSV siap diisi di Excel / Spreadsheet.</p>
+          <button class="btn btn-secondary"
+                  onclick="downloadTemplateSiswaBinaan()">
+            ⬇️ Download Template
+          </button>
+        </div>
+        <div class="box">
+          <h4>📤 Upload Data Siswa Binaan</h4>
+          <input type="file"
+                 id="fileSiswaBinaan"
+                 accept=".csv,.xls,.xlsx">
+          <small class="helper">Format: CSV / XLS / XLSX &bull; 1 baris = 1 siswa</small>
+        </div>
+      </div>
+      <div class="action-row" style="margin-top:16px">
+        <button class="ghost"
+                onclick="resetFileSiswaBinaan()">
+          🔄 Reset File
+        </button>
+        <button id="btnImportSiswaBinaan"
+                onclick="uploadSiswaBinaan()">
+          💾 Simpan Data Siswa Binaan
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. DAFTAR SISWA BINAAN -->
+    <div class="card" style="margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h4 style="margin:0">👥 Daftar Siswa Binaan</h4>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="badge" style="font-size:12px">Maks. 20 siswa</span>
+          <button class="ghost" style="padding:5px 12px;font-size:12px"
+                  onclick="loadSiswaBinaan()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama Siswa</th>
+              <th>NIS</th>
+              <th>Kelas</th>
+            </tr>
+          </thead>
+          <tbody id="siswaBinaanBody">
+            <tr><td colspan="4" class="muted">⏳ Memuat...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="siswaBinaanPager" style="margin-top:8px;text-align:center"></div>
+    </div>
+
+    <!-- 3. FORM INPUT JURNAL -->
+    <div class="card" style="margin-bottom:18px">
+      <h4 style="margin-top:0">📝 Form Input Jurnal Pendampingan</h4>
+      <div class="setting-grid">
+        <!-- KIRI -->
+        <div class="setting-col">
+          <label>Tanggal <span style="color:#ef4444">*</span></label>
+          <input type="date" id="gwTanggal"
+                 onchange="autoFillHariWali(this.value)">
+
+          <label>Hari</label>
+          <input type="text" id="gwHari"
+                 placeholder="Otomatis terisi"
+                 style="text-transform:uppercase"
+                 readonly>
+
+          <label>Waktu Mulai <span style="color:#ef4444">*</span></label>
+          <input type="time" id="gwWaktuMulai">
+
+          <label>Waktu Selesai <span style="color:#ef4444">*</span></label>
+          <input type="time" id="gwWaktuSelesai">
+          <small class="helper">Disimpan sebagai: 09.00 - 09.20</small>
+
+          <label>Fokus Pendampingan <span style="color:#ef4444">*</span></label>
+          <select id="gwFokus">
+            <option value="Akademik">Akademik</option>
+            <option value="Non Akademik">Non Akademik</option>
+          </select>
+        </div>
+        <!-- KANAN -->
+        <div class="setting-col">
+          <label>Topik Pendampingan <span style="color:#ef4444">*</span></label>
+          <input type="text" id="gwTopik"
+                 placeholder="Masukkan topik pendampingan">
+
+          <label>Catatan</label>
+          <textarea id="gwCatatan"
+                    placeholder="Catatan pendampingan..."
+                    style="min-height:80px"></textarea>
+
+          <label>Tindak Lanjut</label>
+          <textarea id="gwTindakLanjut"
+                    placeholder="Rencana tindak lanjut..."
+                    style="min-height:80px"></textarea>
+
+          <label>📸 Dokumentasi (1–2 Foto)</label>
+          <div id="gwFotoArea" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+            <div class="gw-foto-slot" id="gwFotoSlot1" onclick="document.getElementById('gwFotoInput1').click()"
+                 style="width:120px;height:90px;border:2px dashed #c7d2fe;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#f5f3ff;flex-shrink:0;transition:border-color .2s">
+              <div id="gwFotoPlaceholder1" style="font-size:30px;opacity:.4">📷</div>
+              <img id="gwFotoPreview1" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 1">
+              <button id="gwFotoRemove1" onclick="event.stopPropagation();gwRemoveFoto_(1)"
+                style="display:none;position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:18px;text-align:center">×</button>
+              <input type="file" id="gwFotoInput1" accept="image/*" style="display:none" onchange="gwPickFoto_(1,this)">
+            </div>
+            <div class="gw-foto-slot" id="gwFotoSlot2" onclick="document.getElementById('gwFotoInput2').click()"
+                 style="width:120px;height:90px;border:2px dashed #c7d2fe;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#f5f3ff;flex-shrink:0;transition:border-color .2s">
+              <div id="gwFotoPlaceholder2" style="font-size:30px;opacity:.4">📷</div>
+              <img id="gwFotoPreview2" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 2">
+              <button id="gwFotoRemove2" onclick="event.stopPropagation();gwRemoveFoto_(2)"
+                style="display:none;position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:18px;text-align:center">×</button>
+              <input type="file" id="gwFotoInput2" accept="image/*" style="display:none" onchange="gwPickFoto_(2,this)">
+            </div>
+          </div>
+          <small class="helper">Optional · Klik kotak untuk pilih foto · Foto dikompres otomatis</small>
+        </div>
+      </div>
+      <div class="setting-actions">
+        <button id="btnSimpanJurnalWali"
+                onclick="simpanJurnalWali()">
+          💾 Simpan Jurnal
+        </button>
+        <button class="ghost" onclick="resetFormGuruWali()">🔄 Reset</button>
+      </div>
+    </div>
+
+    <!-- 4. RIWAYAT -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <h4 style="margin:0">📑 Riwayat Jurnal Pendampingan</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="ghost" onclick="loadRiwayatGuruWali()">🔄 Refresh</button>
+          <button onclick="cetakLaporanGuruWali()">🖨️ Cetak Laporan</button>
+        </div>
+      </div>
+      <!-- Filter bar -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px 12px;background:#f9fafb;border-radius:10px;border:1px solid #f3f4f6">
+        <div>
+          <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Bulan</label>
+          <input type="month" id="gwFilterBulan" style="font-size:13px" onchange="renderRiwayatGuruWali()">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Fokus</label>
+          <select id="gwFilterFokus" style="font-size:13px" onchange="renderRiwayatGuruWali()">
+            <option value="">-- Semua --</option>
+            <option>Akademik</option>
+            <option>Sosial-Emosional</option>
+            <option>Kehadiran</option>
+            <option>Karir</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <button class="ghost" onclick="gwResetFilter_()" style="font-size:12px;align-self:flex-end">✕ Reset</button>
+        <span id="gwFilterCount" style="font-size:12px;color:#6b7280;align-self:flex-end"></span>
+      </div>
+      <!-- pesan bulan berjalan -->
+      <div id="gwPesanBulanIni"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Hari/Tanggal</th>
+              <th>Waktu</th>
+              <th>Fokus Pendampingan</th>
+              <th>Topik Pendampingan</th>
+              <th>Catatan</th>
+              <th>Tindak Lanjut</th>
+              <th>Dokumentasi</th>
+            </tr>
+          </thead>
+          <tbody id="riwayatGuruWaliBody">
+            <tr><td colspan="8" class="muted">⏳ Memuat...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ARSIP JURNAL GURU WALI -->
+    <div class="card" style="margin-top:18px;background:#fffbeb;border-left:6px solid #f59e0b">
+      <h4 style="margin-top:0">📦 Arsip Jurnal Pendampingan</h4>
+      <p class="muted" style="margin-top:0">Simpan jurnal guru wali tahun aktif ke Google Drive, lalu bersihkan sheet untuk tahun berikutnya.</p>
+      <div id="statusArsipWali" class="muted">⏳ Mengecek status arsip...</div>
+      <div id="warningArsipWali" style="display:none;margin:10px 0;padding:10px 14px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:14px">
+        ⚠️ Data jurnal guru wali sudah mencakup <b>3 atau lebih tahun pelajaran</b>. Pertimbangkan untuk mengarsipkan tahun aktif agar sheet tidak terlalu berat.
+      </div>
+      <div style="margin-top:14px">
+        <button id="btnArsipWali" onclick="arsipJurnalWaliUI()" disabled>
+          📦 Arsip Jurnal Guru Wali Tahun Ini
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= REKAP ================= -->
+  <div class="card tab" id="rekap" data-tabid="rekap" style="display:none">
+    <h3>Rekap Absensi</h3>
+    <label>Dari</label>
+    <input type="date" id="dari">
+    <label>Sampai</label>
+    <input type="date" id="sampai">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+      <button onclick="loadRekap()">Tampilkan</button>
+      <button class="ghost" onclick="doExportRekapPDF()" title="Export rekap ke PDF">📄 Export PDF</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Kelas</th>
+            <th>Tanggal</th>
+            <th>Pertemuan</th>
+            <th>Asesmen</th>
+            <th>Keterangan</th>
+          </tr>
+        </thead>
+        <tbody id="rekapBody"></tbody>
+      </table>
+    </div>
+
+    <hr style="margin:28px 0">
+    <!-- ===== LAPORAN ABSENSI PER SISWA ===== -->
+    <h3>📋 Laporan Absensi Per Siswa</h3>
+    <p class="muted">Rekap kehadiran setiap siswa dalam 1 kelas — per bulan, semester, atau tahun pelajaran.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px">Kelas</label>
+        <select id="laporanKelas" style="min-width:120px">
+          <option value="">-- Pilih --</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px">Periode</label>
+        <select id="laporanMode" onchange="updateLaporanPeriodUI()" style="min-width:120px">
+          <option value="bulan">Per Bulan</option>
+          <option value="semester">Per Semester</option>
+          <option value="tahun">Tahun Pelajaran</option>
+        </select>
+      </div>
+      <div id="laporanPeriodWrap">
+        <label style="font-size:12px">Bulan</label>
+        <input type="month" id="laporanBulan" style="min-width:140px">
+      </div>
+      <div id="laporanSemesterWrap" style="display:none">
+        <label style="font-size:12px">Semester</label>
+        <select id="laporanSemester" style="min-width:120px">
+          <option value="ganjil">Ganjil</option>
+          <option value="genap">Genap</option>
+        </select>
+      </div>
+      <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
+      <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
+    </div>
+    <div id="laporanAbsensiWrap">
+      <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
+    </div>
+  </div>
+
+<!-- ================= TAB SETTING (FINAL) ================= -->
+<div class="card tab" id="setting" data-tabid="setting" style="display:none">
+  <h3>⚙️ Pengaturan Aplikasi <span id="lockIndicator"
+      style="margin-left:8px;font-size:16px;display:none">
+  🔒
+</span>
+</h3>
+  <div class="card" style="margin-bottom:14px;background:#f8fafc;border-left:6px solid #0ea5e9">
+    <h4 style="margin-top:0">Pengaturan Akademik Multi Tahun</h4>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="ghost" onclick="openAcademicModal('periode')">Tahun Pelajaran</button>
+      <button class="ghost" onclick="openAcademicModal('semester')">Semester</button>
+      <button class="ghost" onclick="openAcademicModal('mapel')">Mata Pelajaran Diampu</button>
+      <button class="ghost" onclick="openAcademicModal('kelas')">Kelas Diampu</button>
+      <button class="ghost" onclick="openAcademicModal('clone')">Clone Tahun Pelajaran</button>
+      <button class="ghost" onclick="openAcademicModal('promosi')">Promosi Siswa</button>
+      <button class="ghost" onclick="openAcademicModal('alumni')">Alumni</button>
+    </div>
+    <div id="academicQuickInfo" class="muted" style="margin-top:8px">Memuat konfigurasi akademik...</div>
+  </div>
+  <!-- ================= PANDUAN ================= -->
+  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1">
+    <h4 style="margin-top:0">📌 Langkah Penggunaan</h4>
+    <ol style="margin:8px 0 0 18px;font-size:14px;line-height:1.7">
+      <li><b>Lengkapi semua data Setting</b></li>
+      <li>Klik <b>Simpan Setting</b></li>
+      <li>Setelah tersimpan, <b>Upload Data Siswa</b> akan aktif</li>
+    </ol>
+  </div>
+  <p class="muted" style="margin-top:10px">
+    ⚠️ Data siswa tidak dapat diupload sebelum setting disimpan.
+  </p>
+  <!-- ================= FORM SETTING ================= -->
+  <div class="setting-grid">
+    <!-- KIRI -->
+    <div class="setting-col">
+      <label>Nama Sekolah</label>
+      <input id="set_sekolah">
+      <label>Tahun Pelajaran</label>
+      <input id="set_tahun">
+      <label>Logo Sekolah</label>
+      <input type="file"
+             id="logoFile"
+             accept="image/png,image/jpeg"
+             onchange="previewLogo(this)">
+      <small class="helper">
+        PNG / JPG · Ukuran bebas · Akan tampil sebagai ikon header
+      </small>
+      <img id="logoPreview"
+           style="display:none;margin-top:10px;height:42px">
+    </div>
+
+    <!-- KANAN -->
+    <div class="setting-col">
+      <label>Semester</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input id="set_semester" style="flex:1">
+            <button class="ghost" onclick="gantiSemester()" title="Ganti semester aktif">
+              🔄 Ganti
+            </button>
+          </div>
+              <small class="helper">
+                Digunakan untuk jurnal baru. Jurnal lama tidak berubah.
+              </small>
+      <label>Nama Guru</label>
+      <input id="set_guru">
+      <label>NIP Guru</label>
+        <input
+          id="set_nip_guru"
+          type="text"
+          placeholder="Contoh: 1987xxxxxxxxx"
+        />
+    </div>
+  </div>
+
+  <!-- ===== MATA PELAJARAN (FULL WIDTH) ===== -->
+  <div style="margin-top:18px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <div>
+        <label style="font-weight:600;font-size:14px">Mata Pelajaran <span style="color:#ef4444">*</span></label>
+        <p class="muted" style="margin:2px 0 0;font-size:12px">Centang mapel yang Anda ampu — bisa lebih dari 1</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="ghost" style="font-size:11px;padding:4px 10px"
+          onclick="document.querySelectorAll('.mapel-cb').forEach(c=>c.checked=false);syncMapelSelects()">
+          ✕ Hapus semua
+        </button>
+      </div>
+    </div>
+    <div id="mapelCheckboxList" onchange="syncMapelSelects()"
+         style="display:flex;flex-wrap:wrap;gap:8px;padding:14px;border:1.5px solid #e5e7eb;
+                border-radius:12px;background:#f9fafb">
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Pendidikan Agama Hindu dan Budi Pekerti"><span>Pend. Agama Hindu</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Pendidikan Agama Islam dan Budi Pekerti"><span>Pend. Agama Islam</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Pendidikan Agama Kristen dan Budi Pekerti"><span>Pend. Agama Kristen</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Pendidikan Pancasila"><span>Pendidikan Pancasila</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Bahasa Indonesia"><span>Bahasa Indonesia</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Matematika"><span>Matematika</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="IPA"><span>IPA</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="IPS"><span>IPS</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Bahasa Inggris"><span>Bahasa Inggris</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Informatika"><span>Informatika</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Koding"><span>Koding</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="PJOK"><span>PJOK</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Seni Budaya"><span>Seni Budaya</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Seni Musik"><span>Seni Musik</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Bimbingan Konseling"><span>Bimbingan Konseling</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Sejarah"><span>Sejarah</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Ekonomi"><span>Ekonomi</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Geografi"><span>Geografi</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Sosiologi"><span>Sosiologi</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Fisika"><span>Fisika</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Kimia"><span>Kimia</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Biologi"><span>Biologi</span></label>
+      <label class="mapel-pill"><input type="checkbox" class="mapel-cb" value="Bahasa Bali"><span>Bahasa Bali</span></label>
+    </div>
+    <!-- Preview mapel terpilih -->
+    <div id="mapelSelectedPreview" style="margin-top:8px;min-height:22px;font-size:12px;color:#6C63FF;font-weight:600"></div>
+  </div>
+  <div class="setting-actions">
+    <button onclick="simpanSetting()">💾 Simpan Setting</button>
+    <button id="btnEditSetting"
+        class="ghost"
+        style="display:none"
+        onclick="editSettingUI()">
+  ✏️ Edit Setting
+</button>
+  </div>
+  <hr style="margin:32px 0">
+
+  <!-- ================= DATA SISWA ================= -->
+  <h3>👨‍🎓 Data Siswa</h3>
+  <p class="muted" id="siswaInfoText">
+    🔒 Upload data siswa akan aktif setelah setting disimpan.
+  </p>
+  <div class="grid-2">
+    <!-- DOWNLOAD -->
+    <div class="box">
+      <h4>⬇️ Download Template</h4>
+      <p class="muted">
+        Kolom wajib:<br>
+        <b>kelas, no_absen, nis, nama, jk</b><br>
+        Opsional: <b>nisn, ttl, alamat, orang_tua, kontak, status</b>
+      </p>
+      <button id="btnDownloadTemplate"
+              class="btn btn-secondary"
+              onclick="downloadTemplate()"
+              disabled>
+        Download Template
+      </button>
+    </div>
+    <!-- UPLOAD -->
+    <div class="box">
+      <h4>📤 Upload Data Siswa</h4>
+      <input type="file"
+             id="fileSiswa"
+             accept=".csv,.xls,.xlsx"
+             disabled>
+      <small class="helper">
+        Format: CSV / XLS / XLSX<br>
+        1 baris = 1 siswa
+      </small>
+    </div>
+  </div>
+  <div class="action-row">
+    <button id="btnResetSiswa"
+            class="btn btn-reset"
+            onclick="resetSiswa()"
+            disabled>
+      🔄 Reset
+    </button>
+    <button id="btnUploadSiswa"
+            class="btn btn-primary"
+            onclick="uploadCsv()"
+            disabled>
+      💾 Simpan Data Siswa
+    </button>
+  </div>
+
+  <hr style="margin:32px 0">
+<h3>📅 Input Jadwal Mengajar</h3>
+
+<div class="grid-2">
+
+  <div class="field">
+    <label>Hari</label>
+    <select id="jadwal_hari">
+      <option>SENIN</option>
+      <option>SELASA</option>
+      <option>RABU</option>
+      <option>KAMIS</option>
+      <option>JUMAT</option>
+      <option>SABTU</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Kelas</label>
+    <input type="text" id="jadwal_kelas">
+  </div>
+
+  <div class="field">
+    <label>Mapel</label>
+    <select id="jadwal_mapel">
+      <option value="">-- Pilih Mapel --</option>
+    </select>
+    <small class="helper">Pilih mapel setelah setting mata pelajaran disimpan</small>
+  </div>
+
+  <div class="field">
+    <label>Jam Mulai</label>
+    <input type="time" id="jadwal_mulai">
+  </div>
+
+  <div class="field">
+    <label>Jam Selesai</label>
+    <input type="time" id="jadwal_selesai">
+  </div>
+
+</div>
+
+<div class="action-row">
+  <button class="btn btn-primary" onclick="saveJadwalUI()">💾 Simpan Jadwal</button>
+</div>
+
+<div id="jadwalList"></div>
+<div id="listJadwalSetting"></div>
+</div>
+
+<div id="academicWizardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:min(680px,94vw);max-height:88vh;overflow:auto;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h3 id="academicWizardTitle" style="margin:0">Pengaturan Akademik</h3>
+      <button class="ghost" onclick="closeAcademicModal()">Tutup</button>
+    </div>
+    <div style="margin:10px 0 12px">
+      <div style="height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden">
+        <div id="academicWizardProgress" style="height:100%;width:0;background:linear-gradient(90deg,#0ea5e9,#22c55e);transition:width .25s"></div>
+      </div>
+    </div>
+    <div id="academicWizardBody"></div>
+    <div id="academicWizardActions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"></div>
+  </div>
+</div>
+
+<!-- TAB DASHBOARD SUPERADMIN -->
+<div class="card tab" id="DashboardSuperAdmin" data-tabid="DashboardSuperAdmin" style="display:none">
+  <h3>👑 Dashboard SuperAdmin</h3>
+  <div class="grid-dashboard">
+    <div class="card stat">
+      <div class="label">👥 Total Guru</div>
+      <div class="value" id="sa_totalUser">0</div>
+    </div>
+    <div class="card stat green">
+      <div class="label">✅ Guru Aktif</div>
+      <div class="value" id="sa_guruAktif">0</div>
+    </div>
+    <div class="card stat red">
+      <div class="label">🚫 Guru Nonaktif</div>
+      <div class="value" id="sa_guruNonaktif">0</div>
+    </div>
+    <div class="card stat blue">
+      <div class="label">📘 Total Jurnal</div>
+      <div class="value" id="sa_totalJurnal">0</div>
+    </div>
+    <div class="card stat orange">
+      <div class="label">🏫 Total Kelas</div>
+      <div class="value" id="sa_totalKelas">0</div>
+    </div>
+    <div class="card stat purple">
+      <div class="label">💾 Drive Terpakai</div>
+      <div class="value" id="sa_driveUsed">…</div>
+    </div>
+    </div>
+<!-- ===== TIER MANAGEMENT ===== -->
+<div class="card" style="margin-top:16px;border:2px solid #f59e0b">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div>
+      <h3 style="margin:0">⚡ Manajemen Tier Lisensi</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Generate kode PRO/SCHOOL untuk diberikan ke pengguna. Tier aktif berlaku untuk semua guru di sekolah ini.</p>
+    </div>
+    <span id="currentTierBadge" style="background:#f3f4f6;color:#374151;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">⏳ Memuat...</span>
+  </div>
+
+  <!-- Tier info + set -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+    <div style="background:#f8fafc;border-radius:12px;padding:14px;border:2px solid #e5e7eb">
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">LITE — Gratis</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Jurnal mengajar<br>✅ Absensi (maks 160 siswa)<br>✅ 5 kelas maksimal<br>✅ Input nilai (tanpa katrol)<br>❌ Modul Ajar / RPP<br>❌ Export Excel</div>
+    </div>
+    <div style="background:#eff6ff;border-radius:12px;padding:14px;border:2px solid #6366f1">
+      <div style="font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">PRO — 1 Guru</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur LITE<br>✅ Unlimited kelas & siswa<br>✅ Katrol nilai<br>✅ Modul Ajar & RPP<br>✅ Export Excel semua laporan<br>❌ Rekap Sekolah</div>
+    </div>
+    <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:2px solid #22c55e">
+      <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">SCHOOL — Multi Guru</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur PRO<br>✅ Multi-guru (tambah user)<br>✅ Rekap Sekolah (kepsek)<br>✅ Early Warning Siswa<br>✅ Dashboard Kepala Sekolah</div>
+    </div>
+  </div>
+
+  <!-- Generate key -->
+  <details style="margin-bottom:12px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#4338ca">🎲 Generate Kode Lisensi</summary>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button onclick="genTierKey_('PRO')" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🎲 Generate PRO Key</button>
+      <button onclick="genTierKey_('SCHOOL')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🎲 Generate SCHOOL Key</button>
+      <input id="generatedTierKey" readonly placeholder="Kode akan muncul di sini" style="flex:1;min-width:180px;font-family:monospace;font-size:13px;background:#f8fafc;cursor:pointer" onclick="this.select()" title="Klik untuk pilih semua">
+    </div>
+  </details>
+
+  <!-- Set tier manual (SuperAdmin sendiri) -->
+  <details>
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#dc2626">⚙️ Set Tier Sekolah Ini</summary>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:500px">
+      <div style="flex:1;min-width:120px">
+        <label style="font-size:12px;color:#6b7280">Tier</label>
+        <select id="setTierSelect" style="width:100%">
+          <option value="LITE">LITE (Gratis)</option>
+          <option value="PRO">PRO</option>
+          <option value="SCHOOL">SCHOOL</option>
+        </select>
+      </div>
+      <div style="flex:2;min-width:180px">
+        <label style="font-size:12px;color:#6b7280">Kode Lisensi (untuk PRO/SCHOOL)</label>
+        <input id="setTierKeyInput" placeholder="PRO-XXXX-XXXX" style="width:100%;font-family:monospace;text-transform:uppercase">
+      </div>
+      <button onclick="setTierUI_()" style="background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">💾 Simpan Tier</button>
+    </div>
+  </details>
+</div>
+<!-- ===== END TIER MANAGEMENT ===== -->
+
+<!-- ===== LISENSI SEKOLAH ===== -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+    <div>
+      <h3 style="margin:0">🔑 Lisensi Sekolah</h3>
+      <p class="muted" style="margin:4px 0 0">Lisensi berlaku untuk seluruh pengguna di sekolah ini (school-wide).</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="loadSchoolLicenseUI()" class="ghost" style="font-size:13px">🔄 Refresh</button>
+      <button onclick="genSchoolLicenseKey_()" style="font-size:13px;background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:600;cursor:pointer">🎲 Generate Key</button>
+    </div>
+  </div>
+
+  <!-- Info lisensi aktif -->
+  <div id="schoolLicenseInfo" style="margin-bottom:14px">
+    <p class="muted">⏳ Memuat info lisensi...</p>
+  </div>
+
+  <!-- Form set / renew lisensi -->
+  <details style="margin-top:4px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#4338ca">⚙️ Set / Perpanjang Lisensi</summary>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;max-width:420px">
+      <div>
+        <label style="font-size:12px;color:#6b7280">Kode Lisensi</label>
+        <input id="schoolLicKey" placeholder="SCH-YYYYMMDD-XXXXXXXX" style="width:100%;font-family:monospace">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280">Berlaku s.d.</label>
+        <input type="date" id="schoolLicExpires" style="width:100%">
+      </div>
+      <button onclick="setSchoolLicenseUI()">💾 Simpan Lisensi</button>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px">
+      <label style="font-size:12px;color:#6b7280">Perpanjang (dari tanggal expired saat ini)</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button onclick="renewSchoolLicenseUI(1)" style="font-size:13px">+1 Tahun</button>
+        <button onclick="renewSchoolLicenseUI(2)" style="font-size:13px">+2 Tahun</button>
+        <button onclick="renewSchoolLicenseUI(3)" style="font-size:13px">+3 Tahun</button>
+        <button onclick="deactivateSchoolLicenseUI()" class="ghost" style="font-size:13px;color:#dc2626">❌ Nonaktifkan</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Reminder trigger lisensi -->
+  <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb">
+    <h4 style="margin:0 0 6px;font-size:13px">🔔 Reminder Renewal Otomatis</h4>
+    <p class="muted" style="font-size:12px;margin:0 0 8px">Email ke SuperAdmin saat lisensi H-60, H-30, H-7 sebelum expired.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span id="licReminderStatus" style="font-size:12px;color:#6b7280">⏳ Mengecek...</span>
+      <button onclick="activateLicenseReminderTrigger_()" id="btnSetLicReminder" style="font-size:12px">🔔 Aktifkan</button>
+      <button onclick="deactivateLicenseReminderTrigger_()" class="ghost" id="btnDelLicReminder" style="font-size:12px">🗑️ Nonaktifkan</button>
+    </div>
+  </div>
+</div>
+<!-- ===== END LISENSI SEKOLAH ===== -->
+
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom:10px;
+        flex-wrap:wrap;
+        gap:10px
+      ">
+        <div>
+          <h3 style="margin:0">👥 Manajemen User</h3>
+          <p class="muted" style="margin:4px 0 0">
+            Kelola akun guru yang menggunakan aplikasi ini.
+          </p>
+        </div>
+
+        <button onclick="openAddAdminModal()"
+          style="
+            display:flex;
+            align-items:center;
+            gap:6px;
+            padding:8px 14px;
+            font-weight:700;
+            border-radius:999px;
+            background:linear-gradient(135deg,#22c55e,#16a34a);
+            box-shadow:0 8px 18px rgba(34,197,94,.45)
+          ">
+          ➕ Tambah Admin
+        </button>
+      </div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>Email</th>
+        <th>Nama Guru</th>
+        <th>Sekolah</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Masa Aktif</th>
+        <th>Dibuat</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody id="userBody">
+      <tr>
+        <td colspan="9" class="muted">⏳ Memuat data user...</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<!-- MODAL TAMBAH ADMIN -->
+<div id="addAdminModal" style="
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.45);
+  display:none;
+  z-index:99999;
+">
+  <div style="
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    width:90%;
+    max-width:360px;
+    padding:24px;
+    border-radius:16px;
+    box-shadow:0 30px 60px rgba(0,0,0,.35);
+  ">
+    <h3 style="margin:0 0 16px">➕ Tambah User</h3>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600">Email <span style="color:#ef4444">*</span></label>
+        <input id="newAdminEmail" type="email" placeholder="guru@sekolah.sch.id" style="width:100%">
+      </div>
+
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600">No WhatsApp</label>
+        <input id="newAdminWA" placeholder="08xxx (opsional)" style="width:100%">
+      </div>
+
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Role</label>
+        <div style="display:flex;gap:10px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px;transition:border-color .15s" id="lbl-role-guru">
+            <input type="radio" name="newAdminRole" value="admin" checked onchange="updateRoleLabel_()"> 👨‍🏫 Guru
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px;transition:border-color .15s" id="lbl-role-kepsek">
+            <input type="radio" name="newAdminRole" value="kepsek" onchange="updateRoleLabel_()"> 🏫 Kepsek
+          </label>
+        </div>
+        <p id="roleHintText" style="font-size:11px;color:#6b7280;margin:4px 0 0">Guru: akses jurnal, absensi, nilai. Kepsek: akses Rekap Sekolah.</p>
+      </div>
+
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Masa Aktif</label>
+        <div style="display:flex;gap:10px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px" id="lbl-ma-1year">
+            <input type="radio" name="newAdminMasa" value="1year" checked onchange="updateMasaLabel_()"> 📅 1 Tahun
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #6366f1;border-radius:10px;flex:1;font-size:13px;background:#eff6ff" id="lbl-ma-lifetime">
+            <input type="radio" name="newAdminMasa" value="lifetime" onchange="updateMasaLabel_()"> ♾️ Seumur Hidup
+          </label>
+        </div>
+        <p id="masaHintText" style="font-size:11px;color:#6b7280;margin:4px 0 0">Expired: <b id="masaExpiredPreview"></b></p>
+      </div>
+    </div>
+
+  <div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">
+    <button type="button" class="ghost" onclick="closeAddAdminModal()">Batal</button>
+    <button type="button" onclick="addAdminUI()" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none">💾 Simpan</button>
+  </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Audit Log</h3>
+  <ul id="auditLog"></ul>
+</div>
+
+<hr style="margin:28px 0">
+<div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
+  ⚠️ <b>Peringatan Storage:</b> Folder arsip telah menggunakan <b id="arsipWarnUsed">-</b> MB, melebihi batas <b id="arsipWarnThreshold">-</b> MB. Pertimbangkan untuk menghapus arsip lama.
+</div>
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <div>
+      <h3 style="margin:0">📦 Arsip Semua Guru</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Arsip jurnal dari seluruh guru. Total pemakaian Drive: <b id="arsipTotalMB">⏳</b></p>
+    </div>
+    <button onclick="loadArsipDriveUsage()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🔄 Refresh</button>
+  </div>
+  <div id="arsipAllUserBox">
+    <p class="muted">⏳ Memuat arsip...</p>
+  </div>
+</div>
+
+<!-- Modal: Forward Arsip ke Email -->
+<div id="forwardArsipModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:420px;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="margin:0 0 12px">📧 Kirim Arsip ke Email</h3>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">File: <b id="forwardArsipNama">-</b></p>
+    <input id="forwardArsipEmail" type="email" placeholder="email@tujuan.com" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;margin-bottom:14px">
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('forwardArsipModal').style.display='none'" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="forwardArsipBtn" onclick="_doForwardArsip_()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📤 Kirim</button>
+    </div>
+  </div>
+</div>
+<div class="card">
+  <h3>📈 Statistik Global Lintas Guru</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama Guru</th>
+          <th>Email Guru</th>
+          <th>Total Jurnal</th>
+          <th>Total Kelas</th>
+          <th>Terakhir Aktif</th>
+        </tr>
+      </thead>
+      <tbody id="globalStatBody">
+        <tr>
+          <td colspan="6" class="muted">⏳ Memuat statistik...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <!-- ================= AUDIT LOG SUPERADMIN ================= -->
+<!-- KONFIGURASI TEMPLATE RPP -->
+<div class="card">
+  <h3>📄 Konfigurasi Template RPP</h3>
+  <p class="muted" style="font-size:13px">Buat template RPP di Google Docs dengan placeholder seperti <code>{{mapel}}</code>, <code>{{kelas}}</code>, <code>{{materi}}</code>, dll. Lalu masukkan URL atau ID dokumennya di sini.</p>
+  <div id="rppTemplateInfo" style="margin-bottom:12px;font-size:13px;color:#374151;padding:8px 12px;background:#f8fafc;border-radius:8px">⏳ Memuat konfigurasi...</div>
+  <div style="display:grid;gap:10px;margin-bottom:14px">
+    <div>
+      <label style="font-size:12px;color:#6b7280">URL atau ID Google Docs Template RPP</label>
+      <input id="rppTemplateInput" type="text" placeholder="https://docs.google.com/document/d/... atau Doc ID" style="width:100%;box-sizing:border-box;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#6b7280">URL atau ID Folder Drive output hasil RPP</label>
+      <input id="rppFolderInput" type="text" placeholder="https://drive.google.com/drive/folders/... (kosong = RPP_HASIL default)" style="width:100%;box-sizing:border-box;margin-top:4px">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label style="font-size:12px;color:#6b7280">Nama Kepala Sekolah</label>
+        <input id="rppKepsekNama" type="text" placeholder="Nama Kepala Sekolah" style="width:100%;box-sizing:border-box;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280">NIP Kepala Sekolah</label>
+        <input id="rppKepsekNip" type="text" placeholder="NIP" style="width:100%;box-sizing:border-box;margin-top:4px">
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:14px">
+    <b style="font-size:12px;color:#374151;display:block;margin-bottom:6px">Placeholder yang tersedia dalam template:</b>
+    <div style="font-size:11px;color:#6b7280;line-height:1.8;background:#f3f4f6;padding:8px 12px;border-radius:8px;font-family:monospace">
+      {{mapel}} {{kelas}} {{bab}} {{judul_modul}} {{materi}} {{tujuan_pembelajaran}}<br>
+      {{asesmen}} {{refleksi}} {{pertemuan}} {{jam_ke}} {{semester}} {{tahun_pelajaran}}<br>
+      {{tanggal}} {{nama_guru}} {{nip_guru}} {{sekolah}} {{kepala_sekolah}} {{nip_kepsek}} {{deskripsi_modul}}
+    </div>
+  </div>
+  <button id="rppConfigSaveBtn" onclick="saveRppTemplateConfig()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;font-size:13px;cursor:pointer">💾 Simpan</button>
+</div>
+
+<!-- KONFIGURASI FOLDER ARSIP -->
+<div class="card">
+  <h3>📁 Konfigurasi Folder Arsip</h3>
+  <p class="muted" style="font-size:13px">Tentukan folder Google Drive tujuan penyimpanan arsip jurnal. Biarkan kosong untuk menggunakan folder default <b>JURNAL_ARSIP</b> di My Drive.</p>
+  <div id="arsipFolderInfo" style="margin-bottom:10px;font-size:13px;color:#374151">⏳ Memuat konfigurasi...</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+    <div style="flex:1;min-width:220px">
+      <label style="font-size:12px;color:#6b7280">URL atau Folder ID Google Drive</label>
+      <input id="arsipFolderInput" type="text" placeholder="https://drive.google.com/drive/folders/... atau folder ID" style="width:100%;box-sizing:border-box">
+    </div>
+    <button onclick="saveArsipFolderConfig()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">💾 Simpan</button>
+    <button onclick="resetArsipFolderConfig()" class="ghost" style="font-size:13px;padding:8px 14px">↩️ Reset Default</button>
+  </div>
+  <div style="border-top:1px solid #e5e7eb;padding-top:12px">
+    <label style="font-size:12px;color:#6b7280">Threshold Peringatan Storage (MB)</label>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+      <input id="arsipWarnMbInput" type="number" min="50" max="10000" placeholder="500" style="width:120px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+      <span class="muted" style="font-size:12px">MB — tampilkan warning jika arsip melebihi batas ini</span>
+      <button onclick="saveArsipFolderConfig()" style="padding:6px 14px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600">💾</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <!-- BACKUP OTOMATIS -->
+  <h3>💾 Backup Otomatis</h3>
+  <p class="muted">Trigger harian (pukul 01:00) yang menyalin spreadsheet ke folder <b>BACKUP_JURNAL</b> di Drive Anda.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <span id="backupTriggerStatus" style="font-size:13px">⏳ Mengecek status...</span>
+    <button onclick="activateBackupTrigger()" id="btnSetBackup">✅ Aktifkan Backup Harian</button>
+    <button class="ghost" onclick="deactivateBackupTrigger()" id="btnDelBackup">🗑️ Nonaktifkan</button>
+  </div>
+
+  <!-- REMINDER PENGISIAN JURNAL -->
+  <h3 style="margin-top:24px">🔔 Reminder Pengisian Jurnal</h3>
+  <p class="muted">Trigger harian (pukul 07:00) yang mengirim email pengingat ke guru yang belum mengisi jurnal selama 3 hari terakhir.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <span id="reminderTriggerStatus" style="font-size:13px">⏳ Mengecek status...</span>
+    <button onclick="activateReminderTrigger()" id="btnSetReminder">🔔 Aktifkan Reminder</button>
+    <button class="ghost" onclick="deactivateReminderTrigger()" id="btnDelReminder">🗑️ Nonaktifkan</button>
+  </div>
+</div>
+
+<!-- SUPERADMIN EMAIL MANAGEMENT -->
+<div class="card">
+  <h3>👑 Email SuperAdmin</h3>
+  <p class="muted">Email yang digunakan sebagai superadmin. Disimpan di Script Properties — tidak perlu edit kode.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:1;min-width:200px">
+      <label style="font-size:12px;color:#6b7280">Email SuperAdmin Aktif</label>
+      <input id="inputSuperAdminEmail" style="width:100%" placeholder="email@sekolah.id">
+    </div>
+    <button onclick="updateSuperAdminEmail()">💾 Simpan</button>
+  </div>
+  <p id="superAdminEmailInfo" class="muted" style="margin-top:6px"></p>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <div>
+      <h3 style="margin:0">📝 Audit Log SuperAdmin</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">
+        Riwayat aktivitas penting SuperAdmin (user, lisensi, role, status).
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="_exportAuditLogExcel_()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">📊 Export Excel</button>
+      <button onclick="_confirmClearAuditLog_()" style="background:linear-gradient(135deg,#ef4444,#f87171);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🗑️ Kosongkan Log</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <input id="auditFilterText" type="text" placeholder="🔍 Filter aktor / aksi / target / detail..." oninput="_auditFilterDebounce_()" style="flex:1;min-width:200px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+    <select id="auditFilterAction" onchange="loadAuditLog()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+      <option value="">— Semua Aksi —</option>
+      <option>CREATE_USER</option><option>UPDATE_ROLE</option><option>UPDATE_STATUS</option>
+      <option>DELETE_USER</option><option>CREATE_LICENSE</option><option>GENERATE_LICENSE</option>
+      <option>ARSIP_TAHUN</option><option>CLEAR_AUDIT_LOG</option><option>TRASH_ARSIP_DRIVE</option>
+      <option>FORWARD_ARSIP</option><option>ARSIP_FOLDER_SET</option><option>ARSIP_FOLDER_RESET</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Waktu</th>
+          <th>Aktor</th>
+          <th>Aksi</th>
+          <th>Target</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody id="auditLogBody">
+        <tr>
+          <td colspan="5" class="muted">⏳ Memuat audit log...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== BROADCAST NOTIF ===== -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h3 style="margin:0">📢 Broadcast Notifikasi</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Kirim pengumuman ke semua guru aktif.</p>
+    </div>
+    <button onclick="openBroadcastModal()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📢 Kirim Broadcast</button>
+  </div>
+  <div id="saNotifHistory"><div class="muted">⏳ Memuat riwayat notifikasi…</div></div>
+</div>
+
+<!-- ===== DEPLOYMENT TRACKER ===== -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h3 style="margin:0">🛰️ Multi-Deployment Tracker</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Lacak seluruh sekolah yang menggunakan sistem ini.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="openDeploymentModal()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600">+ Tambah</button>
+      <button onclick="exportDeploymentsExcel()" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600">📥 Excel</button>
+      <button onclick="loadDeployments()" class="ghost" style="font-size:13px">🔄</button>
+    </div>
+  </div>
+  <div id="deploymentList"><div class="muted">⏳ Memuat…</div></div>
+</div>
+
+</div>
+
+<!-- ================= PROGRESS BAR ================= -->
+<div id="progressBox">
+  <div id="progressOuter">
+    <div id="progressInner"></div>
+  </div>
+  <div id="progressPercent">0%</div>
+</div>
+
+<div id="welcomeModal" style="
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:99999;
+">
+  <div style="
+    background:#fff;
+    width:90%;
+    max-width:520px;
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 30px 60px rgba(0,0,0,.35);
+  ">
+    <h2>👋 Selamat Datang di Sistem Akademik Guru</h2>
+    <p style="line-height:1.6">
+      Untuk menggunakan aplikasi ini dengan benar, silakan ikuti langkah berikut:
+    </p>
+    <ol style="line-height:1.8">
+      <li>Masuk ke menu <b>⚙️ Setting</b></li>
+      <li>Lengkapi semua pengaturan jurnal</li>
+      <li>Upload <b>Data Siswa</b></li>
+      <li>Setelah itu gunakan menu <b>Dashboard</b>, <b>Jurnalku</b>, <b>Riwayat</b>, dan <b>Rekap</b></li>
+    </ol>
+    <div style="text-align:right;margin-top:20px">
+      <button onclick="(function(){var m=document.getElementById('welcomeModal');if(m)m.style.display='none';})()">✅ Mengerti</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- MOBILE VIEW -->
+<!-- FLOATING ACTION BUTTON (context-aware) -->
+<button class="fab-jurnal hide"
+        id="fabJurnal"
+        onclick="fabAction()">
+  +
+</button>
+<!-- BOTTOM NAV MOBILE -->
+<div class="mobile-bottom-nav" id="mobileNav" style="display:none">
+  <button onclick="mobileNavGo('dashboard')" id="navDashboard">📊<span>Dashboard</span></button>
+  <button onclick="mobileNavGo('riwayat')" id="navRiwayat">📑<span>Riwayat</span></button>
+  <button onclick="mobileNavGo('rekap')" id="navRekap">📊<span>Rekap</span></button>
+  <button onclick="mobileNavGo('setting')" id="navSetting">⚙️<span>Setting</span></button>
+  <button id="btnDarkModeMobile" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+</div>
+
+<!-- ================= MODAL: LISENSI SEKOLAH TIDAK AKTIF ================= -->
+<div id="licenseModal" style="
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:100000;
+">
+  <div style="
+    background:#fff;
+    width:90%;
+    max-width:380px;
+    padding:28px 24px;
+    border-radius:18px;
+    box-shadow:0 30px 60px rgba(0,0,0,.35);
+    text-align:center;
+  ">
+    <div style="font-size:48px;margin-bottom:10px">🔒</div>
+    <h3 style="margin:0 0 8px;color:#dc2626">Lisensi Sekolah Tidak Aktif</h3>
+    <p class="muted" style="font-size:14px;line-height:1.7">
+      Masa lisensi sekolah sudah habis atau belum diaktifkan.<br>
+      Silakan hubungi <b>Admin Sekolah</b> untuk perpanjangan.
+    </p>
+    <div style="margin-top:20px">
+      <button onclick="closeLicenseModal()" style="width:100%">✅ Mengerti</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL TAHUN AJARAN BARU (MUNCUL SETELAH ARSIP) ========== -->
+<div id="modalTahunBaru" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.6);
+  align-items:center;
+  justify-content:center;
+  z-index:200000;
+">
+  <div style="background:#fff;border-radius:16px;padding:30px 32px;max-width:420px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+    <h3 style="margin:0 0 6px">🎉 Arsip Berhasil!</h3>
+    <p id="infoArsipModal" class="muted" style="margin-bottom:18px;"></p>
+    <p style="margin:0 0 10px;font-size:14px;color:#374151">Silahkan masukkan <strong>tahun pelajaran</strong> dan <strong>semester baru</strong> untuk memulai pencatatan jurnal berikutnya.</p>
+    <label>Tahun Pelajaran Baru</label>
+    <input id="inputTahunBaru" type="text" placeholder="contoh: 2025-2026" style="margin-bottom:10px">
+    <label>Semester</label>
+    <select id="inputSemesterBaru" style="margin-bottom:20px">
+      <option value="">-- Pilih Semester --</option>
+      <option value="Ganjil">Ganjil</option>
+      <option value="Genap">Genap</option>
+    </select>
+    <button onclick="simpanTahunBaruUI()" style="width:100%;padding:12px;background:#6C63FF;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:600">
+      ✅ Simpan & Mulai Tahun Ajaran Baru
+    </button>
+  </div>
+</div>
+
+<!-- =========== TAB: INPUT NILAI (ADMIN / SUPERADMIN ONLY) =========== -->
+<style>
+  .nil-pill{padding:6px 16px;border-radius:20px;border:2px solid #d1d5db;background:#f9fafb;
+    cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;white-space:nowrap}
+  .nil-pill:hover{border-color:#6C63FF;color:#6C63FF}
+  .nil-pill-active{background:#6C63FF!important;color:#fff!important;border-color:#6C63FF!important}
+  .nil-pill-all{border-color:#22c55e;color:#22c55e}
+  .nil-pill-all.nil-pill-active{background:#22c55e!important;border-color:#22c55e!important}
+  .ntd-inp{padding:4px;text-align:center}
+  .ntd-inp input{width:64px;padding:4px 3px;border:1.5px solid #d1d5db;border-radius:5px;text-align:center;font-size:12px}
+  .ntd-inp input:focus{border-color:#6C63FF;outline:none}
+  .ntd-calc{background:#f0f4ff;font-weight:600;font-size:12px;padding:5px 6px;text-align:center}
+  .ntd-plain{font-size:12px;padding:5px 6px;text-align:center}
+  body.dark .nil-pill{background:#1f2937;border-color:#4b5563;color:#e5e7eb}
+  body.dark .ntd-calc{background:#1e293b}
+  #tabelNilai{width:100%;border-collapse:collapse}
+  #tabelNilai th{background:#6C63FF;color:#fff;padding:6px 5px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;font-size:12px}
+  #tabelNilai td{border-bottom:1px solid #e5e7eb}
+  #tabelNilai tr.row-kkm{background:#fff0f0}
+  body.dark #tabelNilai th{background:#4f46e5}
+  body.dark #tabelNilai td{border-bottom-color:#374151}
+  body.dark .ntd-inp input{background:#1f2937;color:#e5e7eb;border-color:#4b5563}
+</style>
+<div id="inputNilai" class="card tab" data-tabid="inputNilai" style="display:none">
+  <h2>📊 Daftar Nilai Siswa</h2>
+  <p class="muted" style="margin-bottom:20px">Modul khusus Admin / Superadmin – Input, pengolahan, dan cetak daftar nilai.</p>
+
+  <!-- Filter -->
+  <div class="card" style="margin-bottom:16px">
+    <h3>🔍 Filter Nilai</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;align-items:flex-end;margin-top:12px">
+      <div>
+        <label>Kelas</label>
+        <select id="nilaiKelasSelect">
+          <option value="">-- Pilih Kelas --</option>
+        </select>
+      </div>
+      <div>
+        <label>Mata Pelajaran</label>
+        <select id="nilaiMapelSelect">
+          <option value="">-- Pilih Mapel --</option>
+        </select>
+      </div>
+      <div>
+        <label>Tahun Pelajaran</label>
+        <input id="nilaiTahunInput" type="text" readonly
+          placeholder="Otomatis dari setting"
+          style="background:#f3f4f6;color:#374151;cursor:not-allowed">
+      </div>
+      <div>
+        <label>Semester</label>
+        <input id="nilaiSemesterSelect" type="text" readonly
+          placeholder="Memuat dari setting..."
+          style="background:#f3f4f6;color:#374151;cursor:not-allowed">
+      </div>
+      <div>
+        <button id="btnMuatNilai" onclick="muatDataNilai()">📂 Muat Data Siswa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Konten utama (tampil setelah muat) -->
+  <div id="nilaiMainSection" style="display:none">
+
+    <!-- Status Bar (sticky saat scroll) -->
+    <div style="position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #e5e7eb;
+                padding:10px 14px;margin-bottom:12px;border-radius:0 0 10px 10px;
+                display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+                box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="flex:1;min-width:180px;font-size:13px">
+        Kelas: <b id="nilaiInfoKelas" style="color:#6C63FF"></b>
+        <span class="muted" style="margin:0 6px">|</span>
+        Mapel: <b id="nilaiInfoMapel"></b>
+        <span class="muted" style="margin:0 6px">|</span>
+        <span id="nilaiInfoSemTahun" class="muted"></span>
+        <span class="muted" style="margin:0 6px">|</span>
+        <span id="nilaiAutosaveInfo" style="font-size:12px;color:#6b7280">Autosave: standby</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="nilaiLockBadge"
+          style="background:#fef3c7;color:#92400e;border-radius:20px;
+                 padding:5px 14px;font-size:12px;font-weight:700">🔒 Terkunci</span>
+        <span id="nilaiEditBadge"
+          style="display:none;background:#d1fae5;color:#065f46;border-radius:20px;
+                 padding:5px 14px;font-size:12px;font-weight:700">✏️ Mode Edit</span>
+        <button id="btnEditNilai" onclick="editNilai()"
+          style="background:#6C63FF;color:#fff;border:none;border-radius:8px;
+                 padding:7px 18px;cursor:pointer;font-weight:600;font-size:13px">
+          ✏️ Input Nilai</button>
+        <div id="btnsEditNilai" style="display:none;gap:8px;flex-wrap:wrap">
+          <button id="btnSimpanNilai" onclick="simpanSemuaNilai()"
+            style="background:#22c55e;color:#fff;border:none;border-radius:8px;
+                   padding:7px 18px;cursor:pointer;font-weight:700;font-size:13px">💾 Simpan</button>
+          <button class="ghost" onclick="cancelEditNilai()">❌ Cancel</button>
+          <button class="ghost" onclick="restoreNilaiDraftManual_()">♻️ Pulihkan Draft</button>
+          <button class="ghost" onclick="clearNilaiDraftManual_()">🧹 Hapus Draft</button>
+          <button class="ghost" onclick="lockNilai()">🔒 Kunci</button>
+        </div>
+        <button class="ghost" onclick="openCetakNilai()" style="margin-left:4px">🖨️ Cetak / Export</button>
+      </div>
+    </div>
+
+    <!-- Import Excel (hanya saat edit mode) -->
+    <div id="nilaiImportSection" class="card" style="display:none;margin-bottom:14px">
+      <h3>📤 Import dari Excel</h3>
+      <p class="muted" style="margin-bottom:8px;font-size:12px">
+        Kolom yang dikenali: nis, nama_siswa, uh1-3, tgs1-3, pts, pas, pat</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="nilaiImportFile" accept=".xlsx,.xls" style="flex:1;min-width:180px">
+        <button onclick="importNilaiExcelUI(this)">📊 Import</button>
+        <button class="ghost" onclick="downloadTemplateNilai()">📥 Template</button>
+      </div>
+    </div>
+
+    <!-- Pilih Komponen Nilai (hanya saat edit mode) — di atas tabel agar mudah diakses -->
+    <div id="nilaiKomponenCard" class="card" style="display:none;margin-bottom:10px;padding:12px 16px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#374151">
+        Pilih komponen nilai yang diinput:
+        <span class="muted" style="font-weight:normal;font-size:12px;margin-left:6px">
+          Pilih satu komponen untuk fokus, atau <b>Semua</b> untuk edit bebas</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="nil-pill nil-pill-all nil-pill-active" data-key="all"
+          onclick="setFokusKomponen('all')">✏️ Semua</button>
+        <button class="nil-pill" data-key="tgs1"  onclick="setFokusKomponen('tgs1')">TGS 1</button>
+        <button class="nil-pill" data-key="tgs2"  onclick="setFokusKomponen('tgs2')">TGS 2</button>
+        <button class="nil-pill" data-key="tgs3"  onclick="setFokusKomponen('tgs3')">TGS 3</button>
+        <button class="nil-pill" data-key="uh1"   onclick="setFokusKomponen('uh1')">UH 1</button>
+        <button class="nil-pill" data-key="uh2"   onclick="setFokusKomponen('uh2')">UH 2</button>
+        <button class="nil-pill" data-key="uh3"   onclick="setFokusKomponen('uh3')">UH 3</button>
+        <button class="nil-pill" data-key="pts"   onclick="setFokusKomponen('pts')">PTS</button>
+        <button class="nil-pill" data-key="pas"   onclick="setFokusKomponen('pas')">PAS</button>
+        <button class="nil-pill" data-key="pat"   onclick="setFokusKomponen('pat')">PAT</button>
+      </div>
+    </div>
+
+    <!-- Tabel Nilai -->
+    <div class="card" style="margin-bottom:0;overflow-x:auto">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+        <h3 style="margin:0">📝 Tabel Nilai</h3>
+        <span class="muted" style="font-size:12px">Baris merah = nilai akhir di bawah KKM</span>
+        <span id="nilaiKelengkapanInfo" style="font-size:12px;background:#eef2ff;color:#3730a3;padding:3px 10px;border-radius:8px">
+          Kelengkapan: -
+        </span>
+        <span class="muted" style="font-size:12px">Tip: klik sel komponen (mis. TGS1), lalu Ctrl+V 1 kolom dari Excel untuk isi ke bawah otomatis</span>
+        <span id="nilaiEditHint" style="display:none;font-size:12px;
+          background:#fff3cd;color:#856404;padding:3px 10px;border-radius:8px">
+          ✏️ Mode edit aktif – klik komponen di atas untuk fokus satu kolom
+        </span>
+      </div>
+      <table id="tabelNilai">
+        <thead id="tabelNilaiThead">
+          <tr>
+            <th rowspan="2" style="min-width:32px">No</th>
+            <th rowspan="2" style="min-width:68px">NIS</th>
+            <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
+            <th colspan="3">Tugas</th>
+            <th colspan="3">Ulangan Harian</th>
+            <th rowspan="2" style="min-width:56px">PTS</th>
+            <th rowspan="2" style="min-width:56px">PAS</th>
+            <th rowspan="2">Rata Tugas</th>
+            <th rowspan="2">Rata UH</th>
+            <th rowspan="2">Rata Total</th>
+            <th rowspan="2" style="background:#4338ca">Total Nilai</th>
+            <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
+          </tr>
+          <tr>
+            <th>TGS1</th><th>TGS2</th><th>TGS3</th>
+            <th>UH1</th><th>UH2</th><th>UH3</th>
+          </tr>
+        </thead>
+        <tbody id="tabelNilaiBody">
+          <tr><td colspan="16" style="padding:24px;color:#9ca3af;text-align:center">
+            Pilih filter dan klik &quot;Muat Data Siswa&quot;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tombol aksi duplikat di bawah tabel (edit mode) -->
+    <div id="btnsEditNilaiBawah" style="display:none;gap:10px;flex-wrap:wrap;
+         padding:12px 0 4px;border-top:1px solid #e5e7eb;margin-bottom:14px">
+      <button onclick="simpanSemuaNilai()"
+        style="background:#22c55e;color:#fff;border:none;border-radius:8px;
+               padding:8px 24px;cursor:pointer;font-weight:700;font-size:14px">💾 Simpan Nilai</button>
+      <button class="ghost" onclick="lockNilai()">🔒 Kunci</button>
+      <button class="ghost" onclick="cancelEditNilai()">❌ Cancel</button>
+    </div>
+
+    <!-- Pengaturan Nilai (Katrol & KKM) -->
+    <div class="card" style="margin-bottom:14px">
+      <h3>⚙️ Pengaturan Nilai (Katrol &amp; KKM)</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;
+                  align-items:flex-end;margin-top:12px">
+        <div>
+          <label>Nilai Terendah Target (katrol min)</label>
+          <input type="number" id="nilaiMinTarget" value="60" min="0" max="100">
+        </div>
+        <div>
+          <label>Nilai Tertinggi Target (katrol max)</label>
+          <input type="number" id="nilaiMaxTarget" value="95" min="0" max="100">
+        </div>
+        <div>
+          <label>KKM</label>
+          <input type="number" id="nilaiKKM" value="70" min="0" max="100">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button onclick="simpanPengaturanNilai(event)">💾 Simpan Pengaturan</button>
+          <button class="ghost" onclick="nilaiHitungKatrolBatch_UI();updateStatistikUI_nilai()">🔄 Hitung Ulang</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statistik -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px">
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Rata-rata Kelas</div>
+        <div id="nilaiStatRata" style="font-size:22px;font-weight:700;color:#6C63FF">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Nilai Tertinggi</div>
+        <div id="nilaiStatMax" style="font-size:22px;font-weight:700;color:#22c55e">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Nilai Terendah</div>
+        <div id="nilaiStatMin" style="font-size:22px;font-weight:700;color:#ef4444">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Tuntas (≥ KKM)</div>
+        <div id="nilaiStatTuntas" style="font-size:22px;font-weight:700;color:#22c55e">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Belum Tuntas</div>
+        <div id="nilaiStatBelum" style="font-size:22px;font-weight:700;color:#ef4444">-</div>
+      </div>
+    </div>
+
+    <!-- Grafik Distribusi -->
+    <div class="card" style="margin-bottom:14px">
+      <h3>📊 Distribusi Nilai Akhir</h3>
+      <div style="height:180px;margin-top:10px"><canvas id="canvasNilai"></canvas></div>
+    </div>
+
+  <!-- ===== AUDIT TRAIL NILAI ===== -->
+  <div style="margin-top:32px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <h3 style="margin:0">📋 Riwayat Perubahan Nilai</h3>
+      <button class="ghost" style="font-size:12px" onclick="loadAuditNilai()">🔄 Refresh</button>
+    </div>
+    <div id="auditNilaiWrap">
+      <p class="muted">Klik Refresh untuk memuat riwayat perubahan nilai.</p>
+    </div>
+  </div>
+
+  </div><!-- end nilaiMainSection -->
+</div><!-- end inputNilai tab -->
+
+<!-- Modal Cetak Nilai (v2) -->
+<div id="modalCetakNilai" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.5);z-index:99990;align-items:flex-start;
+  justify-content:center;padding:24px 12px;overflow-y:auto">
+  <div style="background:#fff;border-radius:16px;padding:26px 28px;
+    max-width:560px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);margin:auto">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h3 style="margin:0">🖨️ Cetak / Export Daftar Nilai</h3>
+      <button onclick="closeCetakNilai()"
+        style="background:#f3f4f6;border:none;border-radius:50%;width:30px;height:30px;
+               font-size:16px;cursor:pointer;font-weight:700">×</button>
+    </div>
+
+    <!-- Pilih Kelas -->
+    <div style="margin-bottom:16px">
+      <label style="font-weight:600;display:block;margin-bottom:6px">Kelas yang dicetak:</label>
+      <div id="cetakKelasContainer">
+        <p class="muted" style="font-size:12px">⏳ Memuat daftar kelas...</p>
+      </div>
+    </div>
+
+    <!-- Jenis Nilai -->
+    <div style="margin-bottom:14px">
+      <label style="font-weight:600;display:block;margin-bottom:6px">Jenis Nilai:</label>
+      <div style="display:flex;gap:20px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakType" value="murni" checked> Nilai Murni</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakType" value="katrol"> Nilai Katrol</label>
+      </div>
+    </div>
+
+    <!-- Kolom yang ditampilkan -->
+    <div style="margin-bottom:18px">
+      <label style="font-weight:600;display:block;margin-bottom:8px">Kolom yang ditampilkan:</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColTGS" checked> Tugas 1, 2, 3</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColUH" checked> UH 1, 2, 3</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColPTS" checked> PTS</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColPAS" checked> PAS / PAT</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColRata" checked> Rata-rata</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColTotal" checked> Nilai Total (murni/katrol)</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColRemedi" checked> Remedial</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColRanking" checked> Ranking</label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="ghost" id="btnPreviewCetak" onclick="previewCetakNilai()">👁️ Preview</button>
+      <button id="btnDoCetak" onclick="doCetakNilai()" disabled title="Lakukan preview terlebih dahulu">🖨️ Print / Simpan PDF</button>
+      <button class="ghost" id="btnDoExcel" onclick="exportNilaiExcelUI()" disabled title="Lakukan preview terlebih dahulu">📊 Export Excel</button>
+      <button class="ghost" onclick="closeCetakNilai()">Batal</button>
+    </div>
+    <div id="cetakPreviewStatus" style="margin-top:8px;font-size:12px;font-weight:600;color:#b45309">
+      ⚠️ Preview belum diverifikasi
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:10px">
+      Saran: cek dulu di <b>Preview</b> sebelum dibagikan ke siswa.</p>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODUL AJAR TAB
+     ============================================================ -->
+<style>
+  #tabelModul{width:100%;border-collapse:collapse}
+  #tabelModul th{background:#6C63FF;color:#fff;padding:7px 8px;text-align:left;font-size:12px;white-space:nowrap;position:sticky;top:0;z-index:2}
+  #tabelModul td{border-bottom:1px solid #f3f4f6;vertical-align:middle}
+  body.dark #tabelModul th{background:#4f46e5}
+  body.dark #tabelModul td{border-bottom-color:#374151}
+  .modul-jadwal-card{transition:opacity .15s,outline .15s,transform .12s}
+  .modul-jadwal-card:hover{transform:translateY(-1px);opacity:1!important}
+  body.dark .modul-assign-item{background:#1f2937;border-color:#374151}
+  body.dark #assignModulModalBox,body.dark #editModulModalBox{background:#1e1b4b;color:#e5e7eb}
+  .modul-skel{height:13px;background:linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 50%,#e5e7eb 75%);background-size:200% 100%;animation:skl .9s ease-in-out infinite;border-radius:6px;margin-bottom:6px}
+  @keyframes skl{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+
+<div id="modulAjar" class="card tab" data-tabid="modulAjar" style="display:none">
+  <h2>📚 Modul Ajar</h2>
+  <p class="muted" style="margin-bottom:12px">Kelola modul ajar Anda.</p>
+
+  <!-- ===== INFO GENERATE RPP ===== -->
+  <div style="background:linear-gradient(135deg,#ede9fe,#e0e7ff);border-left:4px solid #6366f1;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
+    <div style="font-size:20px;flex-shrink:0">📄</div>
+    <div>
+      <div style="font-weight:700;color:#3730a3;font-size:13px">Generate RPP dari Modul Ajar</div>
+      <div style="font-size:12px;color:#4338ca;margin-top:2px">Scroll ke bawah ke tabel <b>Semua Modul Ajar</b> → klik tombol <b>📄 RPP</b> di setiap baris → pilih format (Google Docs / DOCX) → Generate.<br>Untuk generate dari Jurnal: buka tab <b>Jurnal Mengajar</b> → tombol <b>📄</b> di setiap baris.</div>
+    </div>
+  </div>
+
+  <!-- ===== FORM TAMBAH MODUL ===== -->
+  <div class="card" style="margin-bottom:20px">
+    <h3>➕ Tambah Modul Baru</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-top:14px">
+      <div>
+        <label>Mata Pelajaran <span style="color:#ef4444">*</span></label>
+        <select id="modulMapelSelect">
+          <option value="">-- Pilih Mapel --</option>
+        </select>
+        <small class="helper">Pilih setelah Setting disimpan</small>
+      </div>
+      <div>
+        <label>Kelas <span style="color:#ef4444">*</span></label>
+        <select id="modulKelasSelect">
+          <option value="">-- Pilih Kelas --</option>
+        </select>
+      </div>
+      <div>
+        <label>Bab <span style="color:#ef4444">*</span></label>
+        <input type="text" id="modulBabInput" list="modulBabDatalist" placeholder="cth: Bab 1, UTS, Pertemuan 3..." autocomplete="off">
+        <datalist id="modulBabDatalist"></datalist>
+      </div>
+      <div>
+        <label>Judul Modul <span style="color:#ef4444">*</span></label>
+        <input type="text" id="modulJudulInput" placeholder="Judul modul ajar...">
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <label>Deskripsi <span class="muted">(opsional)</span></label>
+      <textarea id="modulDeskripsiInput" rows="3" placeholder="Deskripsi singkat materi..."></textarea>
+    </div>
+    <div style="margin-top:14px">
+      <label>Upload File <span class="muted">(PDF / DOC / PPT — maks 10 MB)</span></label>
+      <input type="file" id="modulFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" onchange="onModulFileChange_(this)" style="margin-top:4px">
+      <div id="modulFileInfo" class="muted" style="margin-top:5px;font-size:12px"></div>
+    </div>
+    <div style="margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button onclick="submitModul_()">💾 Simpan Modul</button>
+      <span id="modulFormMsg" style="font-size:13px;font-weight:600"></span>
+    </div>
+  </div>
+
+  <!-- ===== TABEL DAFTAR MODUL ===== -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h3 style="margin:0">📋 Semua Modul Ajar</h3>
+        <span id="modulCountBadge" style="display:none;background:#ede9fe;color:#6C63FF;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px"></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="filterModulMapel" onchange="renderModulTable_()"><option value="">-- Semua Mapel --</option></select>
+        <select id="filterModulKelas" onchange="renderModulTable_()"><option value="">-- Semua Kelas --</option></select>
+        <button onclick="loadAllModul_()" style="font-size:12px;padding:6px 12px">🔄 Refresh</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="tabelModul">
+        <thead>
+          <tr>
+            <th>Judul</th>
+            <th>Mapel</th>
+            <th style="text-align:center">Kelas</th>
+            <th style="text-align:center">Bab</th>
+            <th>Deskripsi</th>
+            <th style="text-align:center">File</th>
+            <th style="text-align:center">RPP</th>
+            <th style="text-align:center">Edit</th>
+            <th style="text-align:center">Hapus</th>
+          </tr>
+        </thead>
+        <tbody id="modulTableBody">
+          <tr><td colspan="8"><div class="modul-skel" style="width:70%"></div><div class="modul-skel" style="width:50%"></div><div class="modul-skel" style="width:80%"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- end modulAjar tab -->
+
+<footer style="text-align:center;padding:18px 16px 12px;border-top:1px solid #e5e7eb;margin-top:16px;color:#9ca3af;font-size:13px">
+  <div style="margin-bottom:8px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <a href="https://www.youtube.com/@DwiMustikawati" target="_blank" style="color:#6C63FF;text-decoration:none">▶️ My YouTube</a>
+    <a href="https://www.facebook.com/dwi.mustikawati/" target="_blank" style="color:#6C63FF;text-decoration:none">📘 My Facebook</a>
+    <a href="https://instagram.com/dwimustikawati.nym/" target="_blank" style="color:#6C63FF;text-decoration:none">📸 My Instagram</a>
+  </div>
+  <div>Dwi Mustikawati © 2025</div>
+</footer>
+
+<!-- ===== MODAL: EDIT MODUL ===== -->
+<div id="editModulModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9991;align-items:center;justify-content:center">
+  <div id="editModulModalBox" class="card" style="max-width:520px;width:94%;max-height:90vh;overflow-y:auto;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:15px">✏️ Edit Modul Ajar</h3>
+      <button onclick="closeEditModulModal_()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+    </div>
+    <input type="hidden" id="editModulId">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px">Mata Pelajaran *</label>
+        <select id="editModulMapel" style="width:100%">
+          <option value="">-- Pilih --</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px">Kelas *</label>
+        <input type="text" id="editModulKelas" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px">Bab *</label>
+        <input type="text" id="editModulBab" list="editModulBabDatalist" style="width:100%;box-sizing:border-box" autocomplete="off">
+        <datalist id="editModulBabDatalist"></datalist>
+      </div>
+      <div>
+        <label style="font-size:12px">Judul *</label>
+        <input type="text" id="editModulJudul" style="width:100%;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px">Deskripsi</label>
+      <textarea id="editModulDeskripsi" rows="3" style="width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px">Ganti File (opsional — kosongkan untuk pertahankan file lama)</label>
+      <input type="file" id="editModulFile" accept=".pdf,.doc,.docx,.ppt,.pptx" onchange="onEditModulFileChange_(this)" style="margin-top:4px">
+      <div id="editModulFileInfo" class="muted" style="font-size:12px;margin-top:4px"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button onclick="submitEditModul_()">💾 Simpan Perubahan</button>
+      <button onclick="closeEditModulModal_()" style="background:none;border:1px solid #d1d5db;color:#374151">Batal</button>
+      <span id="editModulMsg" style="font-size:13px;font-weight:600"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: ASSIGN MODUL KE JADWAL ===== -->
+<div id="assignModulModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9990;align-items:center;justify-content:center">
+  <div id="assignModulModalBox" class="card" style="max-width:500px;width:92%;max-height:82vh;overflow-y:auto;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:15px">Pilih Modul untuk Jadwal Ini</h3>
+      <button onclick="closeAssignModulModal_()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+    </div>
+    <div id="assignModulPickList"></div>
+  </div>
+</div>
+
+<!-- ===== NOTIFIKASI PANEL ===== -->
+<div id="notifPanel" style="
+  display:none;position:fixed;top:0;right:0;width:340px;max-width:96vw;
+  height:100%;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,0.18);
+  z-index:9999;overflow-y:auto;padding:20px 16px;box-sizing:border-box
+">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h3 style="margin:0;font-size:16px">🔔 Notifikasi</h3>
+    <button class="ghost" onclick="toggleNotifPanel()" style="font-size:18px;padding:2px 8px">✕</button>
+  </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="readAllNotif()" style="background:#eff6ff;color:#1d4ed8;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">✓ Tandai semua dibaca</button>
+  </div>
+  <div id="notifGuruList">
+    <div class="muted">Memuat notifikasi…</div>
+  </div>
+</div>
+<div id="notifOverlay" onclick="toggleNotifPanel()" style="
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.25);z-index:9998
+"></div>
+<!-- ===== MODAL: LICENSE EXPIRY WARNING (SCHOOL-WIDE) ===== -->
+<div id="licenseExpiryModal">
+  <div style="background:#fff;width:90%;max-width:400px;border-radius:18px;padding:28px 26px;box-shadow:0 30px 80px rgba(0,0,0,.4);text-align:center">
+    <div style="font-size:48px;margin-bottom:8px" id="lemIcon">⚠️</div>
+    <h3 id="lemTitle" style="margin:0 0 10px">Peringatan Lisensi Sekolah</h3>
+    <p id="lemBody" class="muted" style="font-size:14px;line-height:1.6"></p>
+    <p style="font-size:12px;color:#9ca3af;margin-top:8px">Hubungi Admin Sekolah atau vendor untuk perpanjangan.</p>
+    <button onclick="closeLicenseExpiryModal_()" style="margin-top:16px;width:100%">✅ Mengerti</button>
+  </div>
+</div>
+
+<!-- ===== MODAL: ATUR MASA AKTIF USER ===== -->
+<div id="setMasaAktifModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99999">
+  <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;width:90%;max-width:400px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4)">
+    <h3 style="margin:0 0 4px">📅 Atur Masa Aktif</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 16px">User: <b id="setMasaEmail" style="color:#6366f1"></b></p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Pilih durasi</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="masaDurasiGrid">
+          <label id="maDur-30"  style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
+            <input type="radio" name="masaDurasi" value="30">  30 Hari (Trial)
+          </label>
+          <label id="maDur-90"  style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
+            <input type="radio" name="masaDurasi" value="90">  3 Bulan
+          </label>
+          <label id="maDur-180" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
+            <input type="radio" name="masaDurasi" value="180"> 6 Bulan
+          </label>
+          <label id="maDur-365" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
+            <input type="radio" name="masaDurasi" value="365"> 1 Tahun
+          </label>
+          <label id="maDur-0"   style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #6366f1;border-radius:10px;font-size:13px;background:#eff6ff;grid-column:span 2">
+            <input type="radio" name="masaDurasi" value="lifetime" checked> ♾️ Seumur Hidup
+          </label>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px">Atau set tanggal expired manual</label>
+        <input type="date" id="masaCustomDate" style="width:100%">
+        <p style="font-size:11px;color:#9ca3af;margin:3px 0 0">Kosongkan jika pakai pilihan durasi di atas.</p>
+      </div>
+      <div id="masaPreviewBox" style="background:#f8fafc;border-radius:10px;padding:10px 14px;font-size:13px;color:#374151">
+        Expired: <b id="masaPreviewText">—</b>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="ghost" onclick="document.getElementById('setMasaAktifModal').style.display='none'">Batal</button>
+      <button onclick="confirmSetMasaAktif_()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: USER AUDIT TRAIL ===== -->
+<div id="userAuditModal">
+  <div style="background:#fff;width:95%;max-width:700px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">📋 Riwayat Aksi: <span id="userAuditEmail" style="color:#6C63FF"></span></h3>
+      <button onclick="closeUserAuditModal_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Waktu</th><th>Aksi</th><th class="left">Detail</th></tr></thead>
+        <tbody id="userAuditBody"><tr><td colspan="3" class="muted">⏳ Memuat...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: TEMPLATE JURNAL ===== -->
+<div id="templateJurnalModal">
+  <div style="background:#fff;width:92%;max-width:540px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h3 style="margin:0">📋 Pilih Template Jurnal</h3>
+      <button onclick="closeTemplateJurnal_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <p class="muted" style="margin-bottom:16px;font-size:13px">Klik template untuk mengisi form Materi, Tujuan, dan Asesmen secara otomatis.</p>
+    <div id="templateJurnalList"></div>
+  </div>
+</div>
+
+<!-- ===== LIGHTBOX MODAL ===== -->
+<div id="gwLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999999;align-items:center;justify-content:center" onclick="gwCloseLightbox_()">
+  <div style="position:relative;max-width:92vw;max-height:90vh">
+    <img id="gwLightboxImg" src="" alt="" style="max-width:92vw;max-height:88vh;border-radius:12px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <button onclick="gwCloseLightbox_()" style="position:absolute;top:-14px;right:-14px;background:#fff;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:30px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</button>
+  </div>
+</div>
+
+<!-- ===== LANDING PAGE (shown while auth-wait) ===== -->
+<style>
+@keyframes lp-bg-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes lp-float {
+  0%,100% { transform: translateY(0px); }
+  50%      { transform: translateY(-12px); }
+}
+@keyframes lp-pulse-ring {
+  0%   { transform: scale(.95); opacity:.7; }
+  70%  { transform: scale(1.1); opacity:0; }
+  100% { transform: scale(.95); opacity:0; }
+}
+@keyframes lp-fade-up {
+  from { opacity:0; transform: translateY(24px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+@keyframes lp-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes lp-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes lp-blob {
+  0%,100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50%      { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+}
+#landingPage { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+.lp-card-enter { animation: lp-fade-up .5s ease both; }
+.lp-card-enter:nth-child(1) { animation-delay:.1s; }
+.lp-card-enter:nth-child(2) { animation-delay:.2s; }
+.lp-card-enter:nth-child(3) { animation-delay:.3s; }
+.lp-card-enter:nth-child(4) { animation-delay:.4s; }
+@media (max-width:480px) {
+  .lp-features { grid-template-columns: repeat(2,1fr) !important; }
+  .lp-hero-title { font-size:24px !important; }
+  .lp-hero-em { font-size:52px !important; }
+  .lp-stats { flex-wrap:wrap !important; gap:10px !important; }
+  .lp-main-card { padding:28px 20px !important; }
+}
+</style>
+<div id="landingPage" style="display:none;position:fixed;inset:0;z-index:99998;overflow-y:auto;
+  background: linear-gradient(-45deg,#1a1060,#312e81,#1e3a8a,#0f172a,#3730a3);
+  background-size:400% 400%;
+  animation: lp-bg-shift 10s ease infinite;">
+
+  <!-- Decorative blobs -->
+  <div style="position:fixed;top:-80px;left:-80px;width:320px;height:320px;
+    background:radial-gradient(circle,rgba(139,92,246,.35) 0%,transparent 70%);
+    border-radius:50%;pointer-events:none;animation:lp-blob 8s ease-in-out infinite;filter:blur(40px)"></div>
+  <div style="position:fixed;bottom:-100px;right:-60px;width:360px;height:360px;
+    background:radial-gradient(circle,rgba(59,130,246,.3) 0%,transparent 70%);
+    border-radius:50%;pointer-events:none;animation:lp-blob 11s ease-in-out infinite reverse;filter:blur(50px)"></div>
+  <div style="position:fixed;top:40%;left:60%;width:200px;height:200px;
+    background:radial-gradient(circle,rgba(167,139,250,.2) 0%,transparent 70%);
+    border-radius:50%;pointer-events:none;filter:blur(30px)"></div>
+
+  <!-- Main content -->
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;text-align:center;color:#fff;position:relative;z-index:1">
+
+    <!-- Logo area -->
+    <div class="lp-card-enter" style="position:relative;margin-bottom:24px">
+      <div style="position:absolute;inset:-8px;border-radius:50%;background:rgba(139,92,246,.4);animation:lp-pulse-ring 2.5s ease-out infinite"></div>
+      <div class="lp-hero-em" style="font-size:64px;line-height:1;position:relative;z-index:1;animation:lp-float 3.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 8px 24px rgba(139,92,246,.6))">🎓</div>
+    </div>
+
+    <!-- Badge -->
+    <div class="lp-card-enter" style="animation-delay:.05s;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;letter-spacing:.5px;margin-bottom:16px;backdrop-filter:blur(8px)">
+      <span style="width:6px;height:6px;border-radius:50%;background:#4ade80;display:inline-block;box-shadow:0 0 8px #4ade80"></span>
+      SISTEM AKADEMIK DIGITAL
+    </div>
+
+    <!-- Title -->
+    <h1 class="lp-card-enter lp-hero-title" style="margin:0 0 14px;font-size:30px;font-weight:900;letter-spacing:-1px;line-height:1.15;animation-delay:.1s">
+      Sistem Akademik Guru
+    </h1>
+    <p class="lp-card-enter" style="margin:0 0 36px;font-size:15px;opacity:.8;max-width:400px;line-height:1.7;font-weight:400;animation-delay:.15s">
+      Platform digital lengkap untuk jurnal, absensi, nilai, dan rekap akademik — semua dalam satu tempat.
+    </p>
+
+    <!-- Main glass card -->
+    <div class="lp-card-enter lp-main-card" style="background:rgba(255,255,255,.08);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:32px 28px;max-width:500px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3);animation-delay:.2s">
+
+      <!-- Feature grid -->
+      <div class="lp-features" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px">
+        <div class="lp-card-enter" style="animation-delay:.25s">
+          <div style="background:rgba(99,102,241,.25);border:1px solid rgba(99,102,241,.4);border-radius:14px;padding:14px 8px">
+            <div style="font-size:24px;margin-bottom:6px">📘</div>
+            <div style="font-size:11px;font-weight:700;line-height:1.3">Jurnal<br>Digital</div>
+          </div>
+        </div>
+        <div class="lp-card-enter" style="animation-delay:.3s">
+          <div style="background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);border-radius:14px;padding:14px 8px">
+            <div style="font-size:24px;margin-bottom:6px">📊</div>
+            <div style="font-size:11px;font-weight:700;line-height:1.3">Rekap<br>Absensi</div>
+          </div>
+        </div>
+        <div class="lp-card-enter" style="animation-delay:.35s">
+          <div style="background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 8px">
+            <div style="font-size:24px;margin-bottom:6px">📝</div>
+            <div style="font-size:11px;font-weight:700;line-height:1.3">Input<br>Nilai</div>
+          </div>
+        </div>
+        <div class="lp-card-enter" style="animation-delay:.4s">
+          <div style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:14px 8px">
+            <div style="font-size:24px;margin-bottom:6px">📄</div>
+            <div style="font-size:11px;font-weight:700;line-height:1.3">Generate<br>RPP</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="height:1px;background:rgba(255,255,255,.12);margin-bottom:20px"></div>
+
+      <!-- Stats row -->
+      <div class="lp-stats" style="display:flex;justify-content:space-around;margin-bottom:24px">
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#a5b4fc">100%</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px">Digital</div>
+        </div>
+        <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#6ee7b7">Real-time</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px">Rekap Data</div>
+        </div>
+        <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#fcd34d">Drive</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px">Penyimpanan</div>
+        </div>
+      </div>
+
+      <!-- Auth checking -->
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.2);border-radius:12px;padding:12px 16px">
+        <div style="width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:lp-spin .8s linear infinite;flex-shrink:0"></div>
+        <div style="text-align:left;flex:1">
+          <div style="font-size:12px;font-weight:600;color:#e2e8f0">Memverifikasi akun Anda...</div>
+          <div style="height:4px;background:rgba(255,255,255,.15);border-radius:999px;margin-top:8px;overflow:hidden">
+            <div id="landingProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#818cf8,#a5b4fc);border-radius:999px;transition:width 2s ease;position:relative">
+              <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);background-size:200px 100%;animation:lp-shimmer 1.5s infinite;border-radius:999px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer note -->
+    <div class="lp-card-enter" style="margin-top:24px;font-size:12px;opacity:.45;animation-delay:.5s">
+      Dwi Mustikawati © 2025 &nbsp;·&nbsp; Powered by Google Apps Script
+    </div>
+  </div>
+</div>
+
+<!-- ===== ONBOARDING WIZARD ===== -->
+<div id="onboardingModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:480px;border-radius:20px;padding:28px 26px;box-shadow:0 30px 80px rgba(0,0,0,.35);position:relative;max-height:90vh;overflow-y:auto">
+    <div id="onboardingContent"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px">
+      <button id="obPrevBtn" onclick="obPrev_()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 18px;font-size:13px;cursor:pointer;display:none">← Kembali</button>
+      <div id="obDots" style="display:flex;gap:8px;align-items:center;flex:1;justify-content:center"></div>
+      <button id="obNextBtn" onclick="obNext_()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 18px;font-size:13px;cursor:pointer;font-weight:600">Lanjut →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: BROADCAST NOTIF ===== -->
+<div id="broadcastModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:16px">📢 Broadcast Notifikasi</h3>
+      <button onclick="closeBroadcastModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Judul *</label>
+    <input id="broadJudul" type="text" placeholder="Contoh: Pengumuman UKG Minggu Ini" style="width:100%;margin-bottom:12px;box-sizing:border-box">
+    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Pesan *</label>
+    <textarea id="broadPesan" placeholder="Tulis isi pengumuman untuk semua guru..." rows="4" style="width:100%;box-sizing:border-box"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button onclick="closeBroadcastModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="broadSubmitBtn" onclick="submitBroadcast()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer">📢 Kirim ke Semua Guru</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: DEPLOYMENT ===== -->
+<div id="deploymentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:480px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35);max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 id="depModalTitle" style="margin:0;font-size:16px">🛰️ Tambah Deployment</h3>
+      <button onclick="closeDeploymentModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <input type="hidden" id="depId">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div>
+        <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Nama Sekolah *</label>
+        <input id="depNama" placeholder="SMP N 1 ..." style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Email SA *</label>
+        <input id="depEmail" type="email" placeholder="admin@belajar.id" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Script ID / URL</label>
+        <input id="depScript" placeholder="AKfycb..." style="width:100%;box-sizing:border-box;font-size:11px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Status</label>
+        <select id="depStatus" style="width:100%">
+          <option value="aktif">✅ Aktif</option>
+          <option value="trial">🟡 Trial</option>
+          <option value="nonaktif">❌ Nonaktif</option>
+        </select>
+      </div>
+    </div>
+    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Catatan</label>
+    <textarea id="depCatatan" rows="2" placeholder="Catatan tambahan..." style="width:100%;box-sizing:border-box"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button onclick="closeDeploymentModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="depSubmitBtn" onclick="submitDeployment()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: CATATAN SISWA ===== -->
+<div id="catatanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:420px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 id="catatanModalTitle" style="margin:0;font-size:15px">📝 Tambah Catatan</h3>
+      <button onclick="closeCatatanModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Siswa *</label>
+    <select id="catatanNisSel" style="width:100%;margin-bottom:12px"><option value="">-- Pilih Siswa --</option></select>
+    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Catatan *</label>
+    <textarea id="catatanTeks" rows="4" placeholder="Tulis catatan untuk siswa ini..." style="width:100%;box-sizing:border-box"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button onclick="closeCatatanModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="catatanSubmitBtn" onclick="submitCatatan()" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: GENERATE RPP DARI JURNAL ===== -->
+<div id="modalRppJurnal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:460px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:15px">📄 Generate RPP dari Jurnal</h3>
+      <button onclick="closeRppJurnalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+      <div>Kelas: <b id="rppJurnalKelas">-</b></div>
+      <div>Materi: <b id="rppJurnalMateri">-</b></div>
+    </div>
+    <div id="rppJurnalModulBox" style="margin-bottom:14px">
+      <span class="muted">⏳ Memuat...</span>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:#6b7280;font-weight:600">Format Output</label>
+      <select id="rppJurnalOutput" style="width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+        <option value="gdocs">📄 Google Docs (buka di tab baru)</option>
+        <option value="docx">⬇️ DOCX (download + buka Google Docs)</option>
+      </select>
+    </div>
+    <p class="muted" style="font-size:11px;margin:0 0 14px">Hasil RPP akan disimpan di folder Drive yang dikonfigurasi Admin.</p>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button onclick="closeRppJurnalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="rppJurnalBtn" onclick="doGenerateRppFromJurnal()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;cursor:pointer">📄 Generate RPP</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: GENERATE RPP DARI MODUL AJAR ===== -->
+<div id="modalRppModul" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:15px">📄 Generate RPP dari Modul Ajar</h3>
+      <button onclick="closeRppModulModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+      <div>Mapel: <b id="rppModulMapel">-</b></div>
+      <div>Kelas: <b id="rppModulKelas">-</b></div>
+      <div>Judul: <b id="rppModulJudul">-</b></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:#6b7280;font-weight:600">Format Output</label>
+      <select id="rppModulOutput" style="width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+        <option value="gdocs">📄 Google Docs (buka di tab baru)</option>
+        <option value="docx">⬇️ DOCX (download + buka Google Docs)</option>
+      </select>
+    </div>
+    <p class="muted" style="font-size:11px;margin:0 0 14px">Hasil RPP akan disimpan di folder Drive yang dikonfigurasi Admin.</p>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button onclick="closeRppModulModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
+      <button id="rppModulBtn" onclick="doGenerateRppFromModul()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;cursor:pointer">📄 Generate RPP</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: HASIL GENERATE RPP ===== -->
+<div id="modalRppResult" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35);text-align:center">
+    <div style="font-size:48px;margin-bottom:10px">✅</div>
+    <h3 style="margin:0 0 8px;font-size:16px">RPP Berhasil Dibuat!</h3>
+    <p id="rppResultName" style="font-size:13px;color:#374151;margin:0 0 20px;word-break:break-all"></p>
+    <div id="rppResultActions" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:16px"></div>
+    <button onclick="closeRppResultModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 20px;cursor:pointer;font-size:13px">Tutup</button>
+  </div>
+</div>
+
+<!-- ===== TAB SAFETY v2: runs immediately after all tabs are in DOM ===== -->
+<script>
+(function(){
+  try {
+    var tabs = document.querySelectorAll('[data-tabid]');
+    tabs.forEach(function(t){ t.style.cssText = t.style.cssText.replace(/display\s*:[^;]*/,'') + ';display:none!important'; });
+    var dash = document.getElementById('dashboard');
+    if(dash){ dash.style.cssText = dash.style.cssText.replace(/display\s*:[^;]*/,'') + ';display:block!important'; }
+    var ni = document.getElementById('inputNilai');
+    if(ni){ ni.style.cssText = ni.style.cssText.replace(/display\s*:[^;]*/,'') + ';display:none!important'; }
+  } catch(e) {}
+})();
+</script>

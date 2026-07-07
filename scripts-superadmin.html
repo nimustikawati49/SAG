@@ -1,0 +1,1102 @@
+<script>
+function loadDashboardSuperAdmin(){
+  google.script.run
+    .withFailureHandler(err=>{
+      alert('❌ Gagal memuat dashboard superadmin:\n' + err.message);
+    })
+    .withSuccessHandler(data=>{
+      document.getElementById('sa_totalUser').innerText = data.totalUser;
+      document.getElementById('sa_guruAktif').innerText = data.guruAktif;
+      document.getElementById('sa_guruNonaktif').innerText = data.guruNonaktif;
+      document.getElementById('sa_totalJurnal').innerText = data.totalJurnal;
+      document.getElementById('sa_totalKelas').innerText = data.totalKelas;
+
+      // ❌ JANGAN panggil yang berat di sini
+      // loadUserManagement();
+      // loadArsipSemuaUser();
+      // loadStatistikGlobal();
+      // loadAuditLog();
+
+      // ✅ panggil bertahap (AMAN)
+      setTimeout(loadUserManagement, 100);
+      setTimeout(loadArsipSemuaUser, 300);
+      setTimeout(loadStatistikGlobal, 500);
+      setTimeout(loadAuditLog, 700);
+      setTimeout(loadBackupTriggerStatus, 900);
+      setTimeout(loadReminderTriggerStatus, 1000);
+      setTimeout(loadSuperAdminEmailUI, 1100);
+      setTimeout(loadDriveStorageInfo, 1300);
+      setTimeout(loadSchoolLicenseUI, 1500);
+      setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
+    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);    })
+    .getSuperAdminDashboard();
+}
+
+
+// LOAD DRIVE STORAGE INFO //
+function loadDriveStorageInfo(){
+  const el = document.getElementById('sa_driveUsed');
+  if(!el) return;
+  google.script.run
+    .withSuccessHandler(function(info){
+      if(!el) return;
+      if(info && info.usedMB !== null){
+        const pctStr   = info.pct    !== null ? ' (' + info.pct + '%)' : '';
+        const limitStr = info.limitGB ? ' / ' + info.limitGB + 'GB' : '';
+        el.textContent = info.usedMB + 'MB' + limitStr + pctStr;
+      } else {
+        el.textContent = '—';
+      }
+    })
+    .withFailureHandler(function(){
+      const el2 = document.getElementById('sa_driveUsed');
+      if(el2) el2.textContent = '—';
+    })
+    .getDriveStorageInfo();
+}
+
+// LOAD USER DATA SUPERADMIN //
+function loadUserManagement(){
+  const body = document.getElementById('userBody');
+  if(!body) return;
+
+  body.innerHTML = `
+    <tr>
+      <td colspan="8" style="text-align:center;color:#888">
+        ⏳ Memuat data user...
+      </td>
+    </tr>
+  `;
+
+  google.script.run
+    .withFailureHandler(err=>{
+      body.innerHTML = `
+        <tr>
+          <td colspan="8" style="color:red;text-align:center">
+            ❌ ${err.message}
+          </td>
+        </tr>
+      `;
+    })
+    .withSuccessHandler(users=>{
+      if(!users || users.length === 0){
+        body.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align:center;color:#888">
+              📭 Belum ada user
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      body.innerHTML = users.map(u=>`
+        <tr>
+          <td>${u.no}</td>
+          <td>${u.email}</td>
+          <td>${u.nama_guru || '-'}</td>
+          <td>${u.sekolah || '-'}</td>
+          <td>
+            <span style="
+              display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+              background:${u.role==='superadmin'?'#7c3aed':u.role==='kepsek'?'#0369a1':u.role==='admin'?'#059669':'#6b7280'};
+              color:#fff;
+            ">${u.role==='kepsek'?'🏫 Kepsek':u.role==='superadmin'?'👑 SA':u.role==='admin'?'👨‍🏫 Guru':u.role}</span>
+          </td>
+          <td>
+            <span class="badge ${u.status==='active'?'badge-green':'badge-red'}">
+              ${u.status}
+            </span>
+          </td>
+          <td>${renderMasaAktif_(u)}</td>
+          <td>${u.dibuat}</td>
+          <td>${renderUserActions(u)}
+            <button class="ghost"
+                    onclick="openUserAuditModal_('${u.email}')"
+                    style="background:#eef2ff;color:#4338ca;font-size:12px">
+              📋 Riwayat
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    })
+    .getUsers(); // ⬅️ SATU-SATUNYA PANGGILAN
+}
+
+function generateLicenseUI(email){
+  if(!confirm(`Generate lisensi 1 tahun untuk ${email}?`)) return;
+  google.script.run
+    .withSuccessHandler(res=>{
+      alert(
+        `✅ Lisensi dibuat\n\n`+
+        `Key: ${res.key}\n`+
+        `Expired: ${res.expired}`
+      );
+      loadUserManagement();
+    })
+    .withFailureHandler(err=>{
+      alert('❌ ' + err.message);
+    })
+    .generateLicense(email, 1);
+}
+
+/*************************************************
+ * LICENSE BADGE (FINAL – STABLE)
+ *************************************************/
+function renderLicenseBadge(u){
+  if(!u || !u.licenseKey || u.sisaHari === null || u.sisaHari === undefined){
+    return '<span class="badge">-</span>';
+  }
+
+  const sisa = Number(u.sisaHari);
+  let bg   = '#22c55e';
+  let text = `Aktif (${sisa} hari)`;
+
+  if(sisa <= 60){
+    bg = '#facc15';
+    text = `⚠️ ${sisa} hari`;
+  }
+  if(sisa <= 30){
+    bg = '#ef4444';
+    text = `⛔ ${sisa} hari`;
+  }
+  if(sisa <= 0){
+    bg = '#6b7280';
+    text = `Expired`;
+  }
+
+  return `
+    <span style="
+      background:${bg};
+      color:#fff;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      display:inline-block;
+      box-shadow:0 6px 14px rgba(0,0,0,.25)
+    ">
+      ${text}
+    </span>
+  `;
+}
+
+/*************************************************
+ * MASA AKTIF BADGE
+ *************************************************/
+function renderMasaAktif_(u) {
+  // sisaHari === null → lifetime (expired kosong)
+  if (u.sisaHari === null || u.sisaHari === undefined) {
+    return '<span style="background:#6366f1;color:#fff;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;display:inline-block">♾️ Lifetime</span>';
+  }
+  var sisa = Number(u.sisaHari);
+  var exp  = u.expired && u.expired !== '-' ? u.expired : '-';
+  var bg, label;
+  if (sisa > 60) {
+    bg = '#22c55e'; label = '✅ ' + sisa + ' hari';
+  } else if (sisa > 30) {
+    bg = '#f59e0b'; label = '⚠️ ' + sisa + ' hari';
+  } else if (sisa > 0) {
+    bg = '#ef4444'; label = '🔴 ' + sisa + ' hari';
+  } else {
+    bg = '#6b7280'; label = '⛔ Expired';
+  }
+  return '<span style="background:' + bg + ';color:#fff;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;display:inline-block" title="s.d. ' + exp + '">' + label + '</span><br><span style="font-size:10px;color:#6b7280">' + exp + '</span>';
+}
+
+/*************************************************
+ * USER ACTIONS (FINAL – EXPIRED SAFE)
+ *************************************************/
+function renderUserActions(u){
+  const expired = (u.sisaHari !== null && Number(u.sisaHari) <= 0);
+  let btn = '';
+
+  if(expired){
+    return `
+      <span class="badge" style="background:#9ca3af;color:#fff">
+        🔒 Expired
+      </span>
+    `;
+  }
+
+  // Toggle status
+  if(u.status === 'active'){
+    btn += `<button class="ghost" onclick="setUserStatus('${u.email}','inactive')">🚫 Nonaktif</button>`;
+  }else{
+    btn += `<button onclick="setUserStatus('${u.email}','active')">✅ Aktifkan</button>`;
+  }
+
+  // Toggle role — now includes kepsek
+  if(u.role === 'admin'){
+    btn += `<button class="ghost" onclick="setUserRole('${u.email}','kepsek')">🏫 Jadikan Kepsek</button>`;
+    btn += `<button class="ghost" onclick="setUserRole('${u.email}','superadmin')">👑 Jadikan SA</button>`;
+  }else if(u.role === 'kepsek'){
+    btn += `<button class="ghost" onclick="setUserRole('${u.email}','admin')">👨‍🏫 Jadikan Guru</button>`;
+    btn += `<button class="ghost" onclick="setUserRole('${u.email}','superadmin')">👑 Jadikan SA</button>`;
+  }else{
+    btn += `<button class="ghost" onclick="setUserRole('${u.email}','admin')">⬇️ Turunkan</button>`;
+  }
+
+  // Delete
+  btn += `<button class="danger" onclick="deleteUserUI('${u.email}')">🗑️</button>`;
+  // Atur masa aktif (SA can extend/set expiry for any non-SA user)
+  btn += `<button class="ghost" onclick="openSetMasaAktifModal_('${u.email}')" style="background:#f0fdf4;color:#16a34a;font-size:12px">📅 Masa Aktif</button>`;
+
+  return btn;
+}
+
+
+// CALL BACKEND SUPERADMIN //
+function setUserStatus(email,status){
+  if(!confirm(`Ubah status ${email} menjadi ${status}?`)) return;
+  google.script.run.withSuccessHandler(()=>{
+    loadUserManagement();
+  }).updateUser(email,{status});
+}
+
+function setUserRole(email,role){
+  if(!confirm(`Ubah role ${email} menjadi ${role}?`)) return;
+  google.script.run.withSuccessHandler(()=>{
+    loadUserManagement();
+  }).updateUser(email,{role});
+}
+
+function deleteUserUI(email){
+  if(!confirm(`⚠️ Hapus user ${email}?\nTindakan ini permanen.`)) return;
+  google.script.run.withSuccessHandler(()=>{
+    loadUserManagement();
+  }).deleteUser(email);
+}
+
+/* ===== AUDIT TRAIL PER USER ===== */
+function openUserAuditModal_(email) {
+  const modal = document.getElementById('userAuditModal');
+  const el    = document.getElementById('userAuditEmail');
+  const tbody = document.getElementById('userAuditBody');
+  if (!modal || !tbody) return;
+  if (el) el.textContent = email;
+  tbody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">⏳ Memuat...</td></tr>';
+  modal.style.display = 'flex';
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">📫 Belum ada riwayat aksi untuk user ini.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function(r) {
+        return '<tr>' +
+          '<td style="white-space:nowrap;font-size:12px">' + r.waktu + '</td>' +
+          '<td><span class="badge">' + r.action + '</span></td>' +
+          '<td class="left" style="font-size:12px">' + r.detail + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .withFailureHandler(function(e) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center">❌ ' + e.message + '</td></tr>';
+    })
+    .getAuditByEmail(email);
+}
+
+function closeUserAuditModal_() {
+  const modal = document.getElementById('userAuditModal');
+  if (modal) modal.style.display = 'none';
+}
+
+/** ARSIP SEMUA GURU BY SUPERADMIN **/
+function loadArsipSemuaUser(){ loadArsipDriveUsage(); }
+
+/** ARSIP DRIVE — Info ukuran + Delete + Forward Email **/
+function loadArsipDriveUsage(){
+  var box     = document.getElementById('arsipAllUserBox');
+  var totalEl = document.getElementById('arsipTotalMB');
+  var warnEl  = document.getElementById('arsipStorageWarning');
+  if(box) box.innerHTML = '<p class="muted">⏳ Memuat arsip...</p>';
+  if(totalEl) totalEl.textContent = '⏳';
+  if(warnEl) warnEl.style.display = 'none';
+  google.script.run
+    .withFailureHandler(function(err){
+      if(box) box.innerHTML = '<p class="muted">❌ ' + _escSA(err.message) + '</p>';
+      if(totalEl) totalEl.textContent = '—';
+    })
+    .withSuccessHandler(function(data){
+      var totalMb = parseFloat(data.total_mb) || 0;
+      if(totalEl) totalEl.textContent = totalMb.toFixed(2) + ' MB';
+
+      // Storage warning
+      google.script.run
+        .withSuccessHandler(function(cfg){
+          var threshold = cfg.warnMb || 500;
+          var warnUsedEl = document.getElementById('arsipWarnUsed');
+          var warnThEl   = document.getElementById('arsipWarnThreshold');
+          if(warnEl){
+            if(totalMb > threshold){
+              if(warnUsedEl) warnUsedEl.textContent = totalMb.toFixed(2);
+              if(warnThEl)   warnThEl.textContent   = threshold;
+              warnEl.style.display = 'block';
+            } else {
+              warnEl.style.display = 'none';
+            }
+          }
+        })
+        .withFailureHandler(function(){})
+        .getArsipFolderConfig();
+
+      if(!data.entries || data.entries.length === 0){
+        if(box) box.innerHTML = '<p class="muted">📭 Belum ada arsip dari guru manapun.</p>';
+        return;
+      }
+
+      // Sort by size_mb descending
+      var entries = data.entries.slice().sort(function(a, b){
+        return parseFloat(b.size_mb||0) - parseFloat(a.size_mb||0);
+      });
+      var maxMb = parseFloat(entries[0].size_mb || 1) || 1;
+
+      // Summary bar visualization
+      var summaryHtml = '<div style="margin-bottom:18px;border:1px solid #e5e7eb;border-radius:10px;padding:12px">' +
+        '<b style="font-size:13px;display:block;margin-bottom:10px">📊 Kapasitas per Guru</b>';
+      entries.forEach(function(guru){
+        var pct = Math.max(2, (parseFloat(guru.size_mb||0) / maxMb * 100)).toFixed(1);
+        var color = pct > 75 ? '#ef4444' : pct > 40 ? '#f59e0b' : '#6366f1';
+        summaryHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px">' +
+          '<span style="min-width:180px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _escSA(guru.guru) + '">' + _escSA(guru.guru) + '</span>' +
+          '<div style="flex:1;background:#f3f4f6;border-radius:8px;height:12px;overflow:hidden">' +
+            '<div style="width:' + pct + '%;background:' + color + ';height:12px;border-radius:8px;transition:width .4s"></div>' +
+          '</div>' +
+          '<span style="min-width:55px;text-align:right;color:#374151;font-weight:600">' + parseFloat(guru.size_mb||0).toFixed(2) + ' MB</span>' +
+          '</div>';
+      });
+      summaryHtml += '</div>';
+
+      var html = summaryHtml;
+      entries.forEach(function(guru){
+        html += '<div style="margin-bottom:16px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+            '<b style="font-size:13px">👤 ' + _escSA(guru.guru) + '</b>' +
+            '<span class="badge" style="background:#e0e7ff;color:#3730a3">' + guru.size_mb + ' MB · ' + (guru.files ? guru.files.length : 0) + ' file</span>' +
+          '</div>';
+        if(!guru.files || guru.files.length === 0){
+          html += '<p class="muted" style="font-size:12px;margin:0">Tidak ada file</p>';
+        } else {
+          html += '<div class="table-wrap"><table><thead><tr>' +
+            '<th>No</th><th>Tahun</th><th>File</th><th>Ukuran</th><th>Aksi</th>' +
+            '</tr></thead><tbody>';
+          guru.files.forEach(function(f, i){
+            html += '<tr>' +
+              '<td>' + (i+1) + '</td>' +
+              '<td>' + _escSA(f.tahun) + '</td>' +
+              '<td class="left" style="font-size:12px">' + _escSA(f.nama) + '</td>' +
+              '<td>' + f.size_mb + ' MB</td>' +
+              '<td style="white-space:nowrap">' +
+                '<button onclick="window.open(\'' + f.url + '\',\'_blank\')" style="font-size:11px;padding:3px 8px;margin:1px">📥</button>' +
+                '<button onclick="_openForwardArsip_(\'' + f.id + '\',\'' + _escSA(f.nama).replace(/'/g,'&#39;') + '\')" style="font-size:11px;padding:3px 8px;margin:1px;background:#e0e7ff;color:#3730a3;border:none;border-radius:6px;cursor:pointer">📧</button>' +
+                '<button onclick="_confirmDeleteArsip_(\'' + f.id + '\',\'' + _escSA(f.nama).replace(/'/g,'&#39;') + '\')" style="font-size:11px;padding:3px 8px;margin:1px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;cursor:pointer">🗑️</button>' +
+              '</td>' +
+            '</tr>';
+          });
+          html += '</tbody></table></div>';
+        }
+        html += '</div>';
+      });
+      if(box) box.innerHTML = html;
+    })
+    .getArsipDriveUsage();
+}
+
+function loadArsipFolderConfig(){
+  google.script.run
+    .withSuccessHandler(function(cfg){
+      var info = document.getElementById('arsipFolderInfo');
+      if(!info) return;
+      if(cfg.folderId){
+        var link = cfg.folderUrl
+          ? '<a href="' + cfg.folderUrl + '" target="_blank" style="color:#4338ca">' + _escSA(cfg.folderName) + '</a>'
+          : _escSA(cfg.folderName);
+        info.innerHTML = '📁 Folder aktif: ' + link + ' <span class="muted" style="font-size:11px">(' + cfg.folderId + ')</span>';
+      } else {
+        info.innerHTML = '📁 Menggunakan folder default: <b>JURNAL_ARSIP</b> di My Drive';
+      }
+      var warnInput = document.getElementById('arsipWarnMbInput');
+      if(warnInput && cfg.warnMb) warnInput.value = cfg.warnMb;
+    })
+    .withFailureHandler(function(err){
+      var info = document.getElementById('arsipFolderInfo');
+      if(info) info.innerHTML = '<span class="muted">❌ ' + _escSA(err.message) + '</span>';
+    })
+    .getArsipFolderConfig();
+}
+
+function saveArsipFolderConfig(){
+  var input  = (document.getElementById('arsipFolderInput') || {}).value || '';
+  var warnMb = (document.getElementById('arsipWarnMbInput') || {}).value || '';
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(typeof showToast==='function'){
+        if(res.folderId) showToast('✅ Folder arsip disimpan: ' + _escSA(res.folderName),'success');
+        else showToast('✅ Threshold warning diperbarui','success');
+      }
+      loadArsipFolderConfig();
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .setArsipFolderConfig(input.trim(), warnMb ? Number(warnMb) : null);
+}
+
+function resetArsipFolderConfig(){
+  if(!confirm('Reset ke folder default JURNAL_ARSIP?')) return;
+  google.script.run
+    .withSuccessHandler(function(){
+      var inp = document.getElementById('arsipFolderInput');
+      if(inp) inp.value = '';
+      if(typeof showToast==='function') showToast('✅ Folder arsip direset ke default','success');
+      loadArsipFolderConfig();
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .setArsipFolderConfig('', null);
+}
+
+
+
+var _forwardArsipFileId_ = null;
+function _openForwardArsip_(fileId, nama){
+  _forwardArsipFileId_ = fileId;
+  var m = document.getElementById('forwardArsipModal');
+  if(m){ document.getElementById('forwardArsipNama').textContent = nama; document.getElementById('forwardArsipEmail').value = ''; m.style.display = 'flex'; }
+}
+function _doForwardArsip_(){
+  var email = (document.getElementById('forwardArsipEmail') || {}).value || '';
+  if(!email.trim()){ if(typeof showToast==='function') showToast('⚠️ Email tujuan wajib diisi','warning'); return; }
+  var btn = document.getElementById('forwardArsipBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Mengirim...'; }
+  google.script.run
+    .withSuccessHandler(function(res){
+      document.getElementById('forwardArsipModal').style.display = 'none';
+      if(btn){ btn.disabled = false; btn.textContent = '📤 Kirim'; }
+      if(typeof showToast==='function') showToast('✅ Arsip dikirim ke ' + res.targetEmail,'success');
+    })
+    .withFailureHandler(function(err){
+      if(btn){ btn.disabled = false; btn.textContent = '📤 Kirim'; }
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .forwardArsipToEmail(_forwardArsipFileId_, email.trim());
+}
+function _confirmDeleteArsip_(fileId, nama){
+  if(!confirm('Hapus file arsip "' + nama + '" dari Drive?\n(File akan dipindah ke Trash, bisa dipulihkan dalam 30 hari)')) return;
+  google.script.run
+    .withSuccessHandler(function(){
+      if(typeof showToast==='function') showToast('🗑️ File dipindah ke Trash Drive','success');
+      loadArsipDriveUsage();
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .deleteArsipFromDrive(fileId);
+}
+
+/** LOAD STATISTIK GLOBAL USER **/
+function loadStatistikGlobal(){
+  renderRiwayatSkeleton(cols);
+  const body = document.getElementById('globalStatBody');
+  google.script.run
+    .withFailureHandler(err=>{
+      body.innerHTML = `
+        <tr><td colspan="6" class="muted">❌ ${err.message}</td></tr>
+      `;
+    })
+    .withSuccessHandler(res=>{
+      if(!res.perGuru || res.perGuru.length === 0){
+        body.innerHTML = '<tr><td colspan="6" class="muted">📤 Belum ada jurnal dari guru manapun.</td></tr>';
+        return;
+      }
+      body.innerHTML = res.perGuru.map((g,i)=>`
+        <tr>
+          <td>${g.no}</td>
+          <td class="left">${g.nama_guru || '-'}</td>
+          <td class="left">${g.email}</td>
+          <td>${g.totalJurnal}</td>
+          <td>${g.totalKelas}</td>
+          <td>${g.lastActivity || '-'}</td>
+        </tr>
+      `).join('');
+    })
+    .getStatistikGlobal();
+}
+
+function loadArsipRiwayat(){
+  renderRiwayatSkeleton(cols);
+  const info = document.getElementById('infoArsipRiwayat');
+  const btn  = document.getElementById('btnArsipRiwayat');
+  const box  = document.getElementById('arsipRiwayatList');
+  btn.disabled = true;
+  google.script.run.withSuccessHandler(res=>{
+  if(res.sudahArsip){
+    info.innerHTML = `🔒 Arsip Tahun Pelajaran <b>${res.tahun}</b> sudah dibuat.`;
+    btn.disabled = true;
+    return;
+  }
+  if(!res.adaGanjil && !res.adaGenap){
+    info.innerHTML = `❌ Belum ada jurnal semester ganjil maupun genap.`;
+    btn.disabled = true;
+    return;
+  }
+  if(res.adaGanjil && !res.adaGenap){
+    info.innerHTML = `⚠️ Arsip belum bisa dilakukan karena <b>jurnal semester genap belum ada</b>.`;
+    btn.disabled = true;
+    return;
+  }
+  if(!res.adaGanjil && res.adaGenap){
+    info.innerHTML = `⚠️ Arsip belum bisa dilakukan karena <b>jurnal semester ganjil belum ada</b>.`;
+    btn.disabled = true;
+    return;
+  }
+  // ✅ lengkap
+  info.innerHTML = `✅ Jurnal Semester Ganjil & Genap lengkap. Arsip bisa dilakukan.`;
+  btn.disabled = false;
+}).getStatusArsipTahunan();
+  google.script.run.withSuccessHandler(list=>{
+    if(!list || list.length===0){
+      box.innerHTML = `<p class="muted">📭 Belum ada arsip.</p>`;
+      return;
+    }
+    box.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tahun Pelajaran</th>
+            <th>Nama File</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map((a,i)=>`
+            <tr>
+              <td>${i+1}</td>
+              <td>${a.tahun || '-'}</td>
+              <td class="left">${a.nama || a.tahun}</td>
+              <td>
+                <button onclick="window.open('${a.url}','_blank')">
+                  📥 Download
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }).getDaftarArsip();
+}
+
+
+function renewLicenseUI(email){
+  if(!confirm(`Perpanjang lisensi ${email} selama 1 tahun?`)) return;
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      alert(`✅ Lisensi diperpanjang sampai ${res.expired || '-'}`);
+
+      // 🔄 AUTO REFRESH TABEL (FIX UTAMA)
+      if(typeof loadUserManagement === 'function'){
+        loadUserManagement();
+      }
+
+      if(typeof loadDashboardSuperAdmin === 'function'){
+        loadDashboardSuperAdmin();
+      }
+    })
+    .withFailureHandler(err=>{
+      alert('❌ ' + err.message);
+    })
+    .renewLicense(email, 1);
+}
+
+/*************************************************
+ * SEND LICENSE EMAIL (UI SAFE)
+ *************************************************/
+function sendLicenseEmailUI(email){
+  if(!confirm(`Kirim email pengingat lisensi ke ${email}?`)) return;
+
+  // 🔐 Jika backend sudah ada fungsi
+  if(google.script.run.sendLicenseEmail){
+    google.script.run
+      .withSuccessHandler(()=>{
+        alert('📧 Email berhasil dikirim');
+      })
+      .withFailureHandler(err=>{
+        alert('❌ Gagal kirim email:\n' + err.message);
+      })
+      .sendLicenseEmail(email);
+    return;
+  }
+
+  // 🛡️ FALLBACK AMAN (tidak crash)
+  alert(
+    'ℹ️ Backend pengiriman email belum diaktifkan.\n\n' +
+    'Silakan hubungi user secara manual.'
+  );
+}
+
+/*************************************************
+ * REGENERATE LICENSE UI (SUPERADMIN ONLY)
+ *************************************************/
+function regenerateLicenseUI(email){
+  if(!confirm(
+    `⚠️ Regenerate lisensi untuk:\n\n${email}\n\n` +
+    `Key lama akan dinonaktifkan.\nUser harus aktivasi ulang.\n\nLanjutkan?`
+  )) return;
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      alert(
+        `🔑 Lisensi berhasil di-regenerate\n\n` +
+        `Email  : ${email}\n` +
+        `Key Baru:\n${res.key}\n\n` +
+        `Status : Inactive\n` +
+        `Expired: Akan dihitung saat aktivasi`
+      );
+
+      // 🔄 refresh tabel & dashboard
+      if(typeof loadUserManagement === 'function'){
+        loadUserManagement();
+      }
+      if(typeof loadDashboardSuperAdmin === 'function'){
+        loadDashboardSuperAdmin();
+      }
+    })
+    .withFailureHandler(err=>{
+      alert('❌ Gagal regenerate lisensi:\n' + err.message);
+    })
+    .regenerateLicense(email);
+}
+
+/* ----------------------------------------------------------------
+   SCHOOL LICENSE UI FUNCTIONS (Tahap 2)
+---------------------------------------------------------------- */
+
+function loadSchoolLicenseUI() {
+  var el = document.getElementById('schoolLicenseInfo');
+  if (!el) return;
+  el.innerHTML = '<p class="muted">⏳ Memuat...</p>';
+
+  // Load tier badge too
+  google.script.run
+    .withSuccessHandler(function(info) {
+      var badge = document.getElementById('currentTierBadge');
+      if (badge && info) {
+        var colors = { LITE: '#f3f4f6:#374151', PRO: '#eff6ff:#6366f1', SCHOOL: '#f0fdf4:#16a34a' };
+        var parts  = (colors[info.tier] || '#f3f4f6:#374151').split(':');
+        badge.style.background = parts[0];
+        badge.style.color      = parts[1];
+        badge.textContent = '⚡ ' + (info.tier || 'LITE');
+      }
+    })
+    .withFailureHandler(function() {})
+    .getSchoolTierInfo();
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<span style="color:#dc2626">❌ ' + err.message + '</span>';
+    })
+    .withSuccessHandler(function(lic) {
+      var statusColor = lic.isActive ? '#166534' : '#991b1b';
+      var statusBg    = lic.isActive ? '#dcfce7' : '#fee2e2';
+      var statusLabel = lic.isActive ? '✅ Aktif' : '❌ Tidak Aktif';
+      var daysStr     = '';
+      if (lic.expires) {
+        daysStr = lic.isActive
+          ? ' · <b>' + lic.daysLeft + '</b> hari tersisa'
+          : ' · Sudah expired ' + Math.abs(lic.daysLeft) + ' hari lalu';
+      }
+      el.innerHTML =
+        '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">' +
+        '<span style="background:' + statusBg + ';color:' + statusColor + ';padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">' + statusLabel + '</span>' +
+        (lic.key ? '<span style="font-family:monospace;font-size:13px;background:#f3f4f6;padding:4px 10px;border-radius:8px">🔑 ' + lic.key + '</span>' : '') +
+        (lic.expires ? '<span style="font-size:13px">📅 s.d. <b>' + lic.expires + '</b>' + daysStr + '</span>' : '<span class="muted">Belum ada tanggal expired</span>') +
+        '</div>';
+    })
+    .getSchoolLicense();
+}
+
+function setSchoolLicenseUI() {
+  var key  = (document.getElementById('schoolLicKey')     || {}).value || '';
+  var exp  = (document.getElementById('schoolLicExpires') || {}).value || '';
+  key = key.trim().toUpperCase();
+  if (!key || !exp) {
+    if (typeof showToast === 'function') showToast('⚠️ Kode lisensi dan tanggal expired wajib diisi', 'warning');
+    else alert('Kode lisensi dan tanggal expired wajib diisi');
+    return;
+  }
+  google.script.run
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Lisensi berhasil disimpan', 'success');
+      else alert('Lisensi berhasil disimpan');
+      loadSchoolLicenseUI();
+    })
+    .setSchoolLicense(key, exp);
+}
+
+function renewSchoolLicenseUI(years) {
+  if (!confirm('Perpanjang lisensi sekolah +' + years + ' tahun?')) return;
+  google.script.run
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Lisensi diperpanjang +' + years + ' tahun', 'success');
+      else alert('Lisensi diperpanjang.');
+      loadSchoolLicenseUI();
+    })
+    .renewSchoolLicense(years);
+}
+
+function deactivateSchoolLicenseUI() {
+  if (!confirm('Nonaktifkan lisensi sekolah sekarang?\nSemua guru tidak dapat mengakses aplikasi.')) return;
+  google.script.run
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('Lisensi dinonaktifkan', 'warning');
+      loadSchoolLicenseUI();
+    })
+    .deactivateSchoolLicense();
+}
+
+function genSchoolLicenseKey_() {
+  google.script.run
+    .withSuccessHandler(function(key) {
+      var el = document.getElementById('schoolLicKey');
+      if (el) {
+        el.value = key;
+        el.focus();
+        el.select();
+      }
+      if (typeof showToast === 'function') showToast('🎲 Key baru: ' + key, 'info');
+    })
+    .withFailureHandler(function(err) {
+      alert('❌ ' + err.message);
+    })
+    .generateSchoolLicenseKey();
+}
+
+/* ---- Reminder Trigger untuk Lisensi Sekolah ---- */
+function loadLicenseReminderTriggerStatus_() {
+  var el = document.getElementById('licReminderStatus');
+  if (!el) return;
+  google.script.run
+    .withSuccessHandler(function(s) {
+      if (!el) return;
+      el.textContent = s && s.active ? '✅ Aktif (08:00 harian)' : '⚫ Tidak aktif';
+      el.style.color = s && s.active ? '#059669' : '#6b7280';
+    })
+    .withFailureHandler(function() {})
+    .getLicenseReminderTriggerStatus();
+}
+
+function activateLicenseReminderTrigger_() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (typeof showToast === 'function')
+        showToast(res.status === 'already_set' ? 'ℹ️ Sudah aktif' : '✅ Reminder lisensi diaktifkan', 'success');
+      loadLicenseReminderTriggerStatus_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+    })
+    .setupLicenseReminderTrigger();
+}
+
+function deactivateLicenseReminderTrigger_() {
+  if (!confirm('Nonaktifkan reminder renewal lisensi sekolah?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('Reminder dinonaktifkan', 'warning');
+      loadLicenseReminderTriggerStatus_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+    })
+    .removeLicenseReminderTrigger();
+}
+
+/* =====================================================================
+   BROADCAST NOTIF — Superadmin kirim notif ke semua guru
+   ===================================================================== */
+function initSANotifSection() {
+  loadSANotifHistory();
+}
+
+/* =====================================================================
+   DEPLOYMENT TRACKER — Vendor untuk kelola multi-deployment
+   ===================================================================== */
+function loadDeployments() {
+  var el = document.getElementById('deploymentList');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px;margin-bottom:6px"></div>'.repeat(3);
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _renderDeployments_(rows, el);
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
+    })
+    .getDeployments();
+}
+
+function _renderDeployments_(rows, el) {
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<div class="alert-banner info">Belum ada deployment tercatat.</div>';
+    return;
+  }
+  var statusColors = { aktif: { bg:'#dcfce7', color:'#166534' }, nonaktif: { bg:'#fee2e2', color:'#991b1b' }, trial: { bg:'#fef9c3', color:'#854d0e' } };
+  var html = '<div class="table-wrap"><table><thead><tr><th>Sekolah</th><th>Email SA</th><th>Script ID</th><th>Tanggal</th><th>Status</th><th>Catatan</th><th>Aksi</th></tr></thead><tbody>';
+  rows.forEach(function(d) {
+    var sc = statusColors[d.status] || { bg:'#f3f4f6', color:'#374151' };
+    html += '<tr>' +
+      '<td><b>' + _escSA(d.nama_sekolah) + '</b></td>' +
+      '<td style="font-size:12px">' + _escSA(d.email_sa) + '</td>' +
+      '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + _escSA(d.script_id || '-') + '</td>' +
+      '<td style="font-size:12px">' + _escSA(d.tanggal) + '</td>' +
+      '<td><span style="background:' + sc.bg + ';color:' + sc.color + ';padding:2px 10px;border-radius:999px;font-size:12px">' + _escSA(d.status) + '</span></td>' +
+      '<td style="font-size:12px;max-width:200px">' + _escSA(d.catatan || '-') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button onclick="editDeployment(\'' + _escSA(d.id) + '\')" style="background:#dbeafe;color:#1e40af;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;margin-right:4px">✏️</button>' +
+        '<button onclick="deleteDeploymentSA(\'' + _escSA(d.id) + '\')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">🗑</button>' +
+      '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  // Store data for edit
+  window._depRows = rows;
+  el.innerHTML = html;
+}
+
+function openDeploymentModal(dep) {
+  var m = document.getElementById('deploymentModal');
+  if (!m) return;
+  m.style.display = 'flex';
+
+  ['depId','depNama','depEmail','depScript','depStatus','depCatatan'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  if (dep) {
+    var idEl = document.getElementById('depId');       if (idEl) idEl.value = dep.id || '';
+    var nmEl = document.getElementById('depNama');     if (nmEl) nmEl.value = dep.nama_sekolah || '';
+    var emEl = document.getElementById('depEmail');    if (emEl) emEl.value = dep.email_sa || '';
+    var scEl = document.getElementById('depScript');   if (scEl) scEl.value = dep.script_id || '';
+    var stEl = document.getElementById('depStatus');   if (stEl) stEl.value = dep.status || 'aktif';
+    var ctEl = document.getElementById('depCatatan');  if (ctEl) ctEl.value = dep.catatan || '';
+  }
+
+  var nmEl2 = document.getElementById('depNama');
+  if (nmEl2) nmEl2.focus();
+}
+
+function editDeployment(id) {
+  if (!window._depRows) return;
+  var dep = window._depRows.find(function(d){ return d.id === id; });
+  if (dep) openDeploymentModal(dep);
+}
+
+function closeDeploymentModal() {
+  var m = document.getElementById('deploymentModal');
+  if (m) m.style.display = 'none';
+}
+
+function submitDeployment() {
+  var id     = (document.getElementById('depId')      || {}).value || '';
+  var nama   = (document.getElementById('depNama')    || {}).value || '';
+  var email  = (document.getElementById('depEmail')   || {}).value || '';
+  var script = (document.getElementById('depScript')  || {}).value || '';
+  var status = (document.getElementById('depStatus')  || {}).value || 'aktif';
+  var catat  = (document.getElementById('depCatatan') || {}).value || '';
+
+  if (!nama.trim()) { if (typeof showToast === 'function') showToast('⚠️ Nama sekolah wajib diisi', 'warning'); return; }
+  if (!email.trim()) { if (typeof showToast === 'function') showToast('⚠️ Email SA wajib diisi', 'warning'); return; }
+
+  var btn = document.getElementById('depSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      closeDeploymentModal();
+      if (typeof showToast === 'function') showToast('✅ Deployment disimpan', 'success');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      loadDeployments();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+    })
+    .saveDeployment({ id: id || null, nama_sekolah: nama.trim(), email_sa: email.trim(), script_id: script.trim(), status: status, catatan: catat.trim() });
+}
+
+function deleteDeploymentSA(id) {
+  if (!confirm('Hapus data deployment ini?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Deployment dihapus', 'success');
+      loadDeployments();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .deleteDeployment(id);
+}
+
+function exportDeploymentsExcel() {
+  if (typeof XLSX === 'undefined') { if (typeof showToast === 'function') showToast('⏳ Library belum siap', 'warning'); return; }
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var wb  = XLSX.utils.book_new();
+      var dat = [['Sekolah', 'Email SA', 'Script ID', 'Tanggal', 'Status', 'Catatan']];
+      (rows || []).forEach(function(r) { dat.push([r.nama_sekolah, r.email_sa, r.script_id, r.tanggal, r.status, r.catatan]); });
+      var ws = XLSX.utils.aoa_to_sheet(dat);
+      ws['!cols'] = [25, 30, 40, 12, 10, 30].map(function(w){ return {wch:w}; });
+      XLSX.utils.book_append_sheet(wb, ws, 'Deployments');
+      XLSX.writeFile(wb, 'Deployments_' + new Date().toLocaleDateString('id-ID').replace(/\//g,'-') + '.xlsx');
+      if (typeof showToast === 'function') showToast('✅ Excel diunduh', 'success');
+    })
+    .withFailureHandler(function() {})
+    .getDeployments();
+}
+
+function _escSA(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ATUR MASA AKTIF USER — SuperAdmin
+───────────────────────────────────────────────────────────── */
+var _masaAktifTargetEmail_ = '';
+
+function openSetMasaAktifModal_(email) {
+  _masaAktifTargetEmail_ = email;
+  var emailEl = document.getElementById('setMasaEmail');
+  if (emailEl) emailEl.textContent = email;
+
+  // Reset radio + date
+  var def = document.querySelector('input[name="masaDurasi"][value="lifetime"]');
+  if (def) def.checked = true;
+  var dateEl = document.getElementById('masaCustomDate');
+  if (dateEl) dateEl.value = '';
+  _updateMasaPreview_();
+
+  // Attach events
+  document.querySelectorAll('input[name="masaDurasi"]').forEach(function(r) {
+    r.onchange = _updateMasaPreview_;
+  });
+  var dateEl2 = document.getElementById('masaCustomDate');
+  if (dateEl2) dateEl2.oninput = _updateMasaPreview_;
+
+  document.getElementById('setMasaAktifModal').style.display = '';
+}
+
+function _updateMasaPreview_() {
+  var customDate = (document.getElementById('masaCustomDate') || {}).value || '';
+  var radioEl    = document.querySelector('input[name="masaDurasi"]:checked');
+  var val        = radioEl ? radioEl.value : 'lifetime';
+  var preview    = document.getElementById('masaPreviewText');
+
+  // Highlight selected radio label
+  [30, 90, 180, 365, 0].forEach(function(d) {
+    var lbl = document.getElementById('maDur-' + d);
+    if (lbl) lbl.style.borderColor = '#e5e7eb';
+  });
+  var activeLbl = document.getElementById('maDur-' + val);
+  if (!activeLbl) activeLbl = document.getElementById('maDur-0');
+  if (activeLbl) activeLbl.style.borderColor = '#6366f1';
+
+  if (customDate) {
+    if (preview) preview.textContent = customDate + ' (manual)';
+    return;
+  }
+  if (val === 'lifetime') {
+    if (preview) preview.textContent = '♾️ Seumur Hidup';
+    return;
+  }
+  var d = new Date();
+  d.setDate(d.getDate() + parseInt(val, 10));
+  if (preview) preview.textContent = d.toLocaleDateString('id-ID', {day:'2-digit',month:'long',year:'numeric'});
+}
+
+function confirmSetMasaAktif_() {
+  var customDate = (document.getElementById('masaCustomDate') || {}).value || '';
+  var radioEl    = document.querySelector('input[name="masaDurasi"]:checked');
+  var val        = radioEl ? radioEl.value : 'lifetime';
+
+  var expiredStr = '';
+  if (customDate) {
+    expiredStr = customDate; // yyyy-mm-dd
+  } else if (val !== 'lifetime') {
+    var d = new Date();
+    d.setDate(d.getDate() + parseInt(val, 10));
+    expiredStr = d.toISOString().split('T')[0];
+  }
+  // lifetime → expiredStr = '' (kosong)
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function')
+        showToast('✅ Masa aktif ' + _masaAktifTargetEmail_ + ' berhasil diupdate', 'success');
+      document.getElementById('setMasaAktifModal').style.display = 'none';
+      loadUserManagement();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function')
+        showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .setUserExpiry(_masaAktifTargetEmail_, expiredStr);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TIER MANAGEMENT — SuperAdmin
+───────────────────────────────────────────────────────────── */
+function genTierKey_(tierType) {
+  google.script.run
+    .withSuccessHandler(function(key) {
+      var el = document.getElementById('generatedTierKey');
+      if (el) { el.value = key; el.focus(); el.select(); }
+      if (typeof showToast === 'function') showToast('🎲 ' + tierType + ' Key: ' + key + '  (klik field untuk copy)', 'info', 6000);
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .generateTierLicenseKey(tierType);
+}
+
+function setTierUI_() {
+  var tier = (document.getElementById('setTierSelect') || {}).value || 'LITE';
+  var key  = ((document.getElementById('setTierKeyInput') || {}).value || '').trim().toUpperCase();
+  if (tier !== 'LITE' && !key) {
+    if (typeof showToast === 'function') showToast('⚠️ Kode lisensi wajib untuk tier ' + tier, 'warning');
+    else alert('Kode lisensi wajib untuk tier ' + tier);
+    return;
+  }
+  if (!confirm('Set tier sekolah ini ke ' + tier + '?\n' + (tier === 'LITE' ? 'Semua fitur premium akan dinonaktifkan.' : 'Fitur ' + tier + ' akan diaktifkan.'))) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (typeof showToast === 'function') showToast('✅ Tier berhasil diset ke ' + res.tier, 'success');
+      loadSchoolLicenseUI();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .setSchoolTier(tier, key);
+}
+
+</script>

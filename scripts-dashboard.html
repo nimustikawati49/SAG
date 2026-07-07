@@ -1,0 +1,848 @@
+<script>
+// DIAGNOSTIC: count tabs immediately after layout.html is parsed
+try{var _t0=document.querySelectorAll('[data-tabid]');if(window.console)console.log('DIAG-dashboard: tabs='+_t0.length+' dash='+(!!document.getElementById('dashboard'))+' sidebar='+(!!document.getElementById('appSidebar')));}catch(e){}
+
+  const cols = 11;
+  // 🔐 FLAG GLOBAL: penanda setting sudah pernah disimpan
+  let settingSudahAda = false;
+  // 🔐 ANTI DOUBLE SUBMIT SIMPAN JURNAL
+  let pendingSettingPayload = null;
+  let editingJurnalId = null;
+  let isSavingJurnal = false;
+ // 📱 MOBILE TAP DELAY GUARD
+  let lastTapTime = 0;
+  const TAP_DELAY_MS = 800; // aman untuk HP
+   /**************** HELPER (WAJIB ADA) ****************/
+let chartJurnal, chartAbsen;
+
+function openHelperModal(){
+  const m = document.getElementById('helperModal');
+  if(m) m.style.display = 'flex';
+}
+
+function closeHelperModal(){
+  const m = document.getElementById('helperModal');
+  if(m) m.style.display = 'none';
+}
+
+function goHelperTab(tab){
+  closeHelperModal();
+  showTab(tab);
+}
+
+function loadDashboard(){
+}
+
+function showKpiSkeleton(){
+  ['kpiJurnal','kpiKelas','kpiRata','kpiRisiko'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el){ el.innerHTML = '<div class="skeleton" style="height:28px;width:60%;margin:auto"></div>'; }
+  });
+  const ranking = document.getElementById('rankingBox');
+  if(ranking) ranking.innerHTML = '<div class="skeleton" style="height:14px;margin-bottom:8px"></div>'.repeat(4);
+  const insight = document.getElementById('insightBox');
+  if(insight) insight.innerHTML = '<li><div class="skeleton" style="height:13px;width:80%"></div></li>'.repeat(3);
+}
+
+let chartStackedV4;
+
+function loadDashboardV4(){
+
+  const dari   = document.getElementById('dashDari') ? document.getElementById('dashDari').value : '';
+  const sampai = document.getElementById('dashSampai') ? document.getElementById('dashSampai').value : '';
+
+  showKpiSkeleton();
+  document.getElementById('dashboard')
+    .classList.add('dashboard-loading');
+
+  // Animate progress bar
+  _dashSetProgress(0);
+  let _p = 0;
+  const _pi = setInterval(function(){
+    _p = Math.min(_p + 2, 75);
+    _dashSetProgress(_p);
+    if(_p >= 75) clearInterval(_pi);
+  }, 120);
+
+  google.script.run
+    .withFailureHandler(err=>{
+      clearInterval(_pi);
+      _dashSetProgress(0);
+      document.getElementById('dashboard')
+        .classList.remove('dashboard-loading');
+      if(typeof showToast === 'function') showToast('❌ Gagal memuat dashboard: ' + err.message, 'error');
+      else alert('Gagal memuat dashboard:\n' + err.message);
+    })
+    .withSuccessHandler(data=>{
+      clearInterval(_pi);
+      _dashSetProgress(100);
+      setTimeout(function(){ _dashSetProgress(0); }, 600);
+      renderDashboardV4(data);
+      document.getElementById('dashboard')
+        .classList.remove('dashboard-loading');
+    })
+    .getDashboardV4Data(dari, sampai);
+}
+
+
+function renderDashboardV4(data){
+
+  if(!data){
+    console.warn('Dashboard data kosong');
+    return;
+  }
+
+  /* ================= KPI FIX ABSOLUTE ================= */
+
+const elJurnal = document.getElementById('kpiJurnal');
+const elKelas  = document.getElementById('kpiKelas');
+const elRisiko = document.getElementById('kpiRisiko');
+const elRata   = document.getElementById('kpiRata');
+
+// 🔥 fallback berbagai kemungkinan nama dari backend
+const totalJurnal =
+  data.totalJurnal ??
+  data.total_jurnal ??
+  data.jurnal ??
+  0;
+
+const totalKelas =
+  data.totalKelas ??
+  data.total_kelas ??
+  data.kelas ??
+  0;
+
+const kelasRisiko =
+  data.risiko ??
+  data.kelasRisiko ??
+  data.kelas_risiko ??
+  0;
+
+const rata2 =
+  data.rata2 ??
+  data.rata_rata ??
+  data.rata ??
+  0;
+
+if(elJurnal){
+  elJurnal.textContent = Number(totalJurnal);
+}
+
+if(elKelas){
+  elKelas.textContent = Number(totalKelas);
+}
+
+if(elRisiko){
+  elRisiko.textContent = Number(kelasRisiko);
+}
+
+if(elRata){
+  elRata.textContent = Number(rata2).toFixed(1) + '%';
+}
+
+
+  /* ================= CHART ================= */
+
+  const ctx = document.getElementById('chartStackedV4');
+  if(!ctx) return;
+
+  if(chartStackedV4) chartStackedV4.destroy();
+
+  const kelas = Object.keys(data.kelasData || {});
+  const H=[],S=[],I=[],A=[];
+
+  kelas.forEach(k=>{
+    H.push(Number(data.kelasData[k].H || 0));
+    S.push(Number(data.kelasData[k].S || 0));
+    I.push(Number(data.kelasData[k].I || 0));
+    A.push(Number(data.kelasData[k].A || 0));
+  });
+
+  chartStackedV4 = new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:kelas,
+      datasets:[
+        {label:'H',data:H,backgroundColor:'#22c55e'},
+        {label:'S',data:S,backgroundColor:'#f97316'},
+        {label:'I',data:I,backgroundColor:'#3b82f6'},
+        {label:'A',data:A,backgroundColor:'#ef4444'}
+      ]
+    },
+    options:{
+      responsive:true,
+      animation:{duration:900},
+      scales:{
+        x:{stacked:true},
+        y:{stacked:true,beginAtZero:true}
+      }
+    }
+  });
+
+  /* ================= RANKING ================= */
+
+  const box = document.getElementById('rankingBox');
+  if(box){
+    box.innerHTML='';
+    if(!data.ranking || data.ranking.length === 0){
+      box.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#9ca3af">' +
+        '<div style="font-size:30px;margin-bottom:8px">📭</div>' +
+        '<div style="font-size:13px;font-weight:600;color:#6b7280">Belum ada ranking kelas</div>' +
+        '<div style="font-size:12px;margin-top:4px">Data muncul setelah jurnal diisi</div>' +
+        '</div>';
+    } else {
+      (data.ranking || []).forEach((r,i)=>{
+        const color = r.persentase >= 85 ? '#16a34a' : r.persentase >= 70 ? '#f97316' : '#ef4444';
+        const medal  = i===0?'🥇':i===1?'🥈':i===2?'🥉':
+          '<span style="display:inline-block;width:20px;text-align:center;font-size:11px;font-weight:700;color:#9ca3af">' + (i+1) + '</span>';
+        box.innerHTML += '<div style="display:flex;justify-content:space-between;align-items:center;' +
+          'padding:10px 12px;margin-bottom:6px;border-left:4px solid ' + color + ';' +
+          'background:#f9fafb;border-radius:8px;gap:8px">' +
+          '<div style="display:flex;align-items:center;gap:8px">' + medal + '<span style="font-size:13px;font-weight:600">' + r.kelas + '</span></div>' +
+          '<div style="font-weight:700;font-size:14px;color:' + color + '">' + r.persentase + '%</div>' +
+          '</div>';
+      });
+    }
+  }
+
+  /* ================= INSIGHT ================= */
+
+  const ul = document.getElementById('insightBox');
+  if(!ul) return;
+
+  ul.innerHTML='';
+
+  if(!data.insight || data.insight.length === 0){
+    ul.innerHTML = '<li style="color:#9ca3af">Belum ada jurnal dalam rentang tanggal ini.</li>';
+  }else{
+    data.insight.forEach(function(item){
+      ul.innerHTML += '<li>' + item + '</li>';
+    });
+  }
+}
+
+
+let dashboardInterval = null;
+let _metaCallInProgress = false; // guard: prevent double GAS call
+
+/* ===== PROGRESS BAR HELPERS ===== */
+function _dashSetProgress(pct){
+  const bar = document.getElementById('dashProgressBar');
+  if(!bar) return;
+  bar.classList.remove('indeterminate');
+  bar.style.width = pct + '%';
+}
+
+/* ===== CURRENT MONTH DEFAULT DATES ===== */
+function _dashDefaultDari(){
+  const now = new Date();
+  return now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-01';
+}
+function _dashDefaultSampai(){
+  const now = new Date();
+  return now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0');
+}
+
+/* ===== JADWAL RENDERER – defined here so it always loads with dashboard ===== */
+/**
+ * Render jadwal grid. Defined in scripts-dashboard.html (not scripts-jadwal-wali.html)
+ * so it's guaranteed to be available even if the jadwal-wali script block fails.
+ * scripts-jadwal-wali.html may also define this; whichever loads last wins.
+ */
+function _renderJadwalGrid_(obj, container){
+  try { window._lastJadwalData = obj; } catch(e){}
+  try { if(typeof _scheduleJadwalNotif_ === 'function') _scheduleJadwalNotif_(obj); } catch(e){}
+
+  var semuaHari = ['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
+  var hariAktif = semuaHari.filter(function(h){ return obj && obj[h] && obj[h].length > 0; });
+
+  /* ── Empty state ─────────────────────────────────── */
+  if(!hariAktif.length){
+    container.innerHTML =
+      '<div style="text-align:center;padding:32px 16px">' +
+        '<div style="font-size:38px;margin-bottom:10px">\uD83D\uDCED</div>' +
+        '<p style="color:#6b7280;font-size:13px;margin:0 0 16px">Belum ada jadwal untuk semester ini.</p>' +
+        '<button onclick="showTab(\'setting\')" ' +
+          'style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;' +
+          'border-radius:10px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;">' +
+          '\u2795 Tambah Jadwal</button>' +
+      '</div>';
+    return;
+  }
+
+  /* ── Inject CSS once ─────────────────────────────── */
+  if(!document.getElementById('jwCss')){
+    var _s = document.createElement('style');
+    _s.id = 'jwCss';
+    _s.textContent =
+      '@keyframes jwPulse{0%,100%{box-shadow:0 4px 16px rgba(99,102,241,.35)}50%{box-shadow:0 8px 28px rgba(99,102,241,.55)}}' +
+      '@keyframes jwDot{0%,100%{opacity:1}50%{opacity:.3}}' +
+      '.jw-wrap{display:flex;gap:0;overflow-x:auto;overflow-y:visible;overscroll-behavior-x:contain;' +
+        '-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;' +
+        'border-radius:14px;border:1px solid #e5e7eb;background:#fff}' +
+      '.jw-wrap::-webkit-scrollbar{height:3px}' +
+      '.jw-wrap::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:99px}' +
+      '.jw-col{flex:0 0 148px;scroll-snap-align:start;display:flex;flex-direction:column;' +
+        'border-right:1px solid #f0f0f0;min-width:0}' +
+      '.jw-col:last-child{border-right:none}' +
+      '.jw-col.jw-today{background:linear-gradient(180deg,#f5f3ff 0%,#fff 60%)}' +
+      '.jw-head{padding:9px 8px;text-align:center;border-bottom:1px solid #f0f0f0}' +
+      '.jw-col.jw-today .jw-head{background:linear-gradient(135deg,#6366f1,#818cf8);border-bottom:none}' +
+      '.jw-head-day{font-size:12px;font-weight:800;letter-spacing:.5px;color:#6b7280}' +
+      '.jw-col.jw-today .jw-head-day{color:#fff}' +
+      '.jw-head-date{font-size:10px;color:rgba(255,255,255,.8);margin-top:2px}' +
+      '.jw-slots{padding:8px 6px;display:flex;flex-direction:column;gap:6px;flex:1}' +
+      '.jw-slot{border-radius:9px;padding:9px 9px;cursor:default;transition:transform .12s}' +
+      '.jw-slot:active{transform:scale(.96)}' +
+      '.jw-slot-kelas{font-weight:700;font-size:12px}' +
+      '.jw-slot-mapel{font-size:11px;margin-top:2px}' +
+      '.jw-slot-time{font-size:10px;margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}' +
+      '.jw-now-badge{padding:1px 6px;border-radius:99px;font-size:9px;font-weight:800;' +
+        'letter-spacing:.3px;background:rgba(255,255,255,.22)}' +
+      '.jw-dot{display:inline-block;width:6px;height:6px;border-radius:50%;' +
+        'background:#fff;animation:jwDot 1.2s infinite;flex-shrink:0}' +
+      '@media(min-width:540px){.jw-col{flex:1}}' +
+      'body.dark .jw-wrap{background:#1f2937;border-color:#374151}' +
+      'body.dark .jw-col{border-color:#374151}' +
+      'body.dark .jw-col.jw-today{background:linear-gradient(180deg,#312e81 0%,#1f2937 60%)}' +
+      'body.dark .jw-head{border-color:#374151}' +
+      'body.dark .jw-head-day{color:#9ca3af}' +
+      'body.dark .jw-slot-mapel{color:#9ca3af!important}' +
+      'body.dark .jw-slot-time{color:#6b7280!important}';
+    document.head.appendChild(_s);
+  }
+
+  function _esc_(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function _pad_(n){ return n<10?'0'+n:''+n; }
+
+  var now       = new Date();
+  var _hMap     = {1:'SENIN',2:'SELASA',3:'RABU',4:'KAMIS',5:'JUMAT',6:'SABTU'};
+  var hariIni   = _hMap[now.getDay()] || null;
+  var curMin    = now.getHours()*60 + now.getMinutes();
+  var todayDate = _pad_(now.getDate())+'/'+_pad_(now.getMonth()+1);
+  var _abbr     = {SENIN:'Senin',SELASA:'Selasa',RABU:'Rabu',KAMIS:'Kamis',Jumat:'Jumat',SABTU:'Sabtu',JUMAT:'Jumat'};
+
+  var palette = [
+    {bg:'#6366f1',light:'#ede9fe',text:'#4338ca'},
+    {bg:'#0ea5e9',light:'#e0f2fe',text:'#0369a1'},
+    {bg:'#10b981',light:'#d1fae5',text:'#065f46'},
+    {bg:'#f59e0b',light:'#fef3c7',text:'#92400e'},
+    {bg:'#ef4444',light:'#fee2e2',text:'#991b1b'},
+    {bg:'#a855f7',light:'#f3e8ff',text:'#6b21a8'},
+    {bg:'#ec4899',light:'#fce7f3',text:'#9d174d'},
+    {bg:'#14b8a6',light:'#ccfbf1',text:'#134e4a'}
+  ];
+  var clrMap = {}, ci = 0;
+  hariAktif.forEach(function(h){
+    (obj[h]||[]).forEach(function(item){
+      if(!clrMap[item.mapel]) clrMap[item.mapel] = palette[ci++ % palette.length];
+    });
+  });
+
+  var html = '<div class="jw-wrap" id="jwWrap">';
+
+  hariAktif.forEach(function(h){
+    var isToday = (h === hariIni);
+    html += '<div class="jw-col'+(isToday?' jw-today':'')+'" data-hari="'+h+'">';
+    html += '<div class="jw-head">' +
+      '<div class="jw-head-day">'+(_abbr[h]||h)+'</div>' +
+      (isToday ? '<div class="jw-head-date">'+todayDate+'</div>' : '') +
+    '</div>';
+    html += '<div class="jw-slots">';
+    (obj[h]||[]).forEach(function(item){
+      var sMin=0, eMin=1440;
+      try{ var sp=item.jam_mulai.split(':'); sMin=+sp[0]*60+ +sp[1]; }catch(e){}
+      try{ var ep=item.jam_selesai.split(':'); eMin=+ep[0]*60+ +ep[1]; }catch(e){}
+      var isNow = isToday && curMin>=sMin && curMin<=eMin;
+      var clr   = clrMap[item.mapel] || palette[0];
+      var slotBg = isNow
+        ? 'background:'+clr.bg+';animation:jwPulse 2s ease-in-out infinite;'
+        : 'background:'+clr.light+';border-left:3px solid '+clr.bg+';';
+      var kelasClr = isNow ? 'color:#fff;' : 'color:'+clr.text+';';
+      var mapelClr = isNow ? 'color:rgba(255,255,255,.85);' : 'color:#6b7280;';
+      var timeClr  = isNow ? 'color:rgba(255,255,255,.7);' : 'color:#9ca3af;';
+      html +=
+        '<div class="jw-slot" style="'+slotBg+'">' +
+          '<div class="jw-slot-kelas" style="'+kelasClr+'">'+_esc_(item.kelas)+'</div>' +
+          '<div class="jw-slot-mapel" style="'+mapelClr+'">'+_esc_(item.mapel)+'</div>' +
+          '<div class="jw-slot-time" style="'+timeClr+'">' +
+            (isNow
+              ? '<span class="jw-dot"></span>'+_esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)+
+                ' <span class="jw-now-badge">SEKARANG</span>'
+              : _esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)
+            ) +
+          '</div>' +
+        '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+
+  setTimeout(function(){
+    var wrap    = document.getElementById('jwWrap');
+    var todayEl = wrap && wrap.querySelector('.jw-col.jw-today');
+    if(todayEl && wrap) todayEl.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+  }, 80);
+}
+
+/* Also expose a direct jadwal loader callable from showTab */
+function _loadJadwalFallback_(){
+  var container = document.getElementById('jadwalGridContainer');
+  if(!container) return;
+  if(container.innerHTML.indexOf('Memuat jadwal') === -1 &&
+     container.innerHTML.indexOf('jwWrap') !== -1) return; // already rendered
+  google.script.run
+    .withSuccessHandler(function(obj){
+      var c2 = document.getElementById('jadwalGridContainer');
+      if(!c2) return;
+      if(!obj || typeof obj !== 'object' || obj._error){
+        c2.innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:32px">\uD83D\uDCED</div>' +
+          '<p style="color:#6b7280;font-size:13px;margin:8px 0 0">Belum ada jadwal.</p></div>';
+        return;
+      }
+      try { _renderJadwalGrid_(obj, c2); } catch(e){ console.error('[JADWAL-FALLBACK]', e); }
+    })
+    .withFailureHandler(function(err){
+      console.error('[JADWAL-FALLBACK] getDashboardJadwal failed:', err && err.message);
+    })
+    .getDashboardJadwal();
+}
+
+/* ===== RENDER HELPER (meta + V4 in one shot) ===== */
+function _renderAllDashboard(allData){
+  const elKelas = document.getElementById('metaKelas');
+  const elSiswa = document.getElementById('metaSiswa');
+  if(elKelas) elKelas.textContent = allData.kelasDiampu ?? allData.totalKelas ?? 0;
+  if(elSiswa) elSiswa.textContent = allData.totalSiswa || 0;
+
+  // Populate header from setting data — only if setting has actual content
+  var hasSetting = allData.setting && (
+    allData.setting.sekolah || allData.setting.tahun_pelajaran ||
+    allData.setting.semester || allData.setting.nama_guru
+  );
+  if(hasSetting && typeof _applySettingToHeader_ === 'function'){
+    _applySettingToHeader_(allData.setting);
+  }
+
+  // Render jadwal dari bundled getDashboardAllData() — hanya jika ada data
+  var jContainer = document.getElementById('jadwalGridContainer');
+  if(jContainer && typeof _renderJadwalGrid_ === 'function'){
+    var jadwalObj = allData.jadwal || {};
+    // Always render: either we have data, or clear the loading placeholder
+    try {
+      _renderJadwalGrid_(jadwalObj, jContainer);
+    } catch(e) {
+      console.error('[DASHBOARD] _renderJadwalGrid_ error:', e);
+    }
+  }
+
+  renderDashboardV4(allData);
+}
+
+function initDashboardMeta(){
+  // Prevent simultaneous double calls (e.g. from showTab + direct call)
+  if(_metaCallInProgress) return;
+  _metaCallInProgress = true;
+
+  // 1. Set date filter defaults IMMEDIATELY — no waiting for server
+  const elDari   = document.getElementById('dashDari');
+  const elSampai = document.getElementById('dashSampai');
+  if(elDari   && !elDari.value)   elDari.value   = _dashDefaultDari();
+  if(elSampai && !elSampai.value) elSampai.value = _dashDefaultSampai();
+
+  // 2. Jadwal dimuat via getDashboardAllData() — tidak perlu call terpisah
+
+  // 3. Show stale cache instantly (stale-while-revalidate)
+  const cacheKey = 'dashCache_' + (window._currentUserEmail || 'anon');
+  let hasCache = false;
+  try {
+    const raw = sessionStorage.getItem(cacheKey);
+    if(raw){
+      const {ts, data} = JSON.parse(raw);
+      if(Date.now() - ts < 5 * 60 * 1000){ // 5-minute TTL
+        _renderAllDashboard(data);
+        hasCache = true;
+        // Update date inputs from cache
+        if(data.firstDate && elDari)   elDari.value   = data.firstDate;
+        if(data.lastDate  && elSampai) elSampai.value = data.lastDate;
+        // NOTE: jadwal is loaded separately above via loadJadwalMengajar()
+      }
+    }
+  } catch(e){ /* ignore */ }
+
+  // 4. Skeleton only if no cache
+  if(!hasCache) showKpiSkeleton();
+  document.getElementById('dashboard').classList.add('dashboard-loading');
+
+  // Jadwal dimuat terpisah via loadJadwalMengajar() di atas
+
+  // 5. Animate progress bar 0 → 78% while waiting for GAS
+  _dashSetProgress(0);
+  let _prog = 0;
+  const _progInterval = setInterval(function(){
+    _prog = Math.min(_prog + 1.5, 78);
+    _dashSetProgress(_prog);
+    if(_prog >= 78) clearInterval(_progInterval);
+  }, 150);
+
+  // 6. Safety timeout 20s
+  const _skeletonTimeout = setTimeout(function(){
+    clearInterval(_progInterval);
+    _dashSetProgress(0);
+    _metaCallInProgress = false;
+    document.getElementById('dashboard').classList.remove('dashboard-loading');
+    if(!hasCache){
+      ['kpiJurnal','kpiKelas','kpiRata','kpiRisiko'].forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.innerHTML = '<span style="color:#ef4444;font-size:12px">—</span>';
+      });
+      const rankingBox = document.getElementById('rankingBox');
+      if(rankingBox) rankingBox.innerHTML = '<p class="muted">⚠️ Server lambat. Coba refresh.</p>';
+      const insightBox = document.getElementById('insightBox');
+      if(insightBox) insightBox.innerHTML = '<li style="color:#6b7280">Tidak ada data.</li>';
+    }
+    if(typeof showToast === 'function')
+      showToast('⚠️ Server lambat merespons. Coba refresh halaman.', 'warning', 8000);
+  }, 20000);
+
+  // 7. Single GAS call — getDashboardAllData() combines meta + V4
+  google.script.run
+    .withFailureHandler(function(err){
+      clearTimeout(_skeletonTimeout);
+      clearInterval(_progInterval);
+      _dashSetProgress(0);
+      _metaCallInProgress = false;
+      document.getElementById('dashboard').classList.remove('dashboard-loading');
+      if(typeof showToast === 'function')
+        showToast('❌ Gagal memuat dashboard: ' + (err.message || 'Coba refresh'), 'error', 6000);
+    })
+    .withSuccessHandler(function(allData){
+      clearTimeout(_skeletonTimeout);
+      clearInterval(_progInterval);
+      _metaCallInProgress = false;
+
+      // Complete progress bar then hide
+      _dashSetProgress(100);
+      setTimeout(function(){ _dashSetProgress(0); }, 600);
+
+      document.getElementById('dashboard').classList.remove('dashboard-loading');
+      if(!allData) return;
+
+      // Update date filter from actual journal date range
+      if(allData.firstDate && elDari)   elDari.value   = allData.firstDate;
+      if(allData.lastDate  && elSampai) elSampai.value = allData.lastDate;
+
+      // Render profile + KPI + chart + ranking + insight
+      _renderAllDashboard(allData);
+
+      // Update "last synced" timestamp
+      const syncEl = document.getElementById('dashSyncTime');
+      if(syncEl){
+        const now = new Date();
+        syncEl.textContent = 'Diperbarui ' + now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+      }
+
+      // Persist to sessionStorage for instant display next visit
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ts: Date.now(), data: allData}));
+      } catch(e){ /* quota exceeded — ignore */ }
+
+      // Track last refresh timestamp
+      window._dashLastRefresh = Date.now();
+
+      // Auto-refresh: only when tab + page are both visible
+      if(window.dashboardInterval) clearInterval(window.dashboardInterval);
+      window.dashboardInterval = setInterval(function(){
+        if(document.visibilityState !== 'visible') return;
+        if(typeof _currentTab !== 'undefined' && _currentTab !== 'dashboard') return;
+        loadDashboardV4();
+      }, 60000);
+    })
+    .getDashboardAllData();
+}
+
+// Refetch dashboard when user returns to tab after being away >= 2 min
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  var isOnDashboard = (typeof _currentTab === 'undefined') || _currentTab === 'dashboard';
+  if(!isOnDashboard) return;
+  var elapsed = Date.now() - (window._dashLastRefresh || 0);
+  if(elapsed > 2 * 60 * 1000){
+    loadDashboardV4();
+  }
+});
+
+function startDashboardAutoRefresh(){
+  if(dashboardInterval) clearInterval(dashboardInterval);
+  dashboardInterval = setInterval(function(){
+    if(document.visibilityState !== 'visible') return;
+    loadDashboardV4();
+  }, 60000);
+}
+
+function loadJurnalChart(){
+  google.script.run.withSuccessHandler(data=>{
+
+    const ctx = document.getElementById('chartJurnal');
+
+    // destroy chart lama
+    if(chartJurnal) chartJurnal.destroy();
+
+    const labels = Object.keys(data || {});
+    const values = Object.values(data || {});
+
+    // =====================
+    // JIKA BELUM ADA JURNAL
+    // =====================
+    if(labels.length === 0){
+
+      chartJurnal = new Chart(ctx,{
+        type:'pie',
+        data:{
+          labels:['Belum ada jurnal'],
+          datasets:[{
+            data:[1],
+            backgroundColor:['#e5e7eb'],
+            borderColor:'#fff',
+            borderWidth:2
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{ display:false },
+            tooltip:{ enabled:false }
+          }
+        }
+      });
+
+      return;
+    }
+    // =====================
+    // JIKA ADA DATA JURNAL
+    // =====================
+    const colors = [
+      '#3b82f6','#22c55e','#f97316',
+      '#a855f7','#ec4899','#14b8a6',
+      '#ef4444','#0ea5e9'
+    ];
+
+    chartJurnal = new Chart(ctx,{
+      type:'pie',
+      data:{
+        labels:labels,
+        datasets:[{
+          data:values,
+          backgroundColor:labels.map((_,i)=>colors[i % colors.length]),
+          borderWidth:2,
+          borderColor:'#fff'
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{
+            position:'bottom',
+            labels:{
+              padding:16,
+              font:{ size:13, weight:'600' }
+            }
+          }
+        }
+      }
+    });
+
+  }).getDashboardData();
+}
+
+function loadAbsenChart(){
+  google.script.run.withSuccessHandler(data => {
+
+    // Info jumlah pertemuan
+    document.getElementById('infoKelas').innerText =
+      `Rekap kehadiran global (${data.totalPertemuan} pertemuan)`;
+
+    // Catatan penjelasan grafik
+    document.getElementById('infoAbsenNote').innerHTML =
+  '📌 Data grafik menunjukkan <b>rekap kehadiran (H/S/I/A)</b> dari ' +
+  '<b>seluruh kelas yang telah direkap absensinya</b>.<br>' +
+  'Nilai merupakan <b>akumulasi jumlah siswa</b> dari setiap kelas ' +
+  'berdasarkan jurnal dan absensi yang telah diisi.';
+
+    // Daftar kelas
+    const infoKelasEl = document.getElementById('infoAbsenKelas');
+    if(data.kelasDirekap && data.kelasDirekap.length > 0){
+      infoKelasEl.innerHTML =
+        `🏫 <b>Kelas yang sudah direkap:</b> ${data.kelasDirekap.join(', ')}`;
+    } else {
+      infoKelasEl.innerHTML =
+        `🚫 <b>Belum ada kelas yang direkap absensinya</b>`;
+    }
+
+    const labels = ['Hadir','Sakit','Izin','Alpha'];
+    const values = [
+      data.hadir || 0,
+      data.sakit || 0,
+      data.izin  || 0,
+      data.alpha || 0
+    ];
+
+    if(chartAbsen) chartAbsen.destroy();
+
+    chartAbsen = new Chart(document.getElementById('chartAbsen'),{
+      type:'bar',
+
+      // ✅ DATA
+      data:{
+        labels: labels,
+        datasets:[{
+          label:'Rekap Kehadiran Keseluruhan',
+          data: values,
+          backgroundColor:[
+            '#22c55e', // Hadir
+            '#f97316', // Sakit
+            '#3b82f6', // Izin
+            '#ef4444'  // Alpha
+          ],
+          borderRadius:10,
+          borderSkipped:false,
+
+          // 🔑 KUNCI AGAR BAR TETAP TERLIHAT
+          minBarLength: 8,
+          barPercentage: 0.6,
+          categoryPercentage: 0.7
+        }]
+      },
+
+      // ✅ OPTIONS (POSISI BENAR)
+      options:{
+        responsive:true,
+        animation:{
+          duration:1400,
+          easing:'easeOutQuart'
+        },
+        plugins:{
+          legend:{ display:true },
+          tooltip:{
+            callbacks:{
+              label:(ctx)=>{
+                  const v = ctx.raw ?? 0;
+                  return ` ${v} siswa`;
+                }
+            }
+          }
+        },
+        scales:{
+          y:{
+            beginAtZero:true,
+            ticks:{ stepSize:1 },
+            suggestedMax: Math.max(...values) + 1
+          }
+        }
+      }
+    });
+
+  }).getDashboardData();
+}
+
+function chartJurnalEl(){return document.getElementById('chartJurnal')}
+function chartAbsenEl(){return document.getElementById('chartAbsen')}
+
+/* ================= PROGRESS ================= */
+let progressValue=0;
+let progressInterval=null;
+
+/* =================================================================
+   GURU WALI — Didefinisikan di sini agar tersedia bahkan jika
+   scripts-jadwal-wali.html gagal dimuat.
+   ================================================================= */
+
+function loadInfoGuruWali(){
+  google.script.run
+    .withSuccessHandler(function(info){
+      if(!info) return;
+      var el;
+      el = document.getElementById('gwNamaGuru');
+      if(el) el.innerText = info.nama_guru || '-';
+      el = document.getElementById('gwNip');
+      if(el) el.innerText = info.nip || '-';
+      el = document.getElementById('gwJumlahSiswa');
+      if(el) el.innerText = (info.jumlah_siswa !== undefined && info.jumlah_siswa !== null) ? info.jumlah_siswa : 0;
+    })
+    .withFailureHandler(function(err){ console.error('[GuruWali] loadInfoGuruWali:', err && err.message); })
+    .getInfoGuruWali();
+}
+
+function loadSiswaBinaan(page){
+  var tbody = document.getElementById('siswaBinaanBody');
+  if(!tbody) return;
+  var p = Number(page) || 1;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:12px">⏳ Memuat...</td></tr>';
+  google.script.run
+    .withSuccessHandler(function(res){
+      var data = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+      if(!data.length){
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:16px">📭 Belum ada siswa binaan. Upload via template CSV.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(function(s){
+        return '<tr>' +
+          '<td style="text-align:center">' + (s.no || '') + '</td>' +
+          '<td class="left">' + (s.nama_siswa || '-') + '</td>' +
+          '<td style="text-align:center">' + (s.nis || '-') + '</td>' +
+          '<td style="text-align:center">' + (s.kelas || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      var ctrl = document.getElementById('siswaBinaanPager');
+      if(ctrl){
+        ctrl.innerHTML = '';
+        if(res && res.totalPages && res.totalPages > 1){
+          for(var i=1;i<=res.totalPages;i++){
+            var btn = document.createElement('button');
+            btn.textContent = i;
+            btn.style.cssText = 'margin:0 2px;padding:2px 8px';
+            if(i === res.page) btn.style.fontWeight = 'bold';
+            (function(pg){ btn.onclick = function(){ loadSiswaBinaan(pg); }; })(i);
+            ctrl.appendChild(btn);
+          }
+        }
+      }
+    })
+    .withFailureHandler(function(err){
+      if(tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:12px">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</td></tr>';
+    })
+    .getSiswaBinaan(p, 20);
+}
+
+function loadJurnalGuruWali(){
+  // Isi dari cache setting dulu
+  var cached = window._settingCache || {};
+  var elNama = document.getElementById('gwNamaGuru');
+  var elNip  = document.getElementById('gwNip');
+  if(elNama && cached.nama_guru) elNama.innerText = cached.nama_guru;
+  if(elNip  && cached.nip_guru)  elNip.innerText  = cached.nip_guru;
+
+  // Muat dari backend (info + siswa binaan)
+  loadInfoGuruWali();
+  loadSiswaBinaan(1);
+
+  // Panggil fungsi lain dari scripts-jadwal-wali.html jika tersedia
+  if(typeof loadRiwayatGuruWali === 'function') loadRiwayatGuruWali();
+  if(typeof loadStatusArsipWali === 'function') loadStatusArsipWali();
+
+  // Set default tanggal hari ini
+  var tglEl = document.getElementById('gwTanggal');
+  if(tglEl && !tglEl.value){
+    tglEl.value = new Date().toISOString().slice(0,10);
+    if(typeof autoFillHariWali === 'function') autoFillHariWali(tglEl.value);
+  }
+}
+
+</script>

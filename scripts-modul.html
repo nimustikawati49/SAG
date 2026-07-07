@@ -1,0 +1,608 @@
+<script>
+/* ================================================================
+   scripts-modul.html — Modul Ajar UI Logic (v2 — multi-mapel, edit, skeleton)
+   ================================================================ */
+
+// ============ STATE ============
+let _modulData           = [];
+let _selectedJadwalId    = null;
+let _selectedJadwalMeta  = { kelas: '', mapel: '' };
+let _modulFileBase64     = null;
+let _modulFileMime       = null;
+let _modulFileName       = null;
+let _editModulFileBase64 = null;
+let _editModulFileMime   = null;
+let _editModulFileName   = null;
+let _editModulDirty      = false;  // → true jika ada perubahan belum disimpan
+
+// ============ HELPER ============
+function escHtml_(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ============ INIT ============
+function initModulAjar() {
+  _loadMapelOptions_();    // isi dropdown mapel dari setting
+  _fillBabSuggestions_();  // isi datalist bab
+  loadAllModul_();
+}
+
+/** Ambil daftar mapel guru dari GAS lalu isi select#modulMapelSelect */
+function _loadMapelOptions_() {
+  google.script.run
+    .withSuccessHandler(function(list) {
+      const sel     = document.getElementById('modulMapelSelect');
+      const selEdit = document.getElementById('editModulMapel');
+      if (!sel) return;
+
+      const opts = '<option value="">-- Pilih Mapel --</option>'
+        + (list || []).map(function(m) {
+            return '<option value="' + escHtml_(m) + '">' + escHtml_(m) + '</option>';
+          }).join('');
+
+      sel.innerHTML     = opts;
+      if (selEdit) selEdit.innerHTML = opts;
+    })
+    .withFailureHandler(function() {
+      // fallback: biarkan kosong
+    })
+    .getMapelListGuru();
+}
+
+/** Isi datalist untuk input bab dengan saran umum */
+function _fillBabSuggestions_() {
+  const suggestions = [];
+  for (let i = 1; i <= 15; i++) suggestions.push('Bab ' + i);
+  ['UTS','UAS','Review','Pendahuluan','Evaluasi'].forEach(function(s) { suggestions.push(s); });
+
+  ['modulBabDatalist','editModulBabDatalist'].forEach(function(id) {
+    const dl = document.getElementById(id);
+    if (!dl) return;
+    dl.innerHTML = suggestions.map(function(s) {
+      return '<option value="' + escHtml_(s) + '">';
+    }).join('');
+  });
+}
+
+// ============ JADWAL SECTION ============
+function loadJadwalForModul_() {
+  const grid = document.getElementById('modulJadwalGrid');
+  if (!grid) return;
+  grid.innerHTML = '<p class="muted">⏳ Memuat jadwal...</p>';
+
+  google.script.run
+    .withSuccessHandler(function(list) { _renderJadwalCards_(list); })
+    .withFailureHandler(function(e) {
+      grid.innerHTML = '<p class="muted">Gagal memuat jadwal: ' + escHtml_(e.message) + '</p>';
+    })
+    .getJadwalWithId();
+}
+
+const _DAYS_ORDER_ = ['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
+
+function _renderJadwalCards_(list) {
+  const grid = document.getElementById('modulJadwalGrid');
+  if (!list || list.length === 0) {
+    grid.innerHTML = '<p class="muted">Belum ada jadwal mengajar. Tambahkan jadwal di menu <b>Setting</b> terlebih dahulu.</p>';
+    // Still populate kelas dropdown from empty list
+    _populateKelasFromJadwal_([]);
+    return;
+  }
+
+  _populateKelasFromJadwal_(list);
+
+  // Group by hari
+  const byHari = {};
+  list.forEach(function(j) {
+    if (!byHari[j.hari]) byHari[j.hari] = [];
+    byHari[j.hari].push(j);
+  });
+
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:14px">';
+  _DAYS_ORDER_.forEach(function(hari) {
+    if (!byHari[hari]) return;
+    html += '<div>';
+    html += '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + escHtml_(hari) + '</div>';
+    byHari[hari].forEach(function(j) {
+      html += '<div class="modul-jadwal-card"'
+        + ' data-jid="' + j.id + '"'
+        + ' data-kelas="' + escHtml_(j.kelas) + '"'
+        + ' data-mapel="' + escHtml_(j.mapel) + '"'
+        + ' onclick="jadwalCardClick_(this)"'
+        + ' style="background:#6C63FF;color:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:8px;font-size:13px;font-weight:600;min-width:120px;transition:opacity .15s,outline .15s">';
+      html += '<div>' + escHtml_(j.kelas) + '</div>';
+      html += '<div style="opacity:.85;font-weight:400;font-size:12px">' + escHtml_(j.mapel) + '</div>';
+      html += '<div style="opacity:.7;font-size:11px;margin-top:2px">' + escHtml_(j.jam_mulai) + '–' + escHtml_(j.jam_selesai) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+function _populateKelasFromJadwal_(list) {
+  const selModulKelas = document.getElementById('modulKelasSelect');
+  const selFilter     = document.getElementById('filterModulKelas');
+  if (!selModulKelas) return;
+
+  // Kumpulkan nama kelas unik dari jadwal (contoh: 7A, 7B, 8A, dst)
+  const kelasSet = {};
+  list.forEach(function(j) {
+    if (j.kelas) kelasSet[j.kelas] = true;
+  });
+  var kelasList = Object.keys(kelasSet).sort(function(a, b) {
+    var aNum = parseInt(a, 10) || 0;
+    var bNum = parseInt(b, 10) || 0;
+    if (aNum !== bNum) return aNum - bNum;
+    return a.localeCompare(b);
+  });
+
+  const opts = '<option value="">-- Pilih Kelas --</option>' + kelasList.map(function(k) {
+    return '<option value="' + k + '">' + k + '</option>';
+  }).join('');
+  selModulKelas.innerHTML = opts;
+  if (selFilter) selFilter.innerHTML = '<option value="">-- Semua Kelas --</option>' + kelasList.map(function(k) {
+    return '<option value="' + k + '">' + k + '</option>';
+  }).join('');
+}
+
+function jadwalCardClick_(el) {
+  _selectedJadwalId          = Number(el.getAttribute('data-jid'));
+  _selectedJadwalMeta.kelas  = el.getAttribute('data-kelas');
+  _selectedJadwalMeta.mapel  = el.getAttribute('data-mapel');
+
+  // Highlight
+  document.querySelectorAll('.modul-jadwal-card').forEach(function(c) {
+    c.style.opacity  = '.5';
+    c.style.outline  = 'none';
+  });
+  el.style.opacity = '1';
+  el.style.outline = '2px solid #fbbf24';
+  el.style.outlineOffset = '2px';
+
+  // Auto-fill form (multi-mapel: coba set select)
+  const selMapel = document.getElementById('modulMapelSelect');
+  if (selMapel) {
+    const opt = Array.from(selMapel.options).find(function(o) { return o.value === _selectedJadwalMeta.mapel; });
+    if (opt) selMapel.value = _selectedJadwalMeta.mapel;
+  }
+  const selKelas = document.getElementById('modulKelasSelect');
+  if (selKelas) {
+    selKelas.value = _selectedJadwalMeta.kelas;
+  }
+
+  // Show linked moduls
+  document.getElementById('modulJadwalDetail').style.display = 'block';
+  document.getElementById('modulJadwalDetailTitle').textContent =
+    '📚 Modul terhubung: ' + _selectedJadwalMeta.kelas + ' – ' + _selectedJadwalMeta.mapel;
+
+  reloadLinkedModuls_();
+}
+
+function reloadLinkedModuls_() {
+  if (!_selectedJadwalId) return;
+  const el = document.getElementById('modulLinkedList');
+  el.innerHTML = '<p class="muted">⏳ Memuat...</p>';
+
+  google.script.run
+    .withSuccessHandler(_renderLinkedModuls_)
+    .withFailureHandler(function(e) {
+      el.innerHTML = '<p class="muted">Gagal: ' + escHtml_(e.message) + '</p>';
+    })
+    .getModulByJadwal(_selectedJadwalId);
+}
+
+function _renderLinkedModuls_(moduls) {
+  const el = document.getElementById('modulLinkedList');
+  if (!moduls || moduls.length === 0) {
+    el.innerHTML = '<p class="muted">Belum ada modul terhubung ke jadwal ini. Klik <b>Tambahkan Modul</b> di atas.</p>';
+    return;
+  }
+  const thStyle = 'padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;color:#374151';
+  const tdStyle = 'padding:8px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;vertical-align:middle';
+  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">';
+  html += '<thead><tr style="background:#f9fafb">'
+    + '<th style="' + thStyle + '">Judul</th>'
+    + '<th style="' + thStyle + '">Bab</th>'
+    + '<th style="' + thStyle + ';text-align:center">File</th>'
+    + '<th style="' + thStyle + ';text-align:center">Edit</th>'
+    + '<th style="' + thStyle + ';text-align:center">Lepas</th>'
+    + '</tr></thead><tbody>';
+  moduls.forEach(function(m) {
+    html += '<tr>'
+      + '<td style="' + tdStyle + '">'
+        + '<div style="font-weight:600">' + escHtml_(m.judul) + '</div>'
+        + (m.deskripsi ? '<div style="font-size:11px;color:#9ca3af;margin-top:2px">' + escHtml_(m.deskripsi) + '</div>' : '')
+      + '</td>'
+      + '<td style="' + tdStyle + '">Bab ' + escHtml_(String(m.bab)) + '</td>'
+      + '<td style="' + tdStyle + ';text-align:center">'
+        + (m.file_url
+          ? '<a href="' + escHtml_(m.file_url) + '" target="_blank" rel="noopener" style="color:#6C63FF;font-weight:600;font-size:12px">⬇ Download</a>'
+          : '<span class="muted">—</span>')
+      + '</td>'
+      + '<td style="' + tdStyle + ';text-align:center">'
+        + '<button onclick="openEditModulModal_(' + m.id + ')" style="font-size:11px;padding:4px 10px;background:#ede9fe;color:#6C63FF;border:none;border-radius:6px;cursor:pointer;font-weight:600">✏️ Edit</button>'
+      + '</td>'
+      + '<td style="' + tdStyle + ';text-align:center">'
+        + '<button onclick="removeModulRelasi_(' + m.relasi_id + ')" style="font-size:11px;padding:4px 10px;background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;cursor:pointer;font-weight:600">✕ Lepas</button>'
+      + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function removeModulRelasi_(relasiId) {
+  if (!confirm('Lepas modul dari jadwal ini?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Modul dilepas dari jadwal.', 'info');
+      reloadLinkedModuls_();
+    })
+    .withFailureHandler(function(e) {
+      showToast('Gagal: ' + e.message, 'error');
+    })
+    .removeModulFromJadwal(relasiId);
+}
+
+// ============ ASSIGN MODUL MODAL ============
+function openAssignModulModal_() {
+  if (!_selectedJadwalId) {
+    showToast('Pilih jadwal terlebih dahulu', 'warning');
+    return;
+  }
+  const modal   = document.getElementById('assignModulModal');
+  const listEl  = document.getElementById('assignModulPickList');
+  modal.style.display = 'flex';
+
+  if (!_modulData || _modulData.length === 0) {
+    listEl.innerHTML = '<p class="muted">Belum ada modul. Tambahkan modul di bawah terlebih dahulu.</p>';
+    return;
+  }
+
+  let html = '';
+  _modulData.forEach(function(m) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;gap:10px">';
+    html += '<div><div style="font-weight:600;font-size:13px">' + escHtml_(m.judul) + '</div>';
+    html += '<div style="font-size:12px;color:#6b7280">' + escHtml_(m.mapel) + ' · Kelas ' + escHtml_(m.kelas) + ' · Bab ' + escHtml_(String(m.bab)) + '</div></div>';
+    html += '<button onclick="doAssignModul_(' + m.id + ')" style="flex-shrink:0;font-size:12px;padding:5px 12px;background:#6C63FF;color:#fff;border:none;border-radius:7px;cursor:pointer;font-weight:600">Pilih</button>';
+    html += '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+function closeAssignModulModal_() {
+  document.getElementById('assignModulModal').style.display = 'none';
+}
+
+function doAssignModul_(modulId) {
+  if (!_selectedJadwalId) { showToast('Pilih jadwal terlebih dahulu', 'warning'); return; }
+  google.script.run
+    .withSuccessHandler(function() {
+      closeAssignModulModal_();
+      showToast('Modul berhasil ditambahkan ke jadwal!', 'success');
+      reloadLinkedModuls_();
+    })
+    .withFailureHandler(function(e) {
+      showToast('Gagal: ' + e.message, 'error');
+    })
+    .assignModulToJadwal(modulId, _selectedJadwalId);
+}
+
+// ============ FILE UPLOAD ============
+function onModulFileChange_(input) {
+  const info = document.getElementById('modulFileInfo');
+  const file = input.files && input.files[0];
+  if (!file) { _modulFileBase64 = null; _modulFileMime = null; _modulFileName = null; return; }
+
+  const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_BYTES) {
+    showToast('File terlalu besar (maks 10 MB)', 'error');
+    input.value = '';
+    _modulFileBase64 = null;
+    info.textContent = '';
+    return;
+  }
+
+  info.textContent = '⏳ Membaca file...';
+  _modulFileMime = file.type || 'application/octet-stream';
+  _modulFileName = file.name;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const full = e.target.result; // data:<mime>;base64,<data>
+    _modulFileBase64 = full.split(',')[1];
+    info.textContent = '✅ ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB) — siap upload';
+  };
+  reader.onerror = function() {
+    info.textContent = '❌ Gagal membaca file';
+    _modulFileBase64 = null;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============ SUBMIT FORM ============
+function submitModul_() {
+  const mapel     = document.getElementById('modulMapelSelect').value.trim();
+  const kelas     = document.getElementById('modulKelasSelect').value.trim();
+  const bab       = document.getElementById('modulBabInput').value.trim();
+  const judul     = document.getElementById('modulJudulInput').value.trim();
+  const deskripsi = document.getElementById('modulDeskripsiInput').value.trim();
+  const msg       = document.getElementById('modulFormMsg');
+
+  if (!mapel || !kelas || !bab || !judul) {
+    showToast('Mapel, kelas, bab, dan judul wajib diisi', 'warning');
+    return;
+  }
+
+  msg.textContent = '⏳ Menyimpan...';
+  const btnSave = document.querySelector('#modulAjar .card button[onclick="submitModul_()"]');
+  if (btnSave) btnSave.disabled = true;
+
+  const data = {
+    mapel:       mapel,
+    kelas:       kelas,
+    bab:         bab,
+    judul:       judul,
+    deskripsi:   deskripsi,
+    file_base64: _modulFileBase64 || null,
+    file_name:   _modulFileName   || null,
+    file_mime:   _modulFileMime   || null
+  };
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (btnSave) btnSave.disabled = false;
+      msg.textContent = '✅ Modul berhasil disimpan!';
+      _clearModulForm_();
+      loadAllModul_();
+      showToast('Modul berhasil disimpan!', 'success');
+      setTimeout(function() { msg.textContent = ''; }, 3500);
+    })
+    .withFailureHandler(function(e) {
+      if (btnSave) btnSave.disabled = false;
+      msg.textContent = '❌ ' + e.message;
+    })
+    .addModul(data);
+}
+
+function _clearModulForm_() {
+  ['modulJudulInput','modulDeskripsiInput'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['modulMapelSelect','modulKelasSelect'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const bab = document.getElementById('modulBabInput');
+  if (bab) bab.value = '';
+  const fi   = document.getElementById('modulFileInput');
+  if (fi) fi.value = '';
+  const info = document.getElementById('modulFileInfo');
+  if (info) info.textContent = '';
+  _modulFileBase64 = null;
+  _modulFileMime   = null;
+  _modulFileName   = null;
+}
+
+// ============ TABLE DAFTAR MODUL ============
+function loadAllModul_() {
+  const tbody = document.getElementById('modulTableBody');
+  // Skeleton loading
+  if (tbody) tbody.innerHTML =
+    '<tr><td colspan="8" style="padding:10px 8px">' +
+    '<div class="modul-skel" style="width:65%"></div>' +
+    '<div class="modul-skel" style="width:45%"></div>' +
+    '<div class="modul-skel" style="width:80%"></div>' +
+    '</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(list) {
+      _modulData = list || [];
+      _populateFilterMapel_(_modulData);
+      renderModulTable_();
+    })
+    .withFailureHandler(function(e) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;padding:16px">Gagal: ' + escHtml_(e.message) + '</td></tr>';
+    })
+    .getAllModul();
+}
+
+function _populateFilterMapel_(list) {
+  const sel = document.getElementById('filterModulMapel');
+  if (!sel) return;
+  const mapels = [];
+  list.forEach(function(m) { if (m.mapel && mapels.indexOf(m.mapel) === -1) mapels.push(m.mapel); });
+  mapels.sort();
+  sel.innerHTML = '<option value="">-- Semua Mapel --</option>' + mapels.map(function(mp) {
+    return '<option value="' + escHtml_(mp) + '">' + escHtml_(mp) + '</option>';
+  }).join('');
+}
+
+function renderModulTable_() {
+  const tbody    = document.getElementById('modulTableBody');
+  const fMapel   = document.getElementById('filterModulMapel').value;
+  const fKelas   = document.getElementById('filterModulKelas').value;
+  if (!tbody) return;
+
+  let rows = _modulData;
+  if (fMapel) rows = rows.filter(function(m) { return m.mapel === fMapel; });
+  if (fKelas) rows = rows.filter(function(m) { return m.kelas === fKelas; });
+
+  // Update count badge in header
+  const countBadge = document.getElementById('modulCountBadge');
+  if (countBadge) {
+    countBadge.textContent = rows.length + ' modul';
+    countBadge.style.display = rows.length > 0 ? 'inline-block' : 'none';
+  }
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px 16px">'
+      + '<div style="font-size:26px;margin-bottom:8px">\ud83d\udced</div>'
+      + '<div style="font-size:13px;font-weight:600;color:#6b7280">'
+      + (_modulData.length === 0 ? 'Belum ada modul ajar' : 'Tidak ada modul untuk filter ini')
+      + '</div>'
+      + (_modulData.length === 0 ? '<div style="font-size:12px;color:#9ca3af;margin-top:4px">Tambahkan modul di form atas</div>' : '')
+      + '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(m) {
+    return '<tr>'
+      + '<td style="padding:10px 8px;font-weight:600">' + escHtml_(m.judul) + '</td>'
+      + '<td style="padding:10px 8px"><span style="background:#ede9fe;color:#6C63FF;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600">' + escHtml_(m.mapel) + '</span></td>'
+      + '<td style="padding:10px 8px;text-align:center"><span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600">' + escHtml_(m.kelas) + '</span></td>'
+      + '<td style="padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:#6b7280">Bab ' + escHtml_(String(m.bab)) + '</td>'
+      + '<td style="padding:10px 8px;font-size:12px;color:#6b7280;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml_(m.deskripsi || '—') + '</td>'
+      + '<td style="padding:10px 8px;text-align:center">'
+      + (m.file_url
+          ? '<a href="' + escHtml_(m.file_url) + '" target="_blank" rel="noopener" style="color:#6C63FF;font-weight:600;font-size:12px;text-decoration:none">\u2b07\ufe0f Download</a>'
+          : '<span style="color:#d1d5db;font-size:12px">—</span>')
+      + '</td>'
+      + '<td style="padding:10px 8px;text-align:center"><button onclick="openRppFromModul(' + m.id + ',\'' + escHtml_(m.mapel).replace(/'/g,"&#39;") + '\',\'' + escHtml_(m.kelas).replace(/'/g,"&#39;") + '\',\'' + escHtml_(m.judul).replace(/'/g,"&#39;") + '\')" style="background:#e0e7ff;color:#3730a3;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600">📄 RPP</button></td>'
+      + '<td style="padding:10px 8px;text-align:center"><button onclick="openEditModulModal_(' + m.id + ')" style="background:#ede9fe;color:#6C63FF;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600">\u270f\ufe0f Edit</button></td>'
+      + '<td style="padding:10px 8px;text-align:center"><button onclick="hapusModul_(' + m.id + ')" style="background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600">\ud83d\uddd1</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function hapusModul_(id) {
+  if (!confirm('Hapus modul ini?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Modul dihapus.', 'info');
+      loadAllModul_();
+    })
+    .withFailureHandler(function(e) {
+      showToast('Gagal: ' + e.message, 'error');
+    })
+    .deleteModul(id);
+}
+
+// ============ EDIT MODUL ============
+function openEditModulModal_(id) {
+  const m = _modulData.find(function(x) { return Number(x.id) === Number(id); });
+  if (!m) { showToast('Modul tidak ditemukan', 'error'); return; }
+
+  document.getElementById('editModulId').value       = m.id;
+  document.getElementById('editModulKelas').value    = m.kelas;
+  document.getElementById('editModulBab').value      = m.bab;
+  document.getElementById('editModulJudul').value    = m.judul;
+  document.getElementById('editModulDeskripsi').value = m.deskripsi || '';
+  document.getElementById('editModulFileInfo').textContent = m.file_url
+    ? '📎 File sebelumnya tersimpan. Upload baru untuk mengganti.'
+    : 'Belum ada file.';
+
+  // Isi dropdown mapel edit
+  const selEdit = document.getElementById('editModulMapel');
+  if (selEdit) {
+    const opt = Array.from(selEdit.options).find(function(o) { return o.value === m.mapel; });
+    if (opt) selEdit.value = m.mapel;
+    else {
+      // Mapel belum ada di list, tambahkan sementara
+      const o = document.createElement('option');
+      o.value = m.mapel; o.textContent = m.mapel;
+      selEdit.appendChild(o);
+      selEdit.value = m.mapel;
+    }
+  }
+
+  _editModulFileBase64 = null; _editModulFileMime = null; _editModulFileName = null;
+  _editModulDirty = false;
+  const fi = document.getElementById('editModulFile');
+  if (fi) fi.value = '';
+
+  document.getElementById('editModulModal').style.display = 'flex';
+
+  // Pasang listeners dirty-check (sekali saja)
+  ['editModulMapel','editModulKelas','editModulBab','editModulJudul','editModulDeskripsi'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el && !el._dirtyBound) {
+      el.addEventListener('input', function() { _editModulDirty = true; });
+      el.addEventListener('change', function() { _editModulDirty = true; });
+      el._dirtyBound = true;
+    }
+  });
+}
+
+function closeEditModulModal_() {
+  if (_editModulDirty) {
+    if (!confirm('Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?')) return;
+  }
+  document.getElementById('editModulModal').style.display = 'none';
+  document.getElementById('editModulMsg').textContent = '';
+  _editModulDirty = false;
+}
+
+function onEditModulFileChange_(input) {
+  const info = document.getElementById('editModulFileInfo');
+  const file = input.files && input.files[0];
+  if (!file) { _editModulFileBase64 = null; return; }
+
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('File terlalu besar (maks 10 MB)', 'error');
+    input.value = '';
+    return;
+  }
+
+  info.textContent = '⏳ Membaca file...';
+  _editModulFileMime = file.type || 'application/octet-stream';
+  _editModulFileName = file.name;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _editModulFileBase64 = e.target.result.split(',')[1];
+    info.textContent = '✅ ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+  };
+  reader.onerror = function() {
+    info.textContent = '❌ Gagal membaca file';
+    _editModulFileBase64 = null;
+  };
+  reader.readAsDataURL(file);
+}
+
+function submitEditModul_() {
+  const id        = document.getElementById('editModulId').value;
+  const mapel     = document.getElementById('editModulMapel').value.trim();
+  const kelas     = document.getElementById('editModulKelas').value.trim();
+  const bab       = document.getElementById('editModulBab').value.trim();
+  const judul     = document.getElementById('editModulJudul').value.trim();
+  const deskripsi = document.getElementById('editModulDeskripsi').value.trim();
+  const msg       = document.getElementById('editModulMsg');
+
+  if (!mapel || !kelas || !bab || !judul) {
+    showToast('Mapel, kelas, bab, dan judul wajib diisi', 'warning');
+    return;
+  }
+
+  msg.textContent = '⏳ Menyimpan...';
+
+  google.script.run
+    .withSuccessHandler(function() {
+      msg.textContent = '✅ Disimpan!';
+      _editModulDirty = false;
+      closeEditModulModal_();
+      loadAllModul_();
+      showToast('Modul berhasil diperbarui!', 'success');
+    })
+    .withFailureHandler(function(e) {
+      msg.textContent = '❌ ' + e.message;
+    })
+    .updateModul(Number(id), {
+      mapel:       mapel,
+      kelas:       kelas,
+      bab:         bab,
+      judul:       judul,
+      deskripsi:   deskripsi,
+      file_base64: _editModulFileBase64 || null,
+      file_name:   _editModulFileName   || null,
+      file_mime:   _editModulFileMime   || null
+    });
+}
+</script>

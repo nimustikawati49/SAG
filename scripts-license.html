@@ -1,0 +1,696 @@
+<script>
+function loadAuditLog(){
+  const body = document.getElementById('auditLogBody');
+  if(!body) return;
+  body.innerHTML = '<tr><td colspan="5" class="muted">⏳ Memuat audit log...</td></tr>';
+
+  // Gabung filter teks bebas + filter dropdown aksi
+  const filterText   = (document.getElementById('auditFilterText')   || {}).value || '';
+  const filterAction = (document.getElementById('auditFilterAction') || {}).value || '';
+  const combined = [filterText.trim(), filterAction.trim()].filter(Boolean).join(' ');
+
+  google.script.run
+    .withFailureHandler(function(err){
+      body.innerHTML = '<tr><td colspan="5" class="muted">❌ ' + (err.message||'Gagal') + '</td></tr>';
+    })
+    .withSuccessHandler(function(rows){
+      if(!rows || rows.length === 0){
+        body.innerHTML = '<tr><td colspan="5" class="muted">📭 Tidak ada entri yang cocok.</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map(function(r){
+        return '<tr>' +
+          '<td style="white-space:nowrap">' + r.waktu + '</td>' +
+          '<td class="left" style="font-size:12px">' + _escLic_(r.actor) + '</td>' +
+          '<td><span class="badge">' + _escLic_(r.action) + '</span></td>' +
+          '<td class="left" style="font-size:12px">' + _escLic_(r.target) + '</td>' +
+          '<td class="left" style="font-size:12px">' + _escLic_(r.detail) + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .getAuditLog(300, combined);
+}
+
+var _auditFilterTimer_ = null;
+function _auditFilterDebounce_(){
+  clearTimeout(_auditFilterTimer_);
+  _auditFilterTimer_ = setTimeout(loadAuditLog, 400);
+}
+
+function _escLic_(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function _exportAuditLogExcel_(){
+  if(typeof XLSX === 'undefined'){ if(typeof showToast==='function') showToast('⏳ Library belum siap','warning'); return; }
+  google.script.run
+    .withSuccessHandler(function(rows){
+      if(!rows || rows.length === 0){ if(typeof showToast==='function') showToast('📭 Tidak ada data untuk diekspor','info'); return; }
+      var wb  = XLSX.utils.book_new();
+      var dat = [['Waktu','Aktor','Aksi','Target','Detail']];
+      rows.forEach(function(r){ dat.push([r.waktu, r.actor, r.action, r.target, r.detail]); });
+      var ws = XLSX.utils.aoa_to_sheet(dat);
+      ws['!cols'] = [20, 30, 25, 30, 40].map(function(w){ return {wch:w}; });
+      XLSX.utils.book_append_sheet(wb, ws, 'Audit Log');
+      var tgl = new Date().toLocaleDateString('id-ID').replace(/\//g,'-');
+      XLSX.writeFile(wb, 'AuditLog_SuperAdmin_' + tgl + '.xlsx');
+      if(typeof showToast==='function') showToast('✅ Audit Log berhasil diekspor','success');
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .getAuditLogAll();
+}
+
+function _confirmClearAuditLog_(){
+  if(!confirm('Kosongkan seluruh Audit Log?\nTindakan ini tidak bisa dibatalkan.')) return;
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(typeof showToast==='function') showToast('✅ ' + (res.deleted||0) + ' baris log dihapus','success');
+      loadAuditLog();
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
+    })
+    .clearAuditLog();
+}
+
+let booted = false;
+
+function bootApp(){
+  if(booted) return;
+  booted = true;
+  google.script.run
+    .withFailureHandler(function(err) {
+      console.error('Auth error', err);
+      // Paksa tampilkan dashboard meski auth gagal
+      if(typeof showTab === 'function') showTab('dashboard');
+      var ni = document.getElementById('inputNilai');
+      if(ni) ni.style.setProperty('display','none','important');
+      document.body.classList.remove('auth-wait');
+      if(typeof showToast === 'function') showToast('\u274C Gagal autentikasi: ' + (err.message || 'Coba refresh halaman'), 'error', 0);
+      else console.error('Auth gagal:', err.message);
+    })
+   .withSuccessHandler(auth => {
+
+  // Simpan identity global agar dipakai modul lain (e.g. draft key per-user)
+  window._currentUserEmail = (auth && auth.email) ? auth.email : null;
+  window._currentUserRole  = (auth && auth.role)  ? auth.role  : 'guest';
+  if (!auth || !auth.role) {
+    console.warn('Auth kosong, fallback ke guest');
+    auth = { role: 'guest' };
+    window._currentUserEmail = null;
+    window._currentUserRole  = 'guest';
+  }
+
+  // ===== TAMPILKAN MENU UTAMA =====
+  const menu = document.getElementById('mainMenu');
+  if (menu) {
+    menu.style.display = 'flex';
+  }
+
+  // ===== SUPERADMIN =====
+  if (auth.role === 'superadmin') {
+
+    document.querySelectorAll('.superadmin-only')
+      .forEach(el => el.style.display = 'inline-block');
+    document.querySelectorAll('.admin-only')
+      .forEach(el => el.style.display = 'inline-block');
+    document.querySelectorAll('.kepsek-only')
+      .forEach(el => el.style.setProperty('display', 'flex', 'important'));
+
+    const badge = document.getElementById('badgeSuperAdmin');
+    if (badge) badge.style.display = 'inline-flex';
+
+    initApp();
+    return;
+  }
+
+  // ===== KEPSEK =====
+  if (auth.role === 'kepsek') {
+    // Use setProperty with !important to beat .sb-item { display:flex !important }
+    document.querySelectorAll('.kepsek-only')
+      .forEach(el => el.style.setProperty('display', 'flex', 'important'));
+
+    // Sembunyikan grup nav yang khusus guru
+    ['sbgrp-pembelajaran','sbgrp-monitoring','sbgrp-kelas'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.style.setProperty('display','none','important');
+    });
+    // Sembunyikan tombol menu utama yang tidak relevan
+    ['jurnalku','modulAjar','inputNilai','riwayat','rekap','jurnalGuruWali'].forEach(function(id){
+      var el = document.querySelector('[data-tab="' + id + '"]');
+      if (el) el.style.setProperty('display','none','important');
+    });
+
+    initApp();
+    setTimeout(function(){
+      if (typeof sbGo_ === 'function') {
+        sbGo_('rekapSekolah', function(){
+          if (typeof initDashboardKepsek === 'function') initDashboardKepsek();
+          else console.error('[KEPSEK] initDashboardKepsek not defined — scripts-kepsek.html may have failed to load. Try Ctrl+Shift+R.');
+        });
+      } else if (typeof showTab === 'function') {
+        showTab('rekapSekolah');
+        if (typeof initDashboardKepsek === 'function') initDashboardKepsek();
+      }
+    }, 200);
+    return;
+  }
+
+  // ===== ADMIN =====
+  if (auth.role === 'admin') {
+    // Explicitly keep kepsek-only hidden for regular admin/guru
+    document.querySelectorAll('.kepsek-only')
+      .forEach(el => el.style.setProperty('display','none','important'));
+    document.querySelectorAll('.admin-only')
+      .forEach(el => el.style.display = 'inline-block');
+
+    // ── Sesuaikan UI berdasarkan TIER ──
+    window._schoolTier = auth.tier || 'LITE';
+    _applyTierUI_(auth.tier || 'LITE');
+
+    initApp();
+    // 🔔 Cek expiry lisensi
+    setTimeout(checkLicenseExpiryWarning_, 2500);
+    return;
+  }
+
+  // ===== GUEST (akun tidak terdaftar) =====
+  // Forcefully hide role-gated elements before showing block screen
+  document.querySelectorAll('.kepsek-only,.admin-only,.superadmin-only')
+    .forEach(el => el.style.setProperty('display','none','important'));
+  _showGuestBlock_(auth.email || '');
+
+})
+    .getAuth();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GUEST BLOCK — Akun tidak terdaftar
+   Mengubah landing page menjadi layar "Akses Ditolak" penuh.
+   App tidak pernah diload untuk guest.
+───────────────────────────────────────────────────────────── */
+function _showGuestBlock_(email) {
+  // Pastikan landing page tetap tampil
+  var lp = document.getElementById('landingPage');
+  if (lp) { lp.style.display = 'block'; window._landingHidden = false; }
+
+  // Cari area card utama dan replace kontennya
+  var pb = document.getElementById('landingProgressBar');
+  if (pb) {
+    // Naik 3 level: bar → overflow div → status box
+    var statusBox = pb.parentElement && pb.parentElement.parentElement && pb.parentElement.parentElement.parentElement;
+    if (statusBox) {
+      statusBox.style.background = 'rgba(239,68,68,.15)';
+      statusBox.style.border = '1px solid rgba(239,68,68,.4)';
+      statusBox.innerHTML =
+        '<div style="font-size:28px;margin-bottom:10px">🔒</div>' +
+        '<div style="font-size:15px;font-weight:700;color:#fca5a5;margin-bottom:6px">Akun Tidak Terdaftar</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6">' +
+          (email ? '<b style="color:#fcd34d">' + email + '</b><br>' : '') +
+          'Email Anda belum terdaftar di sistem ini.' +
+        '</div>';
+    }
+  }
+
+  // Inject kartu info "hubungi admin" setelah card utama
+  var mainContent = lp ? lp.querySelector('[style*="display:flex;flex-direction:column;align-items:center"]') : null;
+  if (mainContent) {
+    var card = mainContent.querySelector('.lp-main-card') || mainContent.querySelector('[style*="backdrop-filter"]');
+    if (card) {
+      var infoCard = document.createElement('div');
+      infoCard.style.cssText = [
+        'background:rgba(255,255,255,.08)',
+        'backdrop-filter:blur(20px)',
+        'border:1px solid rgba(255,255,255,.15)',
+        'border-radius:20px',
+        'padding:20px 24px',
+        'max-width:500px',
+        'width:100%',
+        'margin-top:16px',
+        'text-align:left',
+        'box-shadow:0 12px 40px rgba(0,0,0,.25)'
+      ].join(';');
+      infoCard.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:#a5b4fc;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📋 Cara Mendapatkan Akses</div>' +
+        '<ol style="margin:0;padding-left:18px;font-size:13px;color:rgba(255,255,255,.8);line-height:1.9">' +
+          '<li>Hubungi <b>Administrator</b> atau <b>Kepala Sekolah</b> Anda</li>' +
+          '<li>Berikan email Google Anda: <b style="color:#fcd34d">' + (email || '—') + '</b></li>' +
+          '<li>Admin akan mendaftarkan akun dan memberikan akses</li>' +
+          '<li>Setelah terdaftar, refresh halaman ini</li>' +
+        '</ol>' +
+        '<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);display:flex;gap:10px;flex-wrap:wrap">' +
+          '<button onclick="location.reload()" style="background:rgba(99,102,241,.6);color:#fff;border:none;border-radius:10px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(8px)">🔄 Sudah Didaftarkan? Refresh</button>' +
+        '</div>';
+      card.after ? card.after(infoCard) : card.parentNode.appendChild(infoCard);
+    }
+  }
+
+  // Sembunyikan sidebar dan main content agar tidak ada yang bocor
+  var sidebar = document.getElementById('appSidebar');
+  var sbMain  = document.getElementById('sbMain');
+  if (sidebar) sidebar.style.setProperty('display','none','important');
+  if (sbMain)  sbMain.style.setProperty('display','none','important');
+}
+
+// PATCH: Pastikan bootApp() hanya dipanggil setelah DOM dan layout siap, dan tab dashboard sudah ada
+function safeBootApp() {
+  // 🌙 Dark mode
+  if(localStorage.getItem('darkMode') === '1'){
+    document.body.classList.add('dark');
+  }
+  // Tampilkan landing page segera sebelum GAS call agar tidak ada race condition
+  var _lp = document.getElementById('landingPage');
+  if(_lp && !window._landingHidden){ _lp.style.display = 'block'; }
+  var _pb = document.getElementById('landingProgressBar');
+  if(_pb) setTimeout(function(){ if(!window._landingHidden) _pb.style.width = '85%'; }, 100);
+  // Cek elemen dashboard
+  const dashboardTab = document.querySelector('[data-tabid="dashboard"]');
+  if (dashboardTab) {
+    bootApp();
+  } else {
+    setTimeout(safeBootApp, 100);
+  }
+}
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(safeBootApp, 0);
+} else {
+  document.addEventListener('DOMContentLoaded', safeBootApp);
+}
+
+function addAdminUI(){
+  const email    = (document.getElementById('newAdminEmail') || {}).value || '';
+  const wa       = (document.getElementById('newAdminWA')    || {}).value || '';
+  const roleEl   = document.querySelector('input[name="newAdminRole"]:checked');
+  const masaEl   = document.querySelector('input[name="newAdminMasa"]:checked');
+  const role     = roleEl   ? roleEl.value   : 'admin';
+  const masaAktif= masaEl   ? masaEl.value   : '1year';
+
+  if(!email.trim()){
+    if(typeof showToast === 'function') showToast('⚠️ Email wajib diisi', 'warning');
+    else alert('Email wajib diisi');
+    return;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if(!emailRegex.test(email.trim())){
+    if(typeof showToast === 'function') showToast('⚠️ Format email tidak valid. Contoh: guru@sekolah.sch.id', 'warning');
+    else alert('Format email tidak valid.');
+    return;
+  }
+
+  const btns = document.querySelectorAll('#addAdminModal button');
+  btns.forEach(b => b.disabled = true);
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      const roleLabel = res.role === 'kepsek' ? 'Kepsek' : 'Guru';
+      const expLabel  = res.expired === 'Seumur Hidup' ? '♾️ Seumur Hidup' : 's.d. ' + res.expired;
+      alert(
+        `✅ User berhasil ditambahkan\n\n`+
+        `📧 Email    : ${email.trim()}\n`+
+        `👤 Role     : ${roleLabel}\n`+
+        `🔑 Lisensi  : ${res.key}\n`+
+        `⏳ Masa Aktif: ${expLabel}`
+      );
+
+      if(typeof loadUserManagement === 'function') loadUserManagement();
+      if(typeof loadDashboardSuperAdmin === 'function') loadDashboardSuperAdmin();
+
+      closeAddAdminModal();
+
+      // Reset form
+      document.getElementById('newAdminEmail').value = '';
+      document.getElementById('newAdminWA').value    = '';
+      var r1 = document.querySelector('input[name="newAdminRole"][value="admin"]');
+      var m1 = document.querySelector('input[name="newAdminMasa"][value="1year"]');
+      if(r1) r1.checked = true;
+      if(m1) m1.checked = true;
+      updateMasaLabel_();
+      updateRoleLabel_();
+
+      btns.forEach(b => b.disabled = false);
+    })
+    .withFailureHandler(err=>{
+      alert('❌ Gagal menambahkan user:\n' + err.message);
+      btns.forEach(b => b.disabled = false);
+    })
+    .addAdminUser({ email: email.trim(), wa: wa.trim(), masaAktif: masaAktif, role: role });
+}
+
+function openAddAdminModal(){
+  document.getElementById('addAdminModal').style.display='';
+  // Init preview
+  updateMasaLabel_();
+  updateRoleLabel_();
+}
+function closeAddAdminModal(){
+  document.getElementById('addAdminModal').style.display='none';
+}
+
+function updateMasaLabel_() {
+  var el = document.querySelector('input[name="newAdminMasa"]:checked');
+  var preview = document.getElementById('masaExpiredPreview');
+  var hint    = document.getElementById('masaHintText');
+  var lbl1    = document.getElementById('lbl-ma-1year');
+  var lbl2    = document.getElementById('lbl-ma-lifetime');
+  var val = el ? el.value : '1year';
+  if (lbl1) lbl1.style.borderColor = val === '1year'    ? '#6366f1' : '#e5e7eb';
+  if (lbl2) lbl2.style.borderColor = val === 'lifetime' ? '#6366f1' : '#e5e7eb';
+  if (preview) {
+    if (val === 'lifetime') {
+      preview.textContent = '♾️ Seumur Hidup';
+    } else {
+      var d = new Date(); d.setFullYear(d.getFullYear()+1);
+      preview.textContent = d.toLocaleDateString('id-ID', {day:'2-digit',month:'long',year:'numeric'});
+    }
+  }
+}
+
+function updateRoleLabel_() {
+  var el   = document.querySelector('input[name="newAdminRole"]:checked');
+  var hint = document.getElementById('roleHintText');
+  var lblG = document.getElementById('lbl-role-guru');
+  var lblK = document.getElementById('lbl-role-kepsek');
+  var val  = el ? el.value : 'admin';
+  if (lblG) lblG.style.borderColor = val === 'admin'   ? '#6366f1' : '#e5e7eb';
+  if (lblK) lblK.style.borderColor = val === 'kepsek'  ? '#6366f1' : '#e5e7eb';
+  if (hint) {
+    hint.textContent = val === 'kepsek'
+      ? 'Kepsek: akses Rekap Sekolah & monitoring semua guru.'
+      : 'Guru: akses jurnal mengajar, absensi, nilai, dll.';
+  }
+}
+
+/*************************************************
+ * LICENSE INFO MODAL — School-wide (info only, no key input)
+ *************************************************/
+function openLicenseModal() {
+  var m = document.getElementById('licenseModal');
+  if (m) m.style.display = 'flex';
+}
+
+function closeLicenseModal() {
+  var m = document.getElementById('licenseModal');
+  if (m) m.style.display = 'none';
+}
+
+/*************************************************
+ * GLOBAL LICENSE ERROR HANDLER (FINAL FIX)
+ * Berlaku untuk semua fitur
+ *************************************************/
+function runWithLicenseGuard(run){
+  startProgress();
+
+  try{
+    run({
+      success: () => endProgress(),
+      fail: err => {
+        endProgress();
+
+        if(
+          err.message === 'LISENSI_EXPIRED' ||
+          err.message === 'INPUT_LICENSE' ||
+          err.message.includes('LISENSI')
+        ){
+          // Lisensi sekolah bermasalah — guru tidak bisa aktivasi sendiri
+          if (typeof showToast === 'function') {
+            showToast('🔒 Lisensi sekolah tidak aktif. Hubungi Admin Sekolah untuk perpanjangan.', 'warning', 0);
+          } else {
+            alert('Lisensi sekolah tidak aktif. Hubungi Admin Sekolah.');
+          }
+          if (typeof openLicenseModal === 'function') openLicenseModal();
+          return;
+        }
+
+        alert('❌ ' + err.message);
+      }
+    });
+  }catch(e){
+    endProgress();
+    alert('❌ ' + e.message);
+  }
+}
+
+/*************************************************
+ * LOCK SYSTEM – FRONTEND AUTO (NO RELOAD)
+ *************************************************/
+
+/* ─────────────────────────────────────────────────────────────
+   TIER UI — Sembunyikan/tampilkan fitur sesuai LITE / PRO / SCHOOL
+───────────────────────────────────────────────────────────── */
+function _applyTierUI_(tier) {
+  var isLite = (tier === 'LITE');
+
+  // Fitur yang disembunyikan untuk LITE
+  var proOnlyNavTabs = ['modulAjar', 'rpp'];
+  proOnlyNavTabs.forEach(function(tabId) {
+    var el = document.querySelector('#sbNav .sb-item[data-tab="' + tabId + '"]');
+    if (el) el.style.setProperty('display', isLite ? 'none' : '', 'important');
+  });
+
+  // Elemen dengan class pro-only
+  document.querySelectorAll('.pro-only').forEach(function(el) {
+    el.style.setProperty('display', isLite ? 'none' : 'inline-block', 'important');
+  });
+
+  // Tampilkan badge / banner upgrade di sidebar jika LITE
+  if (isLite) {
+    _showUpgradeBanner_();
+  }
+}
+
+function _showUpgradeBanner_() {
+  // Cek sudah ada belum
+  if (document.getElementById('sbUpgradeBanner')) return;
+
+  var sbNav = document.getElementById('sbNav');
+  if (!sbNav) return;
+
+  var banner = document.createElement('div');
+  banner.id = 'sbUpgradeBanner';
+  banner.style.cssText = [
+    'margin:12px 10px 4px',
+    'background:linear-gradient(135deg,#f59e0b,#fbbf24)',
+    'border-radius:12px',
+    'padding:12px 14px',
+    'cursor:pointer',
+    'transition:transform .2s'
+  ].join(';');
+  banner.onmouseover = function() { this.style.transform = 'scale(1.02)'; };
+  banner.onmouseout  = function() { this.style.transform = ''; };
+  banner.onclick     = function() { _openUpgradeModal_(); };
+  banner.innerHTML   =
+    '<div style="font-size:11px;font-weight:800;color:#78350f;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">⚡ Versi LITE</div>' +
+    '<div style="font-size:12px;color:#92400e;line-height:1.4">Maks 5 kelas & 160 siswa.<br>Upgrade ke <b>PRO</b> untuk semua fitur.</div>' +
+    '<div style="margin-top:8px;background:#92400e;color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;text-align:center">🚀 Upgrade Sekarang</div>';
+
+  // Insert sebelum item pertama
+  var firstItem = sbNav.querySelector('.sb-item, .sb-group-hd');
+  if (firstItem) sbNav.insertBefore(banner, firstItem);
+  else sbNav.appendChild(banner);
+}
+
+function _openUpgradeModal_() {
+  var existing = document.getElementById('upgradeModal');
+  if (existing) { existing.style.display = 'flex'; return; }
+
+  var modal = document.createElement('div');
+  modal.id = 'upgradeModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.onclick = function(e) { if (e.target === this) this.style.display = 'none'; };
+
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:24px;padding:28px 24px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.2)">' +
+      '<div style="text-align:center;margin-bottom:20px">' +
+        '<div style="font-size:40px;margin-bottom:8px">🚀</div>' +
+        '<h2 style="margin:0 0 6px;font-size:20px;font-weight:800;color:#111827">Upgrade ke PRO</h2>' +
+        '<p style="margin:0;font-size:13px;color:#6b7280">Buka semua fitur untuk 1 guru, selamanya.</p>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">' +
+        _upgradeFeatureRow_('✅','Jurnal mengajar unlimited') +
+        _upgradeFeatureRow_('✅','Absensi siswa unlimited') +
+        _upgradeFeatureRow_('✅','Input nilai + katrol nilai') +
+        _upgradeFeatureRow_('✅','Modul Ajar & RPP Generator') +
+        _upgradeFeatureRow_('✅','Export Excel semua laporan') +
+        _upgradeFeatureRow_('✅','Dashboard lengkap') +
+      '</div>' +
+      '<div style="background:#f8fafc;border-radius:14px;padding:14px;margin-bottom:20px">' +
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:6px">Masukkan kode lisensi PRO:</div>' +
+        '<div style="display:flex;gap:8px">' +
+          '<input id="proLicenseInput" type="text" placeholder="PRO-XXXX-XXXX" ' +
+            'style="flex:1;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;text-transform:uppercase;letter-spacing:1px" ' +
+            'oninput="this.value=this.value.toUpperCase()">' +
+          '<button onclick="_activateTierKey_(\'PRO\')" ' +
+            'style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Aktifkan</button>' +
+        '</div>' +
+        '<div id="upgradeMsg" style="font-size:12px;margin-top:6px;min-height:16px"></div>' +
+      '</div>' +
+      '<div style="text-align:center;font-size:12px;color:#9ca3af">Hubungi pengembang untuk mendapatkan kode lisensi PRO.</div>' +
+      '<button onclick="document.getElementById(\'upgradeModal\').style.display=\'none\'" ' +
+        'style="width:100%;margin-top:14px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:10px;font-size:13px;cursor:pointer">Tutup</button>' +
+    '</div>';
+
+  document.body.appendChild(modal);
+}
+
+function _upgradeFeatureRow_(icon, text) {
+  return '<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#f0fdf4;border-radius:10px">' +
+    '<span style="font-size:14px">' + icon + '</span>' +
+    '<span style="font-size:13px;color:#166534;font-weight:500">' + text + '</span></div>';
+}
+
+function _activateTierKey_(tier) {
+  var key   = (document.getElementById('proLicenseInput') || {}).value || '';
+  var msgEl = document.getElementById('upgradeMsg');
+  if (!key) { if (msgEl) msgEl.innerHTML = '<span style="color:#ef4444">Masukkan kode lisensi terlebih dahulu.</span>'; return; }
+  if (msgEl) msgEl.innerHTML = '<span style="color:#6b7280">⏳ Memverifikasi...</span>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (msgEl) msgEl.innerHTML = '<span style="color:#16a34a">✅ Berhasil! Refresh halaman untuk menerapkan perubahan.</span>';
+      setTimeout(function() { location.reload(); }, 2000);
+    })
+    .withFailureHandler(function(err) {
+      if (msgEl) msgEl.innerHTML = '<span style="color:#ef4444">❌ ' + (err.message || 'Kode tidak valid') + '</span>';
+    })
+    .setSchoolTier(tier, key);
+}
+
+/* Intercept error UPGRADE_REQUIRED dari backend */
+window._handleUpgradeError_ = function(err) {
+  if (err && err.message && err.message.startsWith('UPGRADE_REQUIRED')) {
+    _openUpgradeModal_();
+    return true;
+  }
+  return false;
+};
+
+function applyLockUI(isLocked){
+
+  const lockIcon = document.getElementById('lockIndicator');
+
+  const headerInputs = [
+    set_sekolah,
+    set_tahun,
+    set_guru,
+    set_nip_guru
+  ];
+
+  const siswaControls = [
+    document.getElementById('fileSiswa'),
+    document.getElementById('btnUploadSiswa'),
+    document.getElementById('btnDownloadTemplate'),
+    document.getElementById('btnResetSiswa')
+  ];
+
+  if(isLocked){
+
+    if(lockIcon) lockIcon.style.display = 'inline';
+
+    // 🔒 Lock header
+    headerInputs.forEach(el=>{
+      if(el) el.disabled = true;
+    });
+    // 🔒 Lock mapel checkboxes
+    document.querySelectorAll('.mapel-cb').forEach(cb=>{ cb.disabled = true; });
+
+    // 🔒 Lock upload siswa
+    siswaControls.forEach(el=>{
+      if(el) el.disabled = true;
+    });
+
+    // 🟢 Semester tetap bisa diganti
+    set_semester.disabled = false;
+
+  }else{
+
+    if(lockIcon) lockIcon.style.display = 'none';
+
+    headerInputs.forEach(el=>{
+      if(el) el.disabled = false;
+    });
+    // 🔓 Unlock mapel checkboxes
+    document.querySelectorAll('.mapel-cb').forEach(cb=>{ cb.disabled = false; });
+
+    siswaControls.forEach(el=>{
+      if(el) el.disabled = false;
+    });
+  }
+}
+
+function checkAutoLockFrontend(){
+
+  google.script.run
+    .withSuccessHandler(status=>{
+
+      if(!status) return;
+
+      if(status.shouldLock){
+        applyLockUI(true);
+      }
+
+    })
+    .cekAutoLockStatus();
+
+}
+
+/* ===== LICENSE EXPIRY WARNING — SCHOOL-WIDE ===== */
+function checkLicenseExpiryWarning_() {
+  google.script.run
+    .withSuccessHandler(function(info) {
+      if (!info) return; // SA/kepsek — skip
+      var d    = info.daysLeft;
+      var tier = window._schoolTier || 'LITE';
+
+      // Trial (isTrial=true) → tampilkan sebagai info ringan, bukan modal panik
+      if (info.isTrial) {
+        if (d <= 0) {
+          _showExpiryModal_('expired', 0);
+        } else if (d <= 7) {
+          _showExpiryModal_('danger', d);
+        } else {
+          // Tampilkan sekali sebagai toast info ringan, bukan warning merah
+          if (typeof showToast === 'function')
+            showToast('ℹ️ Masa trial gratis: ' + d + ' hari tersisa.', 'info', 6000);
+        }
+        return;
+      }
+
+      // Lisensi berbayar — peringatan normal
+      if (d <= 0) {
+        _showExpiryModal_('expired', 0);
+      } else if (d <= 14) {
+        _showExpiryModal_('danger', d);
+      } else if (d <= 30) {
+        if (typeof showToast === 'function')
+          showToast('⚠️ Lisensi sekolah akan berakhir dalam ' + d + ' hari!', 'warning', 7000);
+      }
+    })
+    .withFailureHandler(function() {})
+    .getSchoolLicenseInfo();
+}
+
+function _showExpiryModal_(level, days) {
+  const modal = document.getElementById('licenseExpiryModal');
+  if (!modal) return;
+  const icon  = document.getElementById('lemIcon');
+  const title = document.getElementById('lemTitle');
+  const body  = document.getElementById('lemBody');
+  if (level === 'expired') {
+    if (icon)  icon.textContent  = '⛔';
+    if (title) title.textContent = 'Lisensi Sekolah Sudah Habis';
+    if (title) title.style.color = '#ef4444';
+    if (body)  body.textContent  = 'Lisensi sekolah telah melewati tanggal kedaluwarsa. Segera hubungi Admin Sekolah atau vendor untuk perpanjangan agar semua fitur dapat digunakan kembali.';
+  } else {
+    if (icon)  icon.textContent  = '⚠️';
+    if (title) title.textContent = 'Lisensi Sekolah Hampir Habis!';
+    if (title) title.style.color = '#d97706';
+    if (body)  body.textContent  = 'Lisensi sekolah akan berakhir dalam ' + days + ' hari lagi. Hubungi Admin Sekolah sekarang untuk perpanjangan agar layanan tidak terputus.';
+  }
+  modal.style.display = 'flex';
+}
+
+function closeLicenseExpiryModal_() {
+  const modal = document.getElementById('licenseExpiryModal');
+  if (modal) modal.style.display = 'none';
+}
+</script>

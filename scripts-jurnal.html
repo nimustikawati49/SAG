@@ -1,0 +1,997 @@
+<script>
+function _setGlobalBar_(pct){
+  var bar = document.getElementById('dashProgressBar');
+  if(!bar) return;
+  bar.style.width = pct + '%';
+}
+
+function startProgress(){
+  if(typeof _markProgressStart === 'function') _markProgressStart();
+  // Animate green top bar
+  clearInterval(window._globalBarInterval);
+  var _gp = 0;
+  _setGlobalBar_(0);
+  window._globalBarInterval = setInterval(function(){
+    _gp = Math.min(_gp + Math.random()*6+3, 85);
+    _setGlobalBar_(_gp);
+    if(_gp >= 85) clearInterval(window._globalBarInterval);
+  }, 150);
+  // Animate centered progress box
+  clearInterval(progressInterval);
+  progressValue=0;
+  progressInner.style.width='0%';
+  progressPercent.innerText='0%';
+  progressBox.style.display='block';
+  progressInterval=setInterval(()=>{
+    if(progressValue<90){
+      progressValue+=Math.random()*8+4;
+      if(progressValue>90) progressValue=90;
+      progressInner.style.width=progressValue+'%';
+      progressPercent.innerText=Math.floor(progressValue)+'%';
+    }
+  },180);
+}
+
+function endProgress(){
+  if(typeof _markProgressEnd === 'function') _markProgressEnd();
+  // Complete green top bar then hide
+  clearInterval(window._globalBarInterval);
+  _setGlobalBar_(100);
+  setTimeout(function(){ _setGlobalBar_(0); }, 600);
+  // Complete centered progress box
+  clearInterval(progressInterval);
+  progressValue=100;
+  progressInner.style.width='100%';
+  progressPercent.innerText='100%';
+  setTimeout(()=>progressBox.style.display='none',600);
+}
+
+/* ================= INIT ================= */
+/* ================= RIWAYAT STATE ================= */
+let riwayatData  = [];
+let riwayatPage  = 1;
+let riwayatTotal = 0;
+const RIWAYAT_LIMIT = 20;
+
+var _elTanggal = document.getElementById('tanggal');
+if(_elTanggal) _elTanggal.value = new Date().toISOString().slice(0,10);
+var _elPertemuan = document.getElementById('pertemuan');
+if(_elPertemuan) for(let i=1;i<=24;i++) _elPertemuan.innerHTML+=`<option>${i}</option>`;
+
+// Init export bulan defaults
+(function(){
+  const now = new Date();
+  const selBulan = document.getElementById('exportBulanSelect');
+  const inpTahun = document.getElementById('exportBulanTahun');
+  if(selBulan) selBulan.value = now.getMonth() + 1;
+  if(inpTahun) inpTahun.value = now.getFullYear();
+})();
+
+function renderRiwayatPagination(){
+  const box = document.getElementById('riwayatPagination');
+  box.innerHTML = '';
+
+  const totalPage = Math.ceil(riwayatTotal / RIWAYAT_LIMIT);
+  if(totalPage <= 1) return;
+
+  const maxBtn  = 7;
+  let   btnFrom = Math.max(1, riwayatPage - Math.floor(maxBtn/2));
+  let   btnTo   = Math.min(totalPage, btnFrom + maxBtn - 1);
+  if(btnTo - btnFrom < maxBtn - 1) btnFrom = Math.max(1, btnTo - maxBtn + 1);
+
+  if(btnFrom > 1) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(1)">« 1</button>`;
+
+  for(let i = btnFrom; i <= btnTo; i++){
+    box.innerHTML += `
+      <button class="ghost"
+        onclick="loadRiwayat(${i})"
+        style="${i===riwayatPage?'font-weight:700;background:#dbeafe':''}">
+        ${i}
+      </button>
+    `;
+  }
+
+  if(btnTo < totalPage) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(${totalPage})">${totalPage} »</button>`;
+  box.innerHTML += `<span class="muted" style="font-size:12px;align-self:center;margin-left:4px">(${riwayatTotal} jurnal)</span>`;
+}
+
+/* ================= NAV ================= */
+let _currentTab = 'dashboard';
+// Tab yang tidak disimpan ke localStorage (butuh inisialisasi manual)
+var TABS_NO_RESTORE = ['inputNilai', 'DashboardSuperAdmin'];
+
+function showTab(id){
+  if(window._dblog) _dblog('showTab(' + id + ')');
+  // Jangan simpan tab yang butuh inisialisasi manual
+  if (!TABS_NO_RESTORE.includes(id)) {
+    localStorage.setItem('lastTab', id);
+  }
+  _currentTab = id;
+
+  // Try current doc first, fallback to parent/top frame
+  var _doc = document;
+  var tabs = _doc.querySelectorAll('[data-tabid]');
+  if(tabs.length === 0 && window.parent && window.parent !== window){
+    try{ _doc = window.parent.document; tabs = _doc.querySelectorAll('[data-tabid]'); }catch(e){}
+  }
+  if(tabs.length === 0 && window.top && window.top !== window){
+    try{ _doc = window.top.document; tabs = _doc.querySelectorAll('[data-tabid]'); }catch(e){}
+  }
+  if(window._dblog) _dblog('tabs=' + tabs.length + ' in ' + (_doc === document ? 'self' : 'parent/top'));
+
+  tabs.forEach(t=>{ t.style.removeProperty('display'); t.style.setProperty('display','none','important'); });
+
+  var el = _doc.getElementById(id) || _doc.querySelector('[data-tabid="' + id + '"]');
+  if(window._dblog) _dblog('target ' + id + ': ' + (el ? 'FOUND' : 'NULL'));
+  if(el){ el.style.removeProperty('display'); el.style.setProperty('display','block','important'); }
+
+  // Update FAB context
+  updateFab_(id);
+
+  // 🔥 AUTO LOAD RIWAYAT SAAT TAB DIBUKA
+  if(id === 'riwayat'){
+    restoreRiwayatFilterState();  // ✅ restore filter state
+    loadRiwayat();
+    loadArsipRiwayat(); // tetap aman
+    loadRiwayatFilterKelas(); // isi dropdown filter kelas
+  }
+
+  // 🔥 LOAD REKAP KELAS
+  if(id === 'rekap'){
+    initLaporanAbsensiKelas();
+  }
+
+  // 🔥 AUTO LOAD SETTING + JADWAL
+  if(id === 'setting'){
+    loadSettingForm();
+    loadJadwalSetting(); // <-- ini penting
+  }
+
+  // 🔥 LOAD KELAS SAAT BUKA JURNALKU
+  if(id === 'jurnalku'){
+    loadKelas();
+    // Restore draft (hanya jika bukan mode edit)
+    setTimeout(function() { if (!editingJurnalId) restoreDraft_(); }, 300);
+  }
+
+  // 🔥 LOAD JURNAL GURU WALI
+  if(id === 'jurnalGuruWali'){
+    loadJurnalGuruWali();
+  }
+
+  // 🔥 DASHBOARD FIX
+  if(id === 'dashboard'){
+    initDashboardMeta();
+    // Load jadwal independently — use loadJadwalDashboard_ if available, else fallback
+    if(typeof loadJadwalDashboard_ === 'function'){
+      loadJadwalDashboard_();
+    } else if(typeof _loadJadwalFallback_ === 'function'){
+      _loadJadwalFallback_();
+    }
+
+    setTimeout(()=>{
+      if(typeof chartJurnal !== 'undefined' && chartJurnal) chartJurnal.resize();
+      if(typeof chartAbsen  !== 'undefined' && chartAbsen)  chartAbsen.resize();
+    },50);
+  }
+}
+
+/* ===== FAB context-aware ===== */
+function updateFab_(tabId) {
+  const fab = document.getElementById('fabJurnal');
+  if (!fab) return;
+
+  if (tabId === 'jurnalku') {
+    fab.textContent = '+';
+    fab.title = 'Tambah Jurnal Baru';
+    fab.style.background = '#22c55e';
+    fab.style.boxShadow = '0 18px 40px rgba(34,197,94,.45)';
+    fab.classList.remove('hide');
+  } else if (tabId === 'inputNilai'
+    && typeof nilaiState !== 'undefined'
+    && nilaiState.rows && nilaiState.rows.length > 0
+    && nilaiState.locked) {
+    // Hanya tampil jika data sudah dimuat dan sedang terkunci (belum edit)
+    fab.textContent = '+';
+    fab.title = 'Input Nilai';
+    fab.style.background = '#6C63FF';
+    fab.style.boxShadow = '0 18px 40px rgba(108,99,255,.45)';
+    fab.classList.remove('hide');
+  } else {
+    fab.classList.add('hide');
+  }
+}
+
+function fabAction() {
+  if (_currentTab === 'jurnalku') {
+    openJurnalFocus();
+  } else if (_currentTab === 'inputNilai') {
+    editNilai();
+  }
+}
+
+/* ================= KELAS & SISWA ================= */
+let pendingAbsensiData = []; // untuk restore absensi saat editJurnal
+
+function loadKelas(){
+  kelas.innerHTML='<option value="">-- Pilih Kelas --</option>';
+  google.script.run.withSuccessHandler(d=>{
+    d.forEach(k=>kelas.innerHTML+=`<option>${k}</option>`);
+  }).getKelas();
+}
+
+function loadSiswa(){
+  if(!kelas.value) return;
+  startProgress();
+  siswaBody.innerHTML='';
+  google.script.run.withSuccessHandler(d=>{
+    d.forEach(s=>{
+      siswaBody.innerHTML+=`
+      <tr>
+        <td>${s.no_absen}</td>
+        <td class="left">${s.nama}</td>
+        <td>${s.jk}</td>
+        <td>
+          <select data-nis="${s.nis}">
+            <option>H</option>
+            <option>S</option>
+            <option>I</option>
+            <option>A</option>
+          </select>
+        </td>
+      </tr>`;
+    });
+    // Restore absensi jika sedang edit
+    if(pendingAbsensiData && pendingAbsensiData.length){
+      pendingAbsensiData.forEach(ab=>{
+        const sel = siswaBody.querySelector('select[data-nis="'+ab.nis+'"]');
+        if(sel) sel.value = ab.status;
+      });
+      pendingAbsensiData = [];
+    }
+    endProgress();
+  }).getSiswaByKelas(kelas.value);
+}
+/* ================= RIWAYAT ================= */
+function loadRiwayatFilterKelas(){
+  const sel = document.getElementById('riwayatFilterKelas');
+  if(!sel || sel.options.length > 1) return;
+  google.script.run.withSuccessHandler(d=>{
+    d.forEach(k=> sel.innerHTML += '<option>' + k + '</option>');
+    // ✅ Restore persisted kelas after dropdown populated
+    const restoreVal = sel.getAttribute('data-restore');
+    if(restoreVal){
+      sel.value = restoreVal;
+      sel.removeAttribute('data-restore');
+    }
+  }).getKelas();
+}
+
+function resetRiwayatFilter(){
+  ['riwayatFilterDari','riwayatFilterSampai','riwayatFilterCari'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  const sel = document.getElementById('riwayatFilterKelas');
+  if(sel) sel.value = '';
+  // ✅ Clear persisted filter state
+  localStorage.removeItem('riwayatFilter');
+  loadRiwayat(1);
+}
+
+/* ✅ Save filter state to localStorage */
+function saveRiwayatFilterState(){
+  const state = {
+    dari  : (document.getElementById('riwayatFilterDari')   || {}).value || '',
+    sampai: (document.getElementById('riwayatFilterSampai') || {}).value || '',
+    kelas : (document.getElementById('riwayatFilterKelas')  || {}).value || '',
+    cari  : (document.getElementById('riwayatFilterCari')   || {}).value || ''
+  };
+  localStorage.setItem('riwayatFilter', JSON.stringify(state));
+}
+
+/* ✅ Restore filter state from localStorage */
+function restoreRiwayatFilterState(){
+  try{
+    const saved = localStorage.getItem('riwayatFilter');
+    if(!saved) return;
+    const state = JSON.parse(saved);
+    const dari   = document.getElementById('riwayatFilterDari');
+    const sampai = document.getElementById('riwayatFilterSampai');
+    const kelas  = document.getElementById('riwayatFilterKelas');
+    const cari   = document.getElementById('riwayatFilterCari');
+    if(dari   && state.dari)   dari.value   = state.dari;
+    if(sampai && state.sampai) sampai.value = state.sampai;
+    if(cari   && state.cari)   cari.value   = state.cari;
+    // kelas dropdown may not have its options yet — restored after loadRiwayatFilterKelas
+    if(kelas  && state.kelas)  kelas.setAttribute('data-restore', state.kelas);
+  }catch(e){}
+}
+
+function loadRiwayat(page = 1){
+  riwayatPage = page;
+  startProgress();
+  renderRiwayatSkeleton(cols);
+
+  const filters = {
+    dari  : (document.getElementById('riwayatFilterDari')   || {}).value || '',
+    sampai: (document.getElementById('riwayatFilterSampai') || {}).value || '',
+    kelas : (document.getElementById('riwayatFilterKelas')  || {}).value || '',
+    cari  : (document.getElementById('riwayatFilterCari')   || {}).value || ''
+  };
+
+  const tbody = document.getElementById('riwayatBody');
+
+  google.script.run
+    .withFailureHandler(err=>{
+      console.error('Gagal load riwayat:', err);
+      if(tbody){
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="muted">
+              ❌ Gagal memuat riwayat jurnal
+            </td>
+          </tr>
+        `;
+      }
+      endProgress();
+      if(typeof showToast === 'function') showToast('❌ Gagal memuat riwayat: ' + err.message, 'error');
+    })
+    .withSuccessHandler(resp=>{
+      riwayatData  = resp.rows  || [];
+      riwayatTotal = resp.total || 0;
+      renderRiwayat();
+      endProgress();
+    })
+    .getRiwayatJurnalPaged(page, RIWAYAT_LIMIT, filters);
+}
+
+function $(id){
+  return document.getElementById(id);
+}
+
+function renderRiwayat(){
+
+  const tbody = document.getElementById('riwayatBody');
+  const pageData = riwayatData; // already the correct page from server
+
+  tbody.innerHTML = '';
+
+  if(pageData.length === 0){
+    tbody.innerHTML =
+      '<tr><td colspan="11" class="muted">📭 Belum ada jurnal.</td></tr>';
+    renderRiwayatPagination();
+    return;
+  }
+
+  pageData.forEach(function(x){
+
+    /* ================= FOTO FINAL FIX ABSOLUTE ================= */
+      let fotoHtml = x.foto && x.foto !== '-'
+        ? x.foto
+        : '-';
+
+    /* ================= REFLEKSI FIX ================= */
+    let refleksiHtml = '-';
+
+    if(x.refleksi && x.refleksi !== '-' && x.refleksi !== '[]'){
+
+      let ref = x.refleksi;
+
+      if(typeof ref === 'string'){
+        try{
+          const parsed = JSON.parse(ref);
+          if(typeof parsed === 'string'){
+            ref = parsed;
+          }
+        }catch(e){}
+      }
+
+      const txt = ref.length > 60
+        ? ref.substring(0,60) + '…'
+        : ref;
+
+      refleksiHtml =
+        `<span title="${ref.replace(/"/g,'&quot;')}">
+          ${txt}
+        </span>`;
+    }
+
+    /* ================= ROW RENDER ================= */
+    tbody.innerHTML += `
+      <tr class="${x.locked ? 'locked' : ''}">
+        <td>${x.no}</td>
+        <td>${x.tanggal || '-'}</td>
+        <td>${x.kelas || '-'}</td>
+        <td>${x.pertemuan || '-'}</td>
+        <td class="left">${x.materi || '-'}</td>
+        <td>${x.asesmen || '-'}</td>
+        <td class="left">${x.absensi || '-'}</td>
+        <td>${fotoHtml}</td>
+        <td class="left">${refleksiHtml}</td>
+        <td>
+          <span class="badge">
+            ${x.edit_count || 0} / 3
+          </span>
+        </td>
+        <td class="actions">
+          <button onclick="editJurnal('${x.jurnalId}')"
+            ${x.locked ? 'disabled' : ''}>✏️</button>
+          <button onclick="openRppFromJurnal('${x.jurnalId}','${(x.kelas||'').replace(/'/g,"&#39;")}','${(x.materi||'').replace(/'/g,"&#39;")}')" style="background:#e0e7ff;color:#3730a3;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:600">📄</button>
+          <button class="danger"
+            onclick="hapusJurnal('${x.jurnalId}')">🗑️</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  renderRiwayatPagination();
+}
+
+function editJurnal(id){
+  google.script.run.withSuccessHandler(d=>{
+    if(d.locked){
+      if(typeof showToast === 'function') showToast('🔒 Jurnal terkunci (≥45 hari)', 'warning');
+      else alert('Jurnal terkunci (≥45 hari)');
+      return;
+    }
+    if(d.edit_count>=3){
+      if(typeof showToast === 'function') showToast('⚠️ Batas edit jurnal (3x) tercapai', 'warning');
+      else alert('Batas edit jurnal tercapai');
+      return;
+    }
+    editingJurnalId=id;
+    // Simpan absensi sebelum loadSiswa agar bisa di-restore
+    pendingAbsensiData = d.absensi || [];
+    showTab('jurnalku');
+    kelas.value=d.kelas;
+    pertemuan.value=d.pertemuan;
+    materi.value=d.materi;
+    tujuan.value=d.tujuan||'';
+    asesmen.value=d.asesmen;
+    if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
+    loadSiswa();
+    if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
+  }).withFailureHandler(err=>{
+    if(typeof showToast === 'function') showToast('❌ Gagal memuat detail jurnal', 'error');
+  }).getJurnalDetail(id);
+}
+
+function hapusJurnal(id){
+  if(!confirm('Yakin menghapus jurnal ini?')) return;
+  startProgress();
+  google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      if(typeof showToast === 'function') showToast('❌ Gagal hapus jurnal: ' + err.message, 'error');
+      else alert('❌ ' + err.message);
+    })
+    .withSuccessHandler(()=>{
+      endProgress();
+      loadRiwayat();
+      if(typeof showToast === 'function') showToast('🗑️ Jurnal berhasil dihapus', 'success');
+    }).hapusJurnal(id);
+}
+
+/* ================= REKAP ================= */
+function loadRekap(){
+  startProgress();
+  renderRiwayatSkeleton(cols);
+  rekapBody.innerHTML='';
+  google.script.run.withSuccessHandler(d=>{
+    d.forEach((x,i)=>{
+      rekapBody.innerHTML+=`
+      <tr>
+        <td>${i+1}</td>
+        <td>${x.kelas}</td>
+        <td>${x.tanggal}</td>
+        <td>${x.pertemuan}</td>
+        <td>${x.asesmen}</td>
+        <td class="left">${x.keterangan}</td>
+      </tr>`;
+    });
+    endProgress();
+  }).getRekapAbsensi(dari.value,sampai.value);
+}
+
+function renderRiwayatSkeleton(rows = 6){
+  const tbody = document.getElementById('riwayatBody');
+  tbody.innerHTML = '';
+  for(let i=0;i<rows;i++){
+    tbody.innerHTML += `
+      <tr class="skeleton-row">
+        ${'<td><div class="skeleton"></div></td>'.repeat(11)}
+      </tr>
+    `;
+  }
+}
+
+/* ================= EXPORT ================= */
+function exportExcel(){
+  startProgress();
+  google.script.run.withSuccessHandler(url=>{
+    endProgress();
+    window.open(url,'_blank');
+  }).exportJurnalExcel();
+}
+
+function exportSemester(semester){
+  const skel = document.getElementById('exportSkeleton');
+  if(skel) skel.style.display = 'block';
+  startProgress();
+  google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      if(skel) skel.style.display = 'none';
+      alert('❌ Gagal export jurnal semester:\n' + err.message);
+    })
+    .withSuccessHandler(url=>{
+      endProgress();
+      if(skel) skel.style.display = 'none';
+      window.open(url,'_blank');
+    })
+    .exportJurnalExcelBySemester(semester);
+}
+
+function cekTombolSemester(){
+  google.script.run.withSuccessHandler(res=>{
+    const bG = document.getElementById('btnSemGanjil');
+    const bE = document.getElementById('btnSemGenap');
+    if(bG){
+      bG.disabled = !res.adaGanjil;
+      bG.title = res.adaGanjil
+        ? 'Download rekap jurnal semester ganjil'
+        : 'Belum ada jurnal semester ganjil';
+      if(!res.adaGanjil) bG.classList.add('ghost');
+    }
+    if(bE){
+      bE.disabled = !res.adaGenap;
+      bE.title = res.adaGenap
+        ? 'Download rekap jurnal semester genap'
+        : 'Belum ada jurnal semester genap';
+      if(!res.adaGenap) bE.classList.add('ghost');
+    }
+  }).cekJurnalSemester();
+}
+
+function doExportByBulan(){
+  const bulan = document.getElementById('exportBulanSelect').value;
+  const tahun = document.getElementById('exportBulanTahun').value || new Date().getFullYear();
+  const info  = document.getElementById('exportBulanInfo');
+  if(info) info.innerHTML = '<span class="muted">⏳ Memproses export...</span>';
+  startProgress();
+  google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      if(info) info.innerHTML = '<span style="color:#dc2626">❌ '+err.message+'</span>';
+    })
+    .withSuccessHandler(url=>{
+      endProgress();
+      if(info) info.innerHTML = '<span style="color:#059669">✅ File siap — tab baru terbuka</span>';
+      window.open(url,'_blank');
+    })
+    .exportJurnalByBulan(parseInt(bulan), parseInt(tahun));
+}
+
+/* ================= LAPORAN ABSENSI PER SISWA ================= */
+function initLaporanAbsensiKelas(){
+  const sel = document.getElementById('laporanKelas');
+  if(!sel || sel.options.length > 1) return;
+  google.script.run.withSuccessHandler(d=>{
+    d.forEach(k=> sel.innerHTML += `<option>${k}</option>`);
+  }).getKelas();
+  // default bulan = current month
+  const inp = document.getElementById('laporanBulan');
+  if(inp && !inp.value){
+    const now = new Date();
+    inp.value = now.getFullYear()+'-'+(now.getMonth()+1).toString().padStart(2,'0');
+  }
+}
+
+function updateLaporanPeriodUI(){
+  const mode = document.getElementById('laporanMode').value;
+  const wrapBulan = document.getElementById('laporanPeriodWrap');
+  const wrapSem   = document.getElementById('laporanSemesterWrap');
+  if(mode === 'bulan'){
+    wrapBulan.style.display = '';
+    wrapSem.style.display   = 'none';
+  } else if(mode === 'semester'){
+    wrapBulan.style.display = 'none';
+    wrapSem.style.display   = '';
+  } else {
+    wrapBulan.style.display = 'none';
+    wrapSem.style.display   = 'none';
+  }
+}
+
+let laporanAbsensiData = [];
+
+function loadLaporanAbsensi(){
+  const kelas  = document.getElementById('laporanKelas').value;
+  const mode   = document.getElementById('laporanMode').value;
+  const wrap   = document.getElementById('laporanAbsensiWrap');
+
+  if(!kelas){
+    alert('Pilih kelas terlebih dahulu');
+    return;
+  }
+
+  let period = '';
+  if(mode === 'bulan')    period = document.getElementById('laporanBulan').value;
+  if(mode === 'semester') period = document.getElementById('laporanSemester').value;
+
+  if(mode === 'bulan' && !period){ alert('Pilih bulan'); return; }
+
+  wrap.innerHTML = '<p class="muted">⏳ Memuat laporan...</p>';
+  startProgress();
+
+  google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      wrap.innerHTML = `<p style="color:#dc2626">❌ ${err.message}</p>`;
+    })
+    .withSuccessHandler(data=>{
+      endProgress();
+      laporanAbsensiData = data || [];
+      renderLaporanAbsensi(data, kelas, mode, period);
+    })
+    .getLaporanAbsensiSiswa(mode, kelas, period);
+}
+
+function renderLaporanAbsensi(data, kelas, mode, period){
+  const wrap = document.getElementById('laporanAbsensiWrap');
+  if(!data || data.length === 0){
+    wrap.innerHTML = '<p class="muted">📭 Tidak ada data untuk periode ini.</p>';
+    return;
+  }
+
+  const labelPeriode = mode === 'bulan'
+    ? ('Bulan: ' + period)
+    : mode === 'semester'
+    ? ('Semester: ' + period.charAt(0).toUpperCase() + period.slice(1))
+    : 'Tahun Pelajaran';
+
+  let html = `
+    <p class="muted" style="margin-bottom:8px">${kelas} · ${labelPeriode} · ${data[0].totalPertemuan} pertemuan</p>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>No</th><th>NIS</th><th class="left">Nama</th><th>JK</th>
+          <th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th>
+          <th>% Hadir</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  data.forEach((s,i) => {
+    const warn  = s.persen < 75;
+    html += `
+      <tr style="${warn ? 'background:#fef2f2' : ''}">
+        <td>${i+1}</td>
+        <td>${s.nis}</td>
+        <td class="left">${s.nama}</td>
+        <td>${s.jk}</td>
+        <td style="color:#059669;font-weight:600">${s.hadir}</td>
+        <td style="color:#f59e0b">${s.sakit}</td>
+        <td style="color:#3b82f6">${s.izin}</td>
+        <td style="color:#dc2626;font-weight:600">${s.alpha}</td>
+        <td style="font-weight:700;color:${warn ? '#dc2626' : '#059669'}">${s.persen}%</td>
+      </tr>
+    `;
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function exportLaporanAbsensiExcel(){
+  if(!laporanAbsensiData.length){ alert('Tampilkan laporan terlebih dahulu'); return; }
+  const kelas  = document.getElementById('laporanKelas').value;
+  const mode   = document.getElementById('laporanMode').value;
+  let period   = '';
+  if(mode === 'bulan')    period = document.getElementById('laporanBulan').value;
+  if(mode === 'semester') period = document.getElementById('laporanSemester').value;
+  startProgress();
+  google.script.run
+    .withFailureHandler(err=>{ endProgress(); alert('❌ '+err.message); })
+    .withSuccessHandler(url=>{ endProgress(); window.open(url,'_blank'); })
+    .exportLaporanAbsensiSiswa(mode, kelas, period);
+}
+
+/* ================= SISWA ================= */
+
+async function simpan(){
+  const now = Date.now();
+
+  // 📱 TAP DELAY GUARD (KHUSUS MOBILE)
+  if(now - lastTapTime < TAP_DELAY_MS){
+    return;
+  }
+  lastTapTime = now;
+
+  // 🚫 CEGAH DOUBLE SUBMIT LOGIC
+  if(isSavingJurnal){
+    return;
+  }
+  isSavingJurnal = true;
+  const btn = document.getElementById('btnSimpanJurnal');
+  if(btn){
+    btn.disabled = true;
+    btn.innerText = '⏳ Menyimpan...';
+  }
+
+  // 🔒 LOCK FORM (MOBILE UX)
+  lockJurnalForm(true);
+  startProgress();
+
+  try{
+    let abs = [];
+    document.querySelectorAll('#siswaBody select').forEach(s=>{
+      abs.push({
+        nis: s.dataset.nis,
+        status: s.value
+      });
+    });
+
+    // ===== VALIDASI FOTO =====
+    const fileInputs = ['foto1','foto2','foto3'];
+    const fotoFiles = fileInputs
+      .map(id => document.getElementById(id).files[0])
+      .filter(f => f);
+    if(fotoFiles.length < 1){
+      alert('⚠️ Minimal 1 foto dokumentasi wajib diupload');
+      throw new Error('Foto wajib');
+    }
+    if(fotoFiles.length > 3){
+      alert('⚠️ Maksimal 3 foto dokumentasi');
+      throw new Error('Foto berlebih');
+    }
+
+    // ===== CEK UKURAN FILE SEBELUM UPLOAD =====
+    // (Batas longgar — kompresi canvas otomatis akan mengecilkan ukuran)
+    const MAX_SINGLE_KB = 15000; // 15MB raw — canvas compression handles the rest
+    const MAX_TOTAL_KB  = 45000;
+    const oversizeFile = fotoFiles.find(f => f.size / 1024 > MAX_SINGLE_KB);
+    if (oversizeFile) {
+      if(typeof showToast === 'function') showToast('⚠️ Foto terlalu besar (maks 15MB per foto)', 'warning');
+      else alert('⚠️ Foto "' + oversizeFile.name + '" melebihi batas 15MB');
+      throw new Error('Foto terlalu besar');
+    }
+
+    // ===== KONVERSI FOTO → BASE64 =====
+    const fotos = await Promise.all(
+      fotoFiles.map(f => fileToBase64(f))
+    );
+    const data = {
+      jurnalId: editingJurnalId,
+      kelas: kelas.value,
+      jam_ke: jam_ke.value,
+      pertemuan: pertemuan.value,
+      materi: materi.value,
+      tujuan: tujuan.value,
+      asesmen: asesmen.value || '-',
+      refleksi: refleksi.value || '-',
+      absensi: abs,
+      dokumentasi: fotos
+    };
+
+    const fn = editingJurnalId ? 'updateJurnal' : 'simpanJurnal';
+      google.script.run
+    .withFailureHandler(err=>{
+      endProgress();
+      if(typeof showToast === 'function') showToast('❌ Gagal simpan jurnal: ' + err.message, 'error', 6000);
+      else alert('❌ Gagal menyimpan jurnal:\n' + err.message);
+      resetSimpanButton();
+    })
+    .withSuccessHandler(res=>{
+      endProgress();
+
+      // 🔴 CEK STATUS DARI BACKEND
+      if(res && res.status === false){
+        if(typeof showToast === 'function') showToast('⚠️ ' + (res.msg || 'Gagal menyimpan jurnal'), 'warning');
+        else alert('⚠️ ' + (res.msg || 'Gagal menyimpan jurnal'));
+        resetSimpanButton();
+        return;
+      }
+
+      // ✅ BENAR-BENAR SUKSES
+      if(typeof showToast === 'function') showToast('✅ Jurnal berhasil disimpan!', 'success', 4000);
+      else alert('✅ Jurnal berhasil disimpan');
+      editingJurnalId = null;
+      clearDraft_(); // 🗑 hapus draft setelah simpan sukses
+      showTab('riwayat');
+      loadRiwayat();
+      resetSimpanButton();
+    })[fn](data);
+    }catch(e){
+    endProgress();
+    resetSimpanButton();
+  }
+}
+
+function resetSimpanButton(){
+  isSavingJurnal = false;
+  const btn = document.getElementById('btnSimpanJurnal');
+  if(btn){
+    btn.disabled = false;
+    btn.innerText = '💾 Simpan Jurnal';
+    btn.style.opacity = '1';
+  }
+  // 🔓 UNLOCK FORM
+  lockJurnalForm(false);
+}
+
+// 🔒 LOCK / UNLOCK FORM SAAT SIMPAN (UX MOBILE)
+function lockJurnalForm(lock = true){
+  const fields = document.querySelectorAll(
+    '#jurnalku input, #jurnalku textarea, #jurnalku select'
+  );
+  fields.forEach(el=>{
+    el.disabled = lock;
+  });
+  // tombol simpan dikelola terpisah
+  const btn = document.getElementById('btnSimpanJurnal');
+  if(btn){
+    btn.style.opacity = lock ? '0.6' : '1';
+  }
+}
+
+/* ================== FIX FUNGSI YANG HILANG ================== */
+// dipanggil saat klik tab Setting
+
+/* ===================================================================
+   DRAFT AUTO-SAVE — simpan form jurnal ke localStorage saat diisi
+   ================================================================= */
+// Kunci draft per-user agar tidak tercampur di PC yang dipakai bergantian
+function getDraftKey_() {
+  return 'jurnalDraft_' + (window._currentUserEmail || 'anon');
+}
+
+function saveDraft_() {
+  try {
+    const draft = {
+      kelas     : (document.getElementById('kelas')     || {}).value || '',
+      pertemuan : (document.getElementById('pertemuan') || {}).value || '',
+      jam_ke    : (document.getElementById('jam_ke')    || {}).value || '',
+      materi    : (document.getElementById('materi')    || {}).value || '',
+      tujuan    : (document.getElementById('tujuan')    || {}).value || '',
+      asesmen   : (document.getElementById('asesmen')   || {}).value || '',
+      refleksi  : (document.getElementById('refleksi')  || {}).value || '',
+      savedAt   : new Date().toISOString()
+    };
+    localStorage.setItem(getDraftKey_(), JSON.stringify(draft));
+  } catch(e) {}
+}
+
+function restoreDraft_() {
+  try {
+    const raw = localStorage.getItem(getDraftKey_());
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    // Hanya restore jika bukan mode edit (edit diisi manual oleh editJurnal())
+    if (editingJurnalId) return;
+    const fields = ['materi','tujuan','asesmen','refleksi'];
+    fields.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el && draft[id]) el.value = draft[id];
+    });
+    if (draft.pertemuan) {
+      const sel = document.getElementById('pertemuan');
+      if (sel && draft.pertemuan) sel.value = draft.pertemuan;
+    }
+    if (draft.jam_ke) {
+      const el = document.getElementById('jam_ke');
+      if (el) el.value = draft.jam_ke;
+    }
+    // Toast ringan
+    if (draft.materi && typeof showToast === 'function')
+      showToast('\ud83d\udcbe Draft dipulihkan', 'info', 2500);
+  } catch(e) {}
+}
+
+function clearDraft_() {
+  try { localStorage.removeItem(getDraftKey_()); } catch(e) {}
+}
+
+// Pasang auto-save listeners setelah DOM siap
+(function() {
+  const ids = ['materi','tujuan','asesmen','refleksi','pertemuan','jam_ke'];
+  function _attachDraftListeners() {
+    ids.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', saveDraft_);
+    });
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(_attachDraftListeners, 500);
+  } else {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(_attachDraftListeners, 500); });
+  }
+})();
+
+/* ===================================================================
+   TEMPLATE JURNAL — pilih template materi siap pakai
+   ================================================================= */
+const _JURNAL_TEMPLATES_ = [
+  {
+    label    : 'Pendahuluan / Perkenalan Materi',
+    materi   : 'Pengenalan materi bab baru — apersepsi, peta konsep, motivasi belajar',
+    tujuan   : 'Siswa mampu menyebutkan garis besar materi yang akan dipelajari dan termotivasi untuk belajar',
+    asesmen  : 'Tanya jawab lisan, lembar observasi keaktifan'
+  },
+  {
+    label    : 'Penyampaian Materi Inti',
+    materi   : 'Penyampaian materi pokok dengan metode ceramah bervariasi, tanya jawab, dan diskusi kelompok',
+    tujuan   : 'Siswa mampu memahami konsep utama materi dan menerapkannya dalam contoh soal',
+    asesmen  : 'Kuis lisan, latihan soal, diskusi kelompok'
+  },
+  {
+    label    : 'Praktik / Latihan Soal',
+    materi   : 'Latihan soal terstruktur — tingkat mudah, sedang, dan sulit (diferensiasi)',
+    tujuan   : 'Siswa mampu mengerjakan soal secara mandiri dan mengidentifikasi kesulitan belajar',
+    asesmen  : 'Lembar kerja siswa (LKS), penilaian proses, koreksi bersama'
+  },
+  {
+    label    : 'Presentasi & Diskusi Siswa',
+    materi   : 'Presentasi hasil kerja kelompok, diskusi kelas, dan refleksi bersama',
+    tujuan   : 'Siswa mampu mengomunikasikan hasil belajar secara lisan dan menghargai pendapat teman',
+    asesmen  : 'Rubrik presentasi, penilaian peer, observasi guru'
+  },
+  {
+    label    : 'Ulangan Harian / Evaluasi',
+    materi   : 'Ulangan Harian — cakupan materi bab yang telah selesai dipelajari',
+    tujuan   : 'Mengukur ketercapaian KD siswa secara individual',
+    asesmen  : 'Soal pilihan ganda dan uraian, penilaian tertulis'
+  },
+  {
+    label    : 'Remedi / Pengayaan',
+    materi   : 'Remedial bagi siswa di bawah KKM; pengayaan bagi siswa yang telah tuntas',
+    tujuan   : 'Siswa yang belum tuntas mencapai KKM; siswa tuntas memperdalam materi lanjutan',
+    asesmen  : 'Soal remedi, proyek pengayaan, portofolio'
+  },
+  {
+    label    : 'Review / Rangkuman Bab',
+    materi   : 'Review seluruh materi bab — mind mapping bersama, tanya jawab, dan persiapan ujian',
+    tujuan   : 'Siswa mampu merangkum poin penting materi dan siap mengikuti ujian',
+    asesmen  : 'Mind map, kuis review, tanya jawab'
+  },
+  {
+    label    : 'PTS / PAS / PAT',
+    materi   : 'Penilaian Tengah/Akhir Semester — siswa mengerjakan soal ujian secara mandiri',
+    tujuan   : 'Mengukur pencapaian kompetensi siswa selama satu semester',
+    asesmen  : 'Lembar ujian tertulis, PTS/PAS/PAT'
+  }
+];
+
+function openTemplateJurnal_() {
+  const modal = document.getElementById('templateJurnalModal');
+  const list  = document.getElementById('templateJurnalList');
+  if (!modal || !list) return;
+  list.innerHTML = _JURNAL_TEMPLATES_.map(function(t, i) {
+    return '<div class="tmpl-item" onclick="applyTemplate_(' + i + ')">' +
+      '<div class="tmpl-label">' + t.label + '</div>' +
+      '<div class="tmpl-preview">' + t.materi.substring(0, 80) + '\u2026</div>' +
+      '</div>';
+  }).join('');
+  modal.style.display = 'flex';
+}
+
+function closeTemplateJurnal_() {
+  const modal = document.getElementById('templateJurnalModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function applyTemplate_(idx) {
+  const t = _JURNAL_TEMPLATES_[idx];
+  if (!t) return;
+  const elMateri  = document.getElementById('materi');
+  const elTujuan  = document.getElementById('tujuan');
+  const elAsesmen = document.getElementById('asesmen');
+  if (elMateri)  elMateri.value  = t.materi;
+  if (elTujuan)  elTujuan.value  = t.tujuan;
+  if (elAsesmen) elAsesmen.value = t.asesmen;
+  closeTemplateJurnal_();
+  saveDraft_();
+  if (typeof showToast === 'function') showToast('\ud83d\udccb Template diterapkan!', 'success', 2500);
+}
+</script>

@@ -1,0 +1,552 @@
+<script>
+function isMobile(){
+  return window.innerWidth <= 768;
+}
+
+const fab = document.getElementById('fabJurnal');
+const mobileNav = document.getElementById('mobileNav');
+if(isMobile()){
+  mobileNav.style.display = 'flex';
+}
+
+/* ===== NAV ACTIVE STATE ===== */
+function mobileNavGo(tab){
+  showTab(tab);
+  document
+    .querySelectorAll('.mobile-bottom-nav button')
+    .forEach(b=>b.classList.remove('active'));
+  const map = {
+    dashboard:'navDashboard',
+    riwayat  :'navRiwayat',
+    rekap    :'navRekap',
+    setting  :'navSetting'
+  };
+  if(map[tab]){
+    const btn = document.getElementById(map[tab]);
+    if(btn) btn.classList.add('active');
+  }
+}
+
+/* ===== OPEN FOCUS MODE ===== */
+function openJurnalFocus(){
+  document.body.classList.add('focus-mode');
+  showTab('jurnalku');
+  if(!document.getElementById('exitFocusBtn')){
+    const btn = document.createElement('button');
+    btn.id = 'exitFocusBtn';
+    btn.className = 'exit-focus';
+    btn.innerText = '✕ Tutup';
+    btn.onclick = closeJurnalFocus;
+    document.body.appendChild(btn);
+  }
+}
+/* ===== CLOSE FOCUS MODE ===== */
+function closeJurnalFocus(){
+  document.body.classList.remove('focus-mode');
+  const btn = document.getElementById('exitFocusBtn');
+  if(btn) btn.remove();
+  showTab('riwayat');
+}
+
+/* ================= AUTO HIDE BOTTOM NAV (FIXED) ================= */
+let lastScrollY = window.scrollY;
+window.addEventListener('scroll', ()=>{
+  if(window.innerWidth > 768) return;
+  const nav = document.getElementById('mobileNav');
+  if(!nav) return;
+  const currentY = window.scrollY;
+  if(currentY > lastScrollY + 10){
+    nav.style.transform = 'translateY(100%)';
+  }else{
+    nav.style.transform = 'translateY(0)';
+  }
+  lastScrollY = currentY;
+});
+
+/* ===== HIDE FAB WHEN KEYBOARD OPEN ===== */
+window.addEventListener('focusin', e=>{
+  if(isMobile() && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')){
+    if(fab) fab.classList.add('hide');
+  }
+});
+window.addEventListener('focusout', ()=>{
+  if(isMobile()){
+    // Kembalikan FAB sesuai tab aktif, bukan selalu show
+    if(typeof updateFab_ === 'function') updateFab_(_currentTab);
+  }
+});
+
+/* ===== DEFAULT ACTIVE ===== */
+if(isMobile()){
+  document.getElementById('navDashboard').classList.add('active');
+}
+
+/* ===== EARLY TAB SAFETY: hide semua tab & tampilkan dashboard sebelum auth ===== */
+(function(){
+  try {
+    var tabs = document.querySelectorAll('[data-tabid]');
+    tabs.forEach(function(t){
+      t.style.removeProperty('display');
+      t.style.setProperty('display','none','important');
+    });
+    var dash = document.getElementById('dashboard');
+    if(dash){
+      dash.style.removeProperty('display');
+      dash.style.setProperty('display','block','important');
+    }
+    var ni = document.getElementById('inputNilai');
+    if(ni){ ni.style.setProperty('display','none','important'); }
+  } catch(e) {}
+})();
+
+/* ================= HAPTIC FEEDBACK ================= */
+function haptic(type='light'){
+  if(!navigator.vibrate) return;
+  const map = {
+    light:[15],
+    medium:[30],
+    heavy:[60]
+  };
+  navigator.vibrate(map[type] || [20]);
+}
+
+/* ================= DARK MODE CONTROLLER ================= */
+function applyChartDarkMode(isDark){
+  if(typeof Chart === 'undefined') return;
+  const fg   = isDark ? '#d1d5db' : '#374151';
+  const grid = isDark ? '#374151' : '#e5e7eb';
+  Chart.defaults.color       = fg;
+  Chart.defaults.borderColor = grid;
+  // Update any live chart instances
+  ['chartStackedV4','chartJurnal','chartAbsen'].forEach(function(name){
+    const c = window[name];
+    if(c && typeof c.update === 'function'){
+      try{
+        if(c.options && c.options.scales){
+          Object.values(c.options.scales).forEach(function(ax){
+            if(ax.ticks)  ax.ticks.color  = fg;
+            if(ax.grid)   ax.grid.color   = grid;
+            if(ax.title)  ax.title.color  = fg;
+          });
+        }
+        if(c.options && c.options.plugins && c.options.plugins.legend && c.options.plugins.legend.labels){
+          c.options.plugins.legend.labels.color = fg;
+        }
+        c.update('none');
+      }catch(e){}
+    }
+  });
+}
+
+function toggleDarkMode(){
+  const isDark = document.body.classList.toggle('dark');
+  localStorage.setItem('darkMode', isDark ? '1' : '0');
+  const _icon  = isDark ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  const _label = isDark ? 'Light Mode' : 'Dark Mode';
+  // Update sidebar button (has .sb-icon / .sb-label span structure)
+  const btn1 = document.getElementById('btnDarkMode');
+  if (btn1) {
+    const ic = btn1.querySelector('.sb-icon');
+    const lb = btn1.querySelector('.sb-label');
+    if (ic && lb) { ic.textContent = _icon; lb.textContent = _label; }
+    else btn1.textContent = _icon + ' ' + _label;
+  }
+  const btn2 = document.getElementById('btnDarkModeMobile');
+  if(btn2) btn2.textContent = _icon + ' ' + _label;
+  applyChartDarkMode(isDark);
+}
+
+// Auto-load: respects localStorage or system preference
+window.addEventListener('load', function(){
+  const stored = localStorage.getItem('darkMode');
+  let isDark = false;
+  if(stored === '1'){
+    isDark = true;
+  } else if(stored === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+    isDark = true;
+    localStorage.setItem('darkMode', '1');
+  }
+  if(isDark){
+    document.body.classList.add('dark');
+    const btn1 = document.getElementById('btnDarkMode');
+    if (btn1) {
+      const ic = btn1.querySelector('.sb-icon');
+      const lb = btn1.querySelector('.sb-label');
+      if (ic && lb) { ic.textContent = '\u2600\uFE0F'; lb.textContent = 'Light Mode'; }
+      else btn1.textContent = '\u2600\uFE0F Light Mode';
+    }
+    const btn2 = document.getElementById('btnDarkModeMobile');
+    if(btn2) btn2.textContent = '\u2600\uFE0F Light Mode';
+    // Apply after a tick to give Chart time to initialize
+    setTimeout(function(){ applyChartDarkMode(true); }, 1000);
+  }
+
+  // === SAFETY FALLBACK: jika bootApp tidak selesai dalam 10 detik, tampilkan dashboard ===
+  setTimeout(function(){
+    if(document.body.classList.contains('auth-wait')){
+      if(typeof showTab === 'function') showTab('dashboard');
+      document.body.classList.remove('auth-wait');
+      _hideLandingPage_();
+      var ni = document.getElementById('inputNilai');
+      if(ni) ni.style.setProperty('display','none','important');
+    }
+  }, 10000);
+
+  // === TAMPILKAN LANDING PAGE selama auth-wait + animasi progress bar (guard: hanya jika belum disembunyikan) ===
+  if(!window._landingHidden){
+    var lp = document.getElementById('landingPage');
+    if(lp){ lp.style.display = 'block'; }
+    var pb = document.getElementById('landingProgressBar');
+    if(pb){ setTimeout(function(){ if(!window._landingHidden) pb.style.width = '85%'; }, 100); }
+  }
+});
+
+/* =================================================================
+   TOAST NOTIFICATION SYSTEM
+   ================================================================= */
+function showToast(msg, type, duration){
+  type     = type     || 'info';
+  duration = (duration === undefined || duration === null) ? 3500 : duration;
+
+  const container = document.getElementById('toastContainer');
+  if(!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.innerHTML =
+    '<span style="flex:1">' + msg + '</span>' +
+    '<span class="toast-close" onclick="this.parentElement.remove()">✕</span>';
+
+  container.appendChild(toast);
+
+  // Trigger entrance animation
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      toast.classList.add('toast-show');
+    });
+  });
+
+  if(duration > 0){
+    setTimeout(function(){
+      toast.classList.remove('toast-show');
+      setTimeout(function(){ if(toast.parentElement) toast.remove(); }, 350);
+    }, duration);
+  }
+}
+
+/* =================================================================
+   STALL DETECTOR (20s timeout warning)
+   ================================================================= */
+let _stallTimer = null;
+
+function _markProgressStart(){
+  clearTimeout(_stallTimer);
+  _stallTimer = setTimeout(function(){
+    showToast('⚠️ Koneksi lambat atau server tidak merespons. Coba lagi sebentar.', 'warning', 6000);
+  }, 20000);
+}
+
+function _markProgressEnd(){
+  clearTimeout(_stallTimer);
+  _stallTimer = null;
+}
+
+/* =================================================================
+   INIT APP (dipanggil setelah bootApp() selesai autentikasi)
+   ================================================================= */
+function initApp(){
+
+  // 1. Paksa semua tab tersembunyi dulu, khususnya inputNilai
+  var _allTabs = document.querySelectorAll('[data-tabid]');
+  _allTabs.forEach(function(t){
+    t.style.removeProperty('display');
+    t.style.setProperty('display','none','important');
+  });
+  var _niForce = document.getElementById('inputNilai');
+  if(_niForce){ _niForce.style.setProperty('display','none','important'); }
+
+  // 2. Paksa dashboard terlihat
+  localStorage.setItem('lastTab', 'dashboard');
+  localStorage.setItem('sbActiveTab', 'dashboard');
+  showTab('dashboard');
+  // Sync sidebar highlight ke dashboard
+  document.querySelectorAll('#sbNav .sb-item').forEach(function(btn){ btn.classList.remove('sb-active'); });
+  var _dashBtn = document.querySelector('#sbNav .sb-item[data-tab="dashboard"]');
+  if (_dashBtn) _dashBtn.classList.add('sb-active');
+
+  // 3. Baru hapus overlay auth-wait
+  document.body.classList.remove('auth-wait');
+
+  // Update greeting immediately (uses local clock, no backend needed)
+  if (typeof updateGreeting_ === 'function') updateGreeting_();
+
+  // NOTE: initDashboardMeta sudah dipanggil di dalam showTab('dashboard') di atas
+  // Jangan panggil lagi di sini supaya tidak double GAS call
+
+  // Muat setting untuk mengisi header meta spans (sekolah, tahun, dll.)
+  if(typeof loadSettingForm === 'function'){
+    google.script.run
+      .withFailureHandler(function(err){ console.warn('[initApp] getSetting gagal:', err && err.message); })
+      .withSuccessHandler(function(d){
+        if(typeof _applySettingToHeader_ === 'function') _applySettingToHeader_(d);
+        if(typeof initDashboardAcademicFilter === 'function') initDashboardAcademicFilter();
+        if(typeof refreshAcademicQuickInfo === 'function') refreshAcademicQuickInfo();
+      })
+      .getSetting();
+  }
+
+  // Sidebar: sync full profile once backend data has loaded (~1.5s)
+  if(typeof syncSidebarProfile_ === 'function'){
+    setTimeout(syncSidebarProfile_, 1500);
+  }
+
+  // Cek status lisensi badge
+  if(typeof checkLicenseStatusBadge === 'function'){
+    setTimeout(checkLicenseStatusBadge, 2000);
+  }
+
+  // Sembunyikan landing page dengan animasi
+  _hideLandingPage_();
+
+  // Mulai polling notifikasi
+  if(typeof startNotifPoll === 'function'){
+    setTimeout(startNotifPoll, 3000);
+  }
+
+  // Cek onboarding wizard (hanya sekali per akun)
+  setTimeout(_checkOnboarding_, 1500);
+}
+
+/* =================================================================
+   LICENSE STATUS BADGE — SCHOOL-WIDE (bukan per-user)
+   ================================================================= */
+function checkLicenseStatusBadge(){
+
+  const badge = document.getElementById('licenseBadge');
+  if (!badge) return;
+
+  google.script.run
+    .withFailureHandler(function(err){
+      console.warn('[GAS] checkLicenseStatusBadge:', err && err.message || err);
+    })
+    .withSuccessHandler(function(info){
+
+      if (!info) return; // SA/kepsek — tidak perlu badge
+
+      badge.style.display = 'inline-flex';
+
+      if (info.isActive) {
+        if (info.isTrial) {
+          badge.style.background = '#7c3aed';
+          badge.style.color      = '#fff';
+          badge.innerText        = '🎁 Trial: ' + info.daysLeft + ' hari';
+          if (info.daysLeft <= 7 && typeof showToast === 'function') {
+            showToast('⚠️ Masa trial hampir habis (' + info.daysLeft + ' hari). Aktifkan lisensi sekolah!', 'warning', 8000);
+          }
+        } else if (info.daysLeft <= 7) {
+          badge.style.background = '#dc2626';
+          badge.style.color      = '#fff';
+          badge.innerText        = '⛔ Lisensi: ' + info.daysLeft + ' hari';
+        } else if (info.daysLeft <= 14) {
+          badge.style.background = '#d97706';
+          badge.style.color      = '#fff';
+          badge.innerText        = '⚠️ Lisensi: ' + info.daysLeft + ' hari';
+        } else {
+          badge.style.background = '#059669';
+          badge.style.color      = '#fff';
+          badge.innerText        = '✅ Lisensi Aktif';
+        }
+      } else {
+        badge.style.background = '#dc2626';
+        badge.style.color      = '#fff';
+        badge.innerText        = '❌ Lisensi Tidak Aktif';
+        // Tampilkan info — tidak minta kode, guru tidak bisa aktivasi sendiri
+        if (typeof showToast === 'function') {
+          showToast('🔒 Lisensi sekolah tidak aktif. Hubungi admin sekolah untuk perpanjangan.', 'warning', 0);
+        }
+        if (typeof openLicenseModal === 'function') openLicenseModal();
+      }
+    })
+    .getSchoolLicenseInfo();
+}
+
+function showSoftPopup(title, html){
+  const div = document.createElement('div');
+  div.style = `
+    position:fixed;
+    bottom:24px;
+    right:24px;
+    max-width:320px;
+    background:#fff;
+    border-radius:16px;
+    padding:16px;
+    box-shadow:0 20px 40px rgba(0,0,0,.35);
+    z-index:99999;
+    animation:slideUp .35s ease-out;
+  `;
+  div.innerHTML = `
+    <h4 style="margin:0 0 6px">${title}</h4>
+    <div style="font-size:13px;line-height:1.6">${html}</div>
+  `;
+  document.body.appendChild(div);
+
+  setTimeout(()=>div.remove(), 8000);
+}
+
+// animasi
+const style = document.createElement('style');
+style.innerHTML = `
+@keyframes slideUp{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:translateY(0)}
+}`;
+document.head.appendChild(style);
+
+/*************************************************
+ * RENEW LICENSE UI (FINAL)
+ *************************************************/
+
+/* ================= OFFLINE INDICATOR ================= */
+function setOfflineBanner(show){
+  var b = document.getElementById('offlineBanner');
+  if(!b) return;
+  b.style.display = show ? 'block' : 'none';
+}
+// Check initial state on load
+if(!navigator.onLine) setOfflineBanner(true);
+window.addEventListener('online',  function(){ setOfflineBanner(false); if(typeof showToast==='function') showToast('✅ Koneksi internet kembali', 'success', 3000); });
+window.addEventListener('offline', function(){ setOfflineBanner(true);  if(typeof showToast==='function') showToast('⚡ Tidak ada koneksi internet', 'warning', 0); });
+
+/* ================= FOTO PREVIEW ================= */
+function previewFotoInput(input, previewId){
+  var img = document.getElementById(previewId);
+  if(!img) return;
+  if(input.files && input.files[0]){
+    var url = URL.createObjectURL(input.files[0]);
+    img.src = url;
+    img.style.display = 'block';
+    img.onload = function(){ URL.revokeObjectURL(url); };
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+  }
+}
+
+/* ================= NOTIFIKASI PANEL (SuperAdmin→Guru) ================= */
+var _notifPanelOpen = false;
+
+function toggleNotifPanel(){
+  _notifPanelOpen = !_notifPanelOpen;
+  var panel   = document.getElementById('notifPanel');
+  var overlay = document.getElementById('notifOverlay');
+  if(!panel) return;
+  panel.style.display   = _notifPanelOpen ? 'block' : 'none';
+  if(overlay) overlay.style.display = _notifPanelOpen ? 'block' : 'none';
+  if(_notifPanelOpen && typeof loadNotifGuru === 'function') loadNotifGuru();
+}
+
+// Poll notif badge setiap 5 menit — dikelola oleh startNotifPoll() di scripts-notif.html
+
+/* =================================================================
+   LANDING PAGE HELPERS
+   ================================================================= */
+function _hideLandingPage_(){
+  window._landingHidden = true; // guard against race condition
+  var lp = document.getElementById('landingPage');
+  if(!lp) return;
+  if(lp.style.display === 'none') return; // already hidden — nothing to animate
+  var pb = document.getElementById('landingProgressBar');
+  if(pb) pb.style.width = '100%';
+  setTimeout(function(){
+    lp.style.opacity = '0';
+    lp.style.transition = 'opacity 0.4s ease';
+    setTimeout(function(){ lp.style.display = 'none'; lp.style.opacity = ''; }, 450);
+  }, 200);
+}
+
+/* =================================================================
+   ONBOARDING WIZARD
+   ================================================================= */
+var _obStep = 1;
+var _obTotal = 3;
+var _obSteps = [
+  {icon:'⚙️', title:'Langkah 1: Setting Profil', body:'Lengkapi data sekolah, tahun ajaran, semester, dan upload logo sekolah di menu <b>Sistem → Setting</b>.'},
+  {icon:'👨‍🎓', title:'Langkah 2: Upload Data Siswa', body:'Download template data siswa, isi sesuai daftar siswa Anda, lalu upload di menu <b>Data Siswa</b>. Ini dibutuhkan untuk fitur absensi.'},
+  {icon:'📘', title:'Langkah 3: Mulai Buat Jurnal!', body:'Klik tombol <b>+ Jurnal</b> untuk memulai jurnal harian. Isi materi, lampirkan foto, dan catat kehadiran siswa. Selamat mengajar! 🎉'}
+];
+
+function _checkOnboarding_(){
+  try {
+    var email = window._appEmail || '';
+    if(!email) return;
+    var key = 'ONBD_v1_' + email.replace(/[^a-z0-9]/gi,'_');
+    if(localStorage.getItem(key)) return; // sudah pernah selesai
+    _obStep = 1;
+    _renderObStep_();
+    var m = document.getElementById('onboardingModal');
+    if(m){ m.style.display = 'flex'; }
+  } catch(e){}
+}
+
+function _renderObStep_(){
+  var s = _obSteps[_obStep - 1];
+  if(!s) return;
+  var content = document.getElementById('onboardingContent');
+  if(!content) return;
+  content.innerHTML =
+    '<div style="text-align:center;margin-bottom:16px;font-size:48px">' + s.icon + '</div>' +
+    '<h3 style="margin:0 0 10px;text-align:center;font-size:16px">' + s.title + '</h3>' +
+    '<p style="color:#6b7280;font-size:13px;line-height:1.6;text-align:center">' + s.body + '</p>';
+  // dots
+  var dots = document.getElementById('obDots');
+  if(dots){
+    dots.innerHTML = '';
+    for(var i=1;i<=_obTotal;i++){
+      var d = document.createElement('div');
+      d.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (i===_obStep?'#6366f1':'#d1d5db');
+      dots.appendChild(d);
+    }
+  }
+  var prev = document.getElementById('obPrevBtn');
+  var next = document.getElementById('obNextBtn');
+  if(prev) prev.style.display = _obStep > 1 ? 'inline-block' : 'none';
+  if(next) next.textContent = _obStep === _obTotal ? '✅ Mulai Sekarang' : 'Lanjut →';
+}
+
+function obNext_(){
+  if(_obStep < _obTotal){ _obStep++; _renderObStep_(); }
+  else { _finishOnboarding_(); }
+}
+function obPrev_(){ if(_obStep > 1){ _obStep--; _renderObStep_(); } }
+function _finishOnboarding_(){
+  try {
+    var email = window._appEmail || '';
+    if(email){
+      var key = 'ONBD_v1_' + email.replace(/[^a-z0-9]/gi,'_');
+      localStorage.setItem(key, '1');
+    }
+  } catch(e){}
+  var m = document.getElementById('onboardingModal');
+  if(m) m.style.display = 'none';
+}
+
+/* =================================================================
+   PANDUAN PER ROLE — TAB SWITCHER
+   ================================================================= */
+function switchPanduan_(role){
+  ['guru','kepsek','superadmin'].forEach(function(r){
+    var el = document.getElementById('panduan' + (r==='superadmin'?'SA':r.charAt(0).toUpperCase()+r.slice(1)));
+    if(el) el.style.display = r===role ? 'block' : 'none';
+    var btn = document.getElementById('panduanBtn' + (r==='superadmin'?'SA':r.charAt(0).toUpperCase()+r.slice(1)));
+    if(btn){
+      btn.style.background = r===role ? '#ede9fe' : '#f3f4f6';
+      btn.style.color      = r===role ? '#4338ca' : '#374151';
+      btn.style.fontWeight = r===role ? '600' : '400';
+    }
+  });
+}
+
+
+
+</script>
+

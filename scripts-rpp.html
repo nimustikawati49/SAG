@@ -1,0 +1,243 @@
+<!-- scripts-rpp.html — Generate RPP dari Jurnal / Modul Ajar -->
+<script>
+/* ============================================================
+   MODAL GENERATE RPP DARI JURNAL
+   ============================================================ */
+
+var _rppJurnalId_  = null;
+var _rppModulList_ = [];
+
+/**
+ * Buka modal Generate RPP dari Jurnal.
+ * Dipanggil dari tombol di tabel jurnal.
+ */
+function openRppFromJurnal(jurnalId, kelasLabel, materiLabel) {
+  _rppJurnalId_ = jurnalId;
+  var m = document.getElementById('modalRppJurnal');
+  if (!m) return;
+
+  document.getElementById('rppJurnalKelas').textContent  = kelasLabel || '-';
+  document.getElementById('rppJurnalMateri').textContent = materiLabel || '-';
+  document.getElementById('rppJurnalModulBox').innerHTML = '<span class="muted">⏳ Memuat modul terkait...</span>';
+  document.getElementById('rppJurnalOutput').value = 'gdocs';
+  document.getElementById('rppJurnalBtn').disabled  = false;
+  document.getElementById('rppJurnalBtn').textContent = '📄 Generate RPP';
+  m.style.display = 'flex';
+
+  // Ambil daftar modul yang cocok dengan jurnal
+  google.script.run
+    .withSuccessHandler(function(modules) {
+      _rppModulList_ = modules || [];
+      var box = document.getElementById('rppJurnalModulBox');
+      if (!_rppModulList_.length) {
+        box.innerHTML = '<p class="muted" style="font-size:12px;margin:0">⚠️ Tidak ada Modul Ajar yang cocok untuk kelas ini. RPP akan dibuat tanpa data modul.</p>';
+        return;
+      }
+      var opts = '<label style="font-size:12px;color:#374151;font-weight:600">Pilih Modul Ajar (opsional)</label>' +
+        '<select id="rppModulSelect" style="width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">' +
+        '<option value="">— Tanpa modul —</option>';
+      _rppModulList_.forEach(function(m) {
+        opts += '<option value="' + _escRpp_(String(m.id)) + '">' +
+          _escRpp_(m.mapel) + ' — Bab ' + _escRpp_(m.bab) + ': ' + _escRpp_(m.judul) + '</option>';
+      });
+      opts += '</select>';
+      box.innerHTML = opts;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('rppJurnalModulBox').innerHTML =
+        '<p class="muted" style="font-size:12px;margin:0">⚠️ Gagal muat modul: ' + _escRpp_(err.message) + '</p>';
+    })
+    .getModulForJurnal(jurnalId);
+}
+
+function closeRppJurnalModal() {
+  var m = document.getElementById('modalRppJurnal');
+  if (m) m.style.display = 'none';
+}
+
+function doGenerateRppFromJurnal() {
+  var btn = document.getElementById('rppJurnalBtn');
+  if (!_rppJurnalId_) return;
+  var modulId    = (document.getElementById('rppModulSelect') || {}).value || '';
+  var outputFmt  = (document.getElementById('rppJurnalOutput') || {}).value || 'gdocs';
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Membuat RPP...';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled    = false;
+      btn.textContent = '📄 Generate RPP';
+      closeRppJurnalModal();
+      _showRppResult_(res);
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled    = false;
+      btn.textContent = '📄 Generate RPP';
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal generate RPP'), 'error');
+    })
+    .generateRppFromJurnal(_rppJurnalId_, modulId || null, outputFmt);
+}
+
+/* ============================================================
+   MODAL GENERATE RPP DARI MODUL AJAR
+   ============================================================ */
+
+var _rppModulId_ = null;
+
+/**
+ * Buka modal Generate RPP dari Modul Ajar.
+ */
+function openRppFromModul(modulId, mapelLabel, kelasLabel, judulLabel) {
+  _rppModulId_ = modulId;
+  var m = document.getElementById('modalRppModul');
+  if (!m) return;
+
+  document.getElementById('rppModulMapel').textContent = mapelLabel || '-';
+  document.getElementById('rppModulKelas').textContent = kelasLabel || '-';
+  document.getElementById('rppModulJudul').textContent = judulLabel || '-';
+  document.getElementById('rppModulOutput').value = 'gdocs';
+  document.getElementById('rppModulBtn').disabled = false;
+  document.getElementById('rppModulBtn').textContent = '📄 Generate RPP';
+  m.style.display = 'flex';
+}
+
+function closeRppModulModal() {
+  var m = document.getElementById('modalRppModul');
+  if (m) m.style.display = 'none';
+}
+
+function doGenerateRppFromModul() {
+  var btn = document.getElementById('rppModulBtn');
+  if (!_rppModulId_) return;
+  var outputFmt = (document.getElementById('rppModulOutput') || {}).value || 'gdocs';
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Membuat RPP...';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled    = false;
+      btn.textContent = '📄 Generate RPP';
+      closeRppModulModal();
+      _showRppResult_(res);
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled    = false;
+      btn.textContent = '📄 Generate RPP';
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal generate RPP'), 'error');
+    })
+    .generateRppFromModul(_rppModulId_, outputFmt);
+}
+
+/* ============================================================
+   RESULT MODAL
+   ============================================================ */
+
+function _showRppResult_(res) {
+  var m = document.getElementById('modalRppResult');
+  if (!m) {
+    // Fallback: toast + buka URL
+    if (res.format === 'docx') {
+      window.open(res.url, '_blank');
+    } else {
+      window.open(res.url, '_blank');
+    }
+    if (typeof showToast === 'function') showToast('✅ RPP berhasil dibuat: ' + res.name, 'success');
+    return;
+  }
+
+  document.getElementById('rppResultName').textContent = res.name;
+
+  var actionsEl = document.getElementById('rppResultActions');
+  actionsEl.innerHTML = '';
+
+  if (res.format === 'docx') {
+    // Tombol download DOCX + buka Google Docs
+    actionsEl.innerHTML =
+      '<a href="' + res.url + '" target="_blank" ' +
+        'style="display:inline-block;background:linear-gradient(135deg,#2563eb,#60a5fa);color:#fff;text-decoration:none;' +
+        'border-radius:10px;padding:10px 20px;font-weight:600;font-size:14px;margin-right:8px">' +
+        '⬇️ Download DOCX</a>' +
+      '<a href="' + res.docUrl + '" target="_blank" ' +
+        'style="display:inline-block;background:linear-gradient(135deg,#059669,#34d399);color:#fff;text-decoration:none;' +
+        'border-radius:10px;padding:10px 20px;font-weight:600;font-size:14px">' +
+        '📄 Buka Google Docs</a>';
+  } else {
+    actionsEl.innerHTML =
+      '<a href="' + res.url + '" target="_blank" ' +
+        'style="display:inline-block;background:linear-gradient(135deg,#059669,#34d399);color:#fff;text-decoration:none;' +
+        'border-radius:10px;padding:10px 20px;font-weight:600;font-size:14px">' +
+        '📄 Buka RPP di Google Docs</a>';
+  }
+
+  m.style.display = 'flex';
+}
+
+function closeRppResultModal() {
+  var m = document.getElementById('modalRppResult');
+  if (m) m.style.display = 'none';
+}
+
+/* ============================================================
+   SUPERADMIN: LOAD & SAVE KONFIGURASI TEMPLATE RPP
+   ============================================================ */
+
+function loadRppTemplateConfig() {
+  google.script.run
+    .withSuccessHandler(function(cfg) {
+      var info = document.getElementById('rppTemplateInfo');
+      if (info) {
+        var tPart = cfg.templateId
+          ? '📄 Template: <a href="' + cfg.templateUrl + '" target="_blank" style="color:#4338ca">' + _escRpp_(cfg.templateName) + '</a>'
+          : '📄 Template: <span class="muted">Belum dikonfigurasi</span>';
+        var fPart = cfg.folderId
+          ? '&nbsp;|&nbsp;📁 Folder: <a href="' + cfg.folderUrl + '" target="_blank" style="color:#4338ca">' + _escRpp_(cfg.folderName) + '</a>'
+          : '&nbsp;|&nbsp;📁 Folder: <span class="muted">Default (RPP_HASIL)</span>';
+        info.innerHTML = tPart + fPart;
+      }
+      var kepsekNamaEl = document.getElementById('rppKepsekNama');
+      var kepsekNipEl  = document.getElementById('rppKepsekNip');
+      if (kepsekNamaEl) kepsekNamaEl.value = cfg.kepsekNama || '';
+      if (kepsekNipEl)  kepsekNipEl.value  = cfg.kepsekNip  || '';
+    })
+    .withFailureHandler(function(err) {
+      var info = document.getElementById('rppTemplateInfo');
+      if (info) info.innerHTML = '<span class="muted">❌ ' + _escRpp_(err.message) + '</span>';
+    })
+    .getRppTemplateConfig();
+}
+
+function saveRppTemplateConfig() {
+  var templateInput = (document.getElementById('rppTemplateInput') || {}).value || '';
+  var folderInput   = (document.getElementById('rppFolderInput')   || {}).value || '';
+  var kepsekNama    = (document.getElementById('rppKepsekNama')    || {}).value || '';
+  var kepsekNip     = (document.getElementById('rppKepsekNip')     || {}).value || '';
+
+  var btn = document.getElementById('rppConfigSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      if (typeof showToast === 'function') showToast('✅ Konfigurasi template RPP disimpan', 'success');
+      loadRppTemplateConfig();
+      // Reset input
+      if (document.getElementById('rppTemplateInput')) document.getElementById('rppTemplateInput').value = '';
+      if (document.getElementById('rppFolderInput'))   document.getElementById('rppFolderInput').value   = '';
+    })
+    .withFailureHandler(function(err) {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menyimpan'), 'error');
+    })
+    .setRppTemplateConfig({ templateInput: templateInput, folderInput: folderInput, kepsekNama: kepsekNama, kepsekNip: kepsekNip });
+}
+
+/* ============================================================
+   UTILS
+   ============================================================ */
+
+function _escRpp_(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+</script>

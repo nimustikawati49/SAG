@@ -1,0 +1,580 @@
+<script>
+/* ============================================================
+   scripts-kepsek.html — Dashboard Kepala Sekolah
+   Menampilkan rekap aktivitas semua guru di sekolah (read-only).
+   ============================================================ */
+
+var _kepsekLoaded = false;
+
+/** Dipanggil saat tab rekap sekolah dibuka */
+function initDashboardKepsek() {
+  if (_kepsekLoaded) return; // Jangan reload jika sudah ada data
+  loadRekapSekolah();
+}
+
+function loadRekapSekolah() {
+  _kepsekLoaded = false;
+
+  // Tampilkan skeleton
+  var container = document.getElementById('kepsekContainer');
+  if (container) {
+    container.innerHTML = _kepsekSkeleton_();
+  }
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      _kepsekLoaded = false;
+      var c = document.getElementById('kepsekContainer');
+      if (c) c.innerHTML =
+        '<div class="alert-banner error">❌ Gagal memuat data: ' +
+        (err && err.message ? err.message : 'Coba refresh halaman') + '</div>';
+    })
+    .withSuccessHandler(function(data) {
+      _kepsekLoaded = true;
+      _renderRekapSekolah_(data);
+    })
+    .getRekapSekolah();
+}
+
+function _kepsekSkeleton_() {
+  var rows = '';
+  for (var i = 0; i < 5; i++) {
+    rows += '<tr>' + '<td><div class="skeleton" style="height:13px;width:80%"></div></td>'.repeat(7) + '</tr>';
+  }
+  return '<div class="skeleton" style="height:80px;margin-bottom:18px;border-radius:14px"></div>' +
+         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">' +
+         '<div class="skeleton" style="height:72px;border-radius:14px"></div>'.repeat(4) +
+         '</div>' +
+         '<div class="skeleton" style="height:16px;width:30%;margin-bottom:10px"></div>' +
+         '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse"><tbody>' + rows + '</tbody></table></div>';
+}
+
+function _renderRekapSekolah_(data) {
+  var container = document.getElementById('kepsekContainer');
+  if (!container) return;
+
+  var html = '';
+
+  // ── Header info sekolah ──
+  html += '<div style="background:linear-gradient(135deg,#1e3a8a,#6366f1);color:#fff;border-radius:18px;padding:20px 24px;margin-bottom:20px">' +
+    '<h2 style="margin:0 0 6px;font-size:20px;font-weight:800">🏫 ' + _esc(data.sekolah || 'Sekolah') + '</h2>' +
+    '<div style="font-size:13px;opacity:.85">Tahun: <b>' + _esc(data.tahun_pelajaran || '-') + '</b> &nbsp;·&nbsp; Semester: <b>' + _esc(data.semester || '-') + '</b></div>' +
+    '<div style="font-size:12px;opacity:.7;margin-top:4px">Bulan aktif: ' + _esc(data.bulanLabel || '') + '</div>' +
+    '</div>';
+
+  // ── KPI Cards ──
+  var kpis = [
+    { label: 'Total Guru Aktif',    value: data.totalGuru,       icon: '👨‍🏫', color: '#3b82f6' },
+    { label: 'Guru Mengisi Jurnal', value: data.guruAktif,       icon: '✅', color: '#22c55e' },
+    { label: 'Jurnal Bulan Ini',    value: data.totalJurnalBulan,icon: '📘', color: '#6366f1' },
+    { label: 'Total Siswa',         value: data.totalSiswa,       icon: '🎓', color: '#f97316' }
+  ];
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:14px;margin-bottom:24px">';
+  kpis.forEach(function(k) {
+    html += '<div class="card stat" style="border-top:3px solid ' + k.color + ';padding:14px 16px">' +
+      '<div class="label">' + k.icon + ' ' + k.label + '</div>' +
+      '<div class="value" style="color:' + k.color + '">' + k.value + '</div>' +
+      '</div>';
+  });
+  html += '</div>';
+
+  // ── Filter absensi + Export ──
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">' +
+    '<button onclick="loadRekapAbsensiSekolah()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📊 Rekap Kehadiran</button>' +
+    '<button onclick="_exportRekapSekolahExcel_()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📥 Export Excel</button>' +
+    '<button onclick="loadEarlyWarning()" style="background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">⚠️ Early Warning</button>' +
+    '<button onclick="loadRaportAbsensi()" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📋 Raport Siswa</button>' +
+    '<button onclick="loadRekapSekolah()" class="ghost" style="font-size:13px;padding:8px 14px;border-radius:10px">🔄 Refresh</button>' +
+    '</div>';
+
+  // ── Warning: guru tidak aktif ──
+  var guruTidakAktif = (data.guruList || []).filter(function(g) { return g.statusJurnal !== 'aktif'; });
+  if (guruTidakAktif.length > 0) {
+    html += '<div class="alert-banner warning" style="margin-bottom:16px">⚠️ <b>' + guruTidakAktif.length + ' guru</b> belum mengisi jurnal bulan ini.</div>';
+  }
+
+  // ── Tabel daftar guru (responsive, no horizontal scroll) ──
+  html += '<div style="width:100%;overflow:hidden">' +
+    '<table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+    '<colgroup>' +
+    '<col style="width:26%">' +
+    '<col style="width:13%">' +
+    '<col style="width:10%">' +
+    '<col style="width:9%">' +
+    '<col style="width:22%">' +
+    '<col style="width:20%">' +
+    '</colgroup>' +
+    '<thead><tr>' +
+    '<th style="text-align:left;padding:8px 10px">Guru</th>' +
+    '<th style="padding:8px 6px">Jurnal Bulan</th>' +
+    '<th style="padding:8px 6px">Total</th>' +
+    '<th style="padding:8px 6px">Kelas</th>' +
+    '<th style="padding:8px 6px;text-align:left">Jurnal Terakhir</th>' +
+    '<th style="padding:8px 6px">Status</th>' +
+    '</tr></thead><tbody>';
+
+  if (!data.guruList || data.guruList.length === 0) {
+    html += '<tr><td colspan="6" class="muted" style="padding:16px;text-align:center">Belum ada guru aktif.</td></tr>';
+  } else {
+    data.guruList.forEach(function(g) {
+      var statusBg =
+        g.statusJurnal === 'aktif'       ? '#dcfce7' :
+        g.statusJurnal === 'tidak_aktif' ? '#fef9c3' : '#fee2e2';
+      var statusColor =
+        g.statusJurnal === 'aktif'       ? '#166534' :
+        g.statusJurnal === 'tidak_aktif' ? '#854d0e' : '#991b1b';
+      var statusLabel =
+        g.statusJurnal === 'aktif'       ? '✅ Aktif' :
+        g.statusJurnal === 'tidak_aktif' ? '⚠️ Tdk Aktif' : '❌ Belum';
+
+      html += '<tr>' +
+        '<td style="padding:8px 10px;overflow:hidden">' +
+          '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px" title="' + _esc(g.nama) + '">' + _esc(g.nama) + '</div>' +
+          '<div style="font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _esc(g.email) + '">' + _esc(g.email) + '</div>' +
+        '</td>' +
+        '<td style="padding:8px 6px;text-align:center"><b style="font-size:15px">' + g.totalJurnalBulan + '</b></td>' +
+        '<td style="padding:8px 6px;text-align:center;font-size:13px">' + g.totalJurnal + '</td>' +
+        '<td style="padding:8px 6px;text-align:center;font-size:13px">' + g.totalKelas + '</td>' +
+        '<td style="padding:8px 6px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _esc(g.lastJurnal) + '">' + _esc(g.lastJurnal) + '</td>' +
+        '<td style="padding:8px 6px;text-align:center"><span style="background:' + statusBg + ';color:' + statusColor + ';padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap">' + statusLabel + '</span></td>' +
+        '</tr>';
+    });
+  }
+
+  html += '</tbody></table></div>';
+  html += '<div id="kepsekAbsensiSection" style="margin-top:24px"></div>';
+
+  // Charts + Early Warning + Raport section placeholders
+  html += '<div id="kepsekChartsSection" style="margin-top:28px"></div>';
+  html += '<div id="kepsekEarlyWarningSection" style="margin-top:32px"></div>';
+  html += '<div id="kepsekRaportSection" style="margin-top:32px"></div>';
+  container.innerHTML = html;
+
+  // Auto-load charts + early warning
+  setTimeout(loadKepsekCharts, 300);
+  setTimeout(loadEarlyWarning, 600);
+}
+
+function loadRekapAbsensiSekolah() {
+  var dari   = document.getElementById('kepsekDari')   ? document.getElementById('kepsekDari').value   : '';
+  var sampai = document.getElementById('kepsekSampai') ? document.getElementById('kepsekSampai').value : '';
+
+  var section = document.getElementById('kepsekAbsensiSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:200px;border-radius:14px;margin-top:8px"></div>';
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ ' + (err && err.message || 'Gagal memuat rekap absensi') + '</div>';
+    })
+    .withSuccessHandler(function(rows) {
+      _renderAbsensiSekolah_(rows, section);
+    })
+    .getRekapAbsensiSekolah(dari, sampai);
+}
+
+function _renderAbsensiSekolah_(rows, container) {
+  if (!rows || rows.length === 0) {
+    container.innerHTML = '<div class="alert-banner info">ℹ️ Tidak ada data absensi dalam rentang tanggal ini.</div>';
+    return;
+  }
+
+  var html = '<h3 style="margin:0 0 12px;font-size:15px">📊 Rekap Kehadiran per Kelas</h3>' +
+    '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+    '<colgroup><col style="width:11%"><col style="width:28%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:9%"><col style="width:20%"></colgroup>' +
+    '<thead><tr><th style="padding:7px 8px">Kelas</th><th style="padding:7px 8px;text-align:left">Guru</th><th style="padding:7px 4px">H</th><th style="padding:7px 4px">S</th><th style="padding:7px 4px">I</th><th style="padding:7px 4px">A</th><th style="padding:7px 4px">Total</th><th style="padding:7px 8px">% Hadir</th></tr></thead>' +
+    '<tbody>';
+
+  rows.forEach(function(r, idx) {
+    var pColor = r.persen >= 80 ? '#166534' : r.persen >= 60 ? '#854d0e' : '#991b1b';
+    var pBg    = r.persen >= 80 ? '#dcfce7' : r.persen >= 60 ? '#fef9c3' : '#fee2e2';
+    html += '<tr>' +
+      '<td style="padding:7px 8px;font-weight:700;font-size:13px">' + _esc(r.kelas) + '</td>' +
+      '<td style="padding:7px 8px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _esc(r.guru) + '">' + _esc(r.guru) + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#166534;font-weight:700">' + r.H + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#854d0e">' + r.S + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#1e40af">' + r.I + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#991b1b;font-weight:700">' + r.A + '</td>' +
+      '<td style="padding:7px 4px;text-align:center">' + r.total + '</td>' +
+      '<td style="padding:7px 8px;text-align:center"><span style="background:' + pBg + ';color:' + pColor + ';padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700">' + r.persen + '%</span></td>' +
+      '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function _esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CHART.JS — Tren Jurnal & Distribusi Kehadiran
+   ───────────────────────────────────────────────────────────── */
+var _kepsekChartTren   = null;
+var _kepsekChartAbsen  = null;
+
+function loadKepsekCharts() {
+  var section = document.getElementById('kepsekChartsSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:260px;border-radius:14px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(d) {
+      _renderKepsekCharts_(d, section);
+    })
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ Gagal memuat chart: ' + _esc(err.message || '') + '</div>';
+    })
+    .getJurnalChartData();
+}
+
+function _renderKepsekCharts_(d, section) {
+  var isDark  = document.body.classList.contains('dark');
+  var fg      = isDark ? '#e2e8f0' : '#1f2937';
+  var fgMuted = isDark ? '#94a3b8' : '#6b7280';
+  var gridClr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
+  var cardBg  = isDark ? '#1e293b' : '#ffffff';
+
+  section.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">' +
+      '<div style="width:3px;height:20px;background:linear-gradient(180deg,#6366f1,#8b5cf6);border-radius:2px"></div>' +
+      '<h3 style="margin:0;font-size:15px;font-weight:700;color:' + fg + '">Grafik Aktivitas Sekolah</h3>' +
+    '</div>' +
+    '<div class="dash-grid">' +
+      /* Card tren jurnal - mirip dashboard */
+      '<div class="card" style="background:' + cardBg + '">' +
+        '<h3 style="margin:0 0 4px;font-size:14px;font-weight:700;color:' + fg + '">📅 Tren Jurnal</h3>' +
+        '<p style="margin:0 0 14px;font-size:12px;color:' + fgMuted + '">4 Minggu Terakhir</p>' +
+        '<canvas id="chartTrenJurnal" style="max-height:240px!important;height:240px!important"></canvas>' +
+      '</div>' +
+      /* Card distribusi kehadiran */
+      '<div class="card" style="background:' + cardBg + '">' +
+        '<h3 style="margin:0 0 4px;font-size:14px;font-weight:700;color:' + fg + '">📊 Distribusi Kehadiran</h3>' +
+        '<p style="margin:0 0 14px;font-size:12px;color:' + fgMuted + '">Total Semua Kelas</p>' +
+        '<canvas id="chartAbsensiDist" style="max-height:240px!important;height:240px!important"></canvas>' +
+      '</div>' +
+    '</div>';
+
+  /* ── Tren line chart ── */
+  var ctxTren = document.getElementById('chartTrenJurnal');
+  if (ctxTren && typeof Chart !== 'undefined') {
+    if (_kepsekChartTren) { _kepsekChartTren.destroy(); _kepsekChartTren = null; }
+    _kepsekChartTren = new Chart(ctxTren, {
+      type: 'line',
+      data: {
+        labels: d.labels || [],
+        datasets: [{
+          label: 'Jurnal Masuk',
+          data: d.weekly || [],
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.10)',
+          fill: true,
+          tension: 0.42,
+          pointBackgroundColor: '#6366f1',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2.5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 900, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { labels: { color: fg, font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 } }
+        },
+        scales: {
+          x: { ticks: { color: fgMuted, font: { size: 10 }, maxRotation: 0 }, grid: { color: gridClr } },
+          y: { ticks: { color: fgMuted, font: { size: 10 },
+              callback: function(v) { return Number.isInteger(v) ? v : ''; } },
+            grid: { color: gridClr }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  /* ── Distribusi doughnut chart ── */
+  var abs = d.absence || {};
+  var ctxPie = document.getElementById('chartAbsensiDist');
+  if (ctxPie && typeof Chart !== 'undefined') {
+    if (_kepsekChartAbsen) { _kepsekChartAbsen.destroy(); _kepsekChartAbsen = null; }
+    _kepsekChartAbsen = new Chart(ctxPie, {
+      type: 'doughnut',
+      data: {
+        labels: ['Hadir (H)', 'Sakit (S)', 'Izin (I)', 'Alpha (A)'],
+        datasets: [{
+          data: [abs.H || 0, abs.S || 0, abs.I || 0, abs.A || 0],
+          backgroundColor: ['#22c55e', '#facc15', '#60a5fa', '#f87171'],
+          hoverBackgroundColor: ['#16a34a', '#eab308', '#3b82f6', '#ef4444'],
+          borderWidth: 0,
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { animateScale: true, animateRotate: true, duration: 900 },
+        cutout: '62%',
+        plugins: {
+          legend: { position: 'bottom',
+            labels: { color: fg, font: { size: 11 }, padding: 12, usePointStyle: true, pointStyleWidth: 8 } }
+        }
+      }
+    });
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EARLY WARNING — Siswa Bermasalah
+   ───────────────────────────────────────────────────────────── */
+function loadEarlyWarning() {
+  var section = document.getElementById('kepsekEarlyWarningSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:120px;border-radius:14px"></div>';
+
+  var threshold = parseInt((document.getElementById('ewThreshold') || {}).value || '75', 10);
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _renderEarlyWarning_(rows, section, threshold);
+    })
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal') + '</div>';
+    })
+    .getEarlyWarningSiswa(threshold);
+}
+
+function _renderEarlyWarning_(rows, section, threshold) {
+  if (!rows || rows.length === 0) {
+    section.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<h3 style="margin:0;font-size:15px">⚠️ Early Warning Siswa (Kehadiran &lt;' + (threshold||75) + '%)</h3>' +
+        _ewControls_(threshold) +
+      '</div>' +
+      '<div class="alert-banner" style="background:#dcfce7;border-color:#22c55e;color:#166534">✅ Tidak ada siswa berisiko. Semua di atas ' + (threshold||75) + '% kehadiran.</div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+    '<h3 style="margin:0;font-size:15px">⚠️ Early Warning Siswa <span style="background:#fee2e2;color:#991b1b;border-radius:999px;padding:2px 10px;font-size:12px;margin-left:6px">' + rows.length + ' siswa</span></h3>' +
+    _ewControls_(threshold) +
+    '</div>' +
+    '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+    '<colgroup><col style="width:6%"><col style="width:10%"><col style="width:24%"><col style="width:10%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:14%"></colgroup>' +
+    '<thead><tr><th style="padding:7px 6px">No</th><th style="padding:7px 6px">Kelas</th><th style="padding:7px 8px;text-align:left">Nama</th><th style="padding:7px 6px">NIS</th><th style="padding:7px 4px">H</th><th style="padding:7px 4px">S</th><th style="padding:7px 4px">I</th><th style="padding:7px 4px">A</th><th style="padding:7px 4px">Total</th><th style="padding:7px 6px">% Hadir</th>' +
+    '</tr></thead><tbody>';
+
+  rows.forEach(function(r, idx) {
+    var pct   = r.persen;
+    var pBg   = pct < 50 ? '#fee2e2' : '#fef9c3';
+    var pClr  = pct < 50 ? '#991b1b' : '#854d0e';
+    html += '<tr>' +
+      '<td>' + (idx + 1) + '</td>' +
+      '<td><b>' + _esc(r.kelas) + '</b></td>' +
+      '<td class="left">' + _esc(r.nama) + '</td>' +
+      '<td style="font-size:12px">' + _esc(r.nis) + '</td>' +
+      '<td style="color:#166534;font-weight:700">' + r.H + '</td>' +
+      '<td style="color:#854d0e">' + r.S + '</td>' +
+      '<td style="color:#1e40af">' + r.I + '</td>' +
+      '<td style="color:#991b1b;font-weight:700">' + r.A + '</td>' +
+      '<td>' + r.total + '</td>' +
+      '<td><span style="background:' + pBg + ';color:' + pClr + ';padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">' + pct + '%</span></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  section.innerHTML = html;
+}
+
+function _ewControls_(threshold) {
+  return '<div style="display:flex;gap:8px;align-items:center">' +
+    '<label style="font-size:12px;color:#6b7280">Threshold:</label>' +
+    '<input id="ewThreshold" type="number" min="1" max="100" value="' + (threshold || 75) + '" style="width:60px;padding:4px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px" />' +
+    '<button onclick="loadEarlyWarning()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">🔍 Filter</button>' +
+    '<button onclick="_exportEWExcel_()" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">📥 Excel</button>' +
+    '</div>';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RAPORT ABSENSI SISWA
+   ───────────────────────────────────────────────────────────── */
+function loadRaportAbsensi() {
+  var section = document.getElementById('kepsekRaportSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:200px;border-radius:14px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _renderRaportAbsensi_(rows, section);
+    })
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal') + '</div>';
+    })
+    .getRaportAbsensiSiswa();
+}
+
+function _renderRaportAbsensi_(rows, section) {
+  if (!rows || rows.length === 0) {
+    section.innerHTML =
+      '<h3 style="margin:0 0 10px;font-size:15px">📋 Raport Absensi Siswa</h3>' +
+      '<div class="alert-banner info">ℹ️ Belum ada data absensi siswa.</div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">' +
+    '<h3 style="margin:0;font-size:15px">📋 Raport Absensi Siswa (' + rows.length + ' siswa)</h3>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button onclick="_exportRaportExcel_()" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600">📥 Excel</button>' +
+      '<button onclick="_printRaport_()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600">🖨️ Print/PDF</button>' +
+    '</div>' +
+    '</div>' +
+    '<div style="width:100%;overflow:hidden"><table id="raportTable" style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+    '<colgroup><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:24%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:14%"></colgroup>' +
+    '<thead><tr><th style="padding:7px 6px">No</th><th style="padding:7px 6px">Kelas</th><th style="padding:7px 6px">NIS</th><th style="padding:7px 8px;text-align:left">Nama</th><th style="padding:7px 4px">H</th><th style="padding:7px 4px">S</th><th style="padding:7px 4px">I</th><th style="padding:7px 4px">A</th><th style="padding:7px 4px">Total</th><th style="padding:7px 6px">% Hadir</th>' +
+    '</tr></thead><tbody>';
+
+  rows.forEach(function(r, idx) {
+    var pct  = r.persen;
+    var pBg  = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef9c3' : '#fee2e2';
+    var pClr = pct >= 80 ? '#166534' : pct >= 60 ? '#854d0e' : '#991b1b';
+    html += '<tr>' +
+      '<td style="padding:7px 6px;text-align:center">' + (idx + 1) + '</td>' +
+      '<td style="padding:7px 6px;font-weight:700;font-size:12px">' + _esc(r.kelas) + '</td>' +
+      '<td style="padding:7px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="' + _esc(r.nama) + '">' + _esc(r.nama) + '</td>' +
+      '<td style="padding:7px 6px;text-align:center;font-size:11px">' + _esc(r.nis) + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#166534;font-weight:700">' + r.H + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#854d0e">' + r.S + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#1e40af">' + r.I + '</td>' +
+      '<td style="padding:7px 4px;text-align:center;color:#991b1b;font-weight:700">' + r.A + '</td>' +
+      '<td style="padding:7px 4px;text-align:center">' + r.total + '</td>' +
+      '<td style="padding:7px 6px;text-align:center"><span style="background:' + pBg + ';color:' + pClr + ';padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700">' + pct + '%</span></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  section.innerHTML = html;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRINT / PDF Raport
+   ───────────────────────────────────────────────────────────── */
+function _printRaport_() {
+  var table = document.getElementById('raportTable');
+  if (!table) {
+    if (typeof showToast === 'function') showToast('⚠️ Muat raport dulu sebelum print', 'warning');
+    return;
+  }
+  var win = window.open('', '_blank');
+  win.document.write('<html><head><title>Raport Absensi Siswa</title>' +
+    '<style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f3f4f6;font-weight:700}tr:nth-child(even){background:#f9fafb}</style>' +
+    '</head><body>' +
+    '<h2 style="margin-bottom:4px">Raport Absensi Siswa</h2>' +
+    '<p style="color:#666;margin-bottom:12px">Dicetak: ' + new Date().toLocaleDateString('id-ID') + '</p>' +
+    table.outerHTML +
+    '</body></html>');
+  win.document.close();
+  win.print();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EXPORT EXCEL — Early Warning + Raport
+   ───────────────────────────────────────────────────────────── */
+function _exportEWExcel_() {
+  if (typeof XLSX === 'undefined') { if (typeof showToast === 'function') showToast('⏳ Library belum siap', 'warning'); return; }
+  if (typeof showToast === 'function') showToast('⏳ Menyiapkan Excel...', 'info', 3000);
+
+  var thresh = parseInt((document.getElementById('ewThreshold') || {}).value || '75', 10);
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var wb   = XLSX.utils.book_new();
+      var data = [['No', 'Kelas', 'Nama', 'NIS', 'H', 'S', 'I', 'A', 'Total', '% Hadir']];
+      (rows || []).forEach(function(r, i) {
+        data.push([i + 1, r.kelas, r.nama, r.nis, r.H, r.S, r.I, r.A, r.total, r.persen + '%']);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [4,10,25,15,5,5,5,5,8,10].map(function(w){ return {wch:w}; });
+      XLSX.utils.book_append_sheet(wb, ws, 'Early Warning');
+      XLSX.writeFile(wb, 'EarlyWarning_' + thresh + 'pct.xlsx');
+      if (typeof showToast === 'function') showToast('✅ File Excel diunduh', 'success');
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .getEarlyWarningSiswa(thresh);
+}
+
+function _exportRaportExcel_() {
+  if (typeof XLSX === 'undefined') { if (typeof showToast === 'function') showToast('⏳ Library belum siap', 'warning'); return; }
+  if (typeof showToast === 'function') showToast('⏳ Menyiapkan Excel...', 'info', 3000);
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var wb   = XLSX.utils.book_new();
+      var data = [['No', 'Kelas', 'NIS', 'Nama', 'H', 'S', 'I', 'A', 'Total', '% Hadir']];
+      (rows || []).forEach(function(r, i) {
+        data.push([i + 1, r.kelas, r.nis, r.nama, r.H, r.S, r.I, r.A, r.total, r.persen + '%']);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [4,10,15,25,5,5,5,5,8,10].map(function(w){ return {wch:w}; });
+      XLSX.utils.book_append_sheet(wb, ws, 'Raport Absensi');
+      XLSX.writeFile(wb, 'Raport_Absensi_Siswa.xlsx');
+      if (typeof showToast === 'function') showToast('✅ File Excel diunduh', 'success');
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .getRaportAbsensiSiswa();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EXPORT EXCEL — Rekap Guru + Kehadiran
+───────────────────────────────────────────────────────────── */
+function _exportRekapSekolahExcel_() {
+  if (typeof XLSX === 'undefined') {
+    if (typeof showToast === 'function') showToast('⏳ Library belum siap, coba lagi sesaat.', 'warning');
+    return;
+  }
+  if (typeof showToast === 'function') showToast('⏳ Menyiapkan file Excel...', 'info', 3000);
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err && err.message || 'Gagal'), 'error');
+    })
+    .withSuccessHandler(function(data) {
+      var wb = XLSX.utils.book_new();
+
+      // Sheet 1: Rekap Guru
+      var guruRows = [['No','Nama Guru','Email','Jurnal Bulan Ini','Total Jurnal','Kelas','Jurnal Terakhir','Status']];
+      (data.guruList || []).forEach(function(g, i) {
+        guruRows.push([i+1, g.nama, g.email, g.totalJurnalBulan, g.totalJurnal, g.totalKelas, g.lastJurnal, g.statusJurnal]);
+      });
+      var wsGuru = XLSX.utils.aoa_to_sheet(guruRows);
+      // Column widths
+      wsGuru['!cols'] = [5,25,30,16,14,10,18,14].map(function(w){ return {wch:w}; });
+      XLSX.utils.book_append_sheet(wb, wsGuru, 'Rekap Guru');
+
+      // Sheet 2: Info Sekolah
+      var infoRows = [
+        ['Sekolah', data.sekolah || ''],
+        ['Tahun Pelajaran', data.tahun_pelajaran || ''],
+        ['Semester', data.semester || ''],
+        ['Bulan Rekap', data.bulanLabel || ''],
+        ['Total Guru', data.totalGuru],
+        ['Guru Aktif (Jurnal)', data.guruAktif],
+        ['Jurnal Bulan Ini', data.totalJurnalBulan],
+        ['Total Siswa', data.totalSiswa],
+        ['Dicetak', new Date().toLocaleDateString('id-ID')]
+      ];
+      var wsInfo = XLSX.utils.aoa_to_sheet(infoRows);
+      wsInfo['!cols'] = [{wch:20},{wch:30}];
+      XLSX.utils.book_append_sheet(wb, wsInfo, 'Info Sekolah');
+
+      var fileName = 'Rekap_' + (data.sekolah || 'Sekolah').replace(/\s+/g,'_') + '_' + (data.bulanLabel || '').replace(/\s+/g,'') + '.xlsx';
+      XLSX.writeFile(wb, fileName);
+      if (typeof showToast === 'function') showToast('✅ File Excel berhasil diunduh', 'success');
+    })
+    .getRekapSekolah();
+}
+</script>

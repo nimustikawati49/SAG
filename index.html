@@ -1,0 +1,99 @@
+<!-- SISTEM AKADEMIK GURU v4.0 - MODULAR | DATE: 2026-03-06 -->
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Instant dark mode — applied before CSS renders to prevent flash -->
+  <script>
+  (function(){
+    var s = localStorage.getItem('darkMode');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if(s === '1' || (s === null && prefersDark)){
+      document.documentElement.setAttribute('data-dark','1');
+      // Apply as early as possible
+      if(document.body) document.body.classList.add('dark');
+      document.addEventListener('DOMContentLoaded', function(){
+        document.body.classList.add('dark');
+      });
+    }
+  })();
+  </script>
+  <script>
+/* ================= GLOBAL SAFE GUARD (WAJIB PALING ATAS) ================= */
+function qs(name, def = null){
+  try{
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name) ?? def;
+  }catch(e){
+    return def;
+  }
+}
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Sistem Akademik Guru</title>
+  <base target="_self">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Akademik Guru">
+  <meta name="theme-color" content="#6C63FF">
+  <meta name="description" content="Sistem Akademik Guru — Jurnal, Absensi & Nilai Digital">
+  <!-- PWA Manifest (injected as blob URL for Android Chrome install) -->
+  <script>
+  (function(){
+    try {
+      var isDark = localStorage.getItem('darkMode') === '1' ||
+        (localStorage.getItem('darkMode') === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var manifest = {
+        name: 'Sistem Akademik Guru',
+        short_name: 'Akademik Guru',
+        description: 'Jurnal, Absensi & Nilai Digital untuk Guru',
+        start_url: window.location.href.split('?')[0],
+        display: 'standalone',
+        background_color: isDark ? '#121212' : '#ffffff',
+        theme_color: isDark ? '#312e81' : '#6C63FF',
+        icons: [
+          { src: 'https://www.gstatic.com/images/branding/product/2x/apps_script_48dp.png', sizes: '48x48',  type: 'image/png' },
+          { src: 'https://www.gstatic.com/images/branding/product/2x/apps_script_96dp.png', sizes: '96x96',  type: 'image/png' }
+        ]
+      };
+      var blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      var url  = URL.createObjectURL(blob);
+      var link = document.createElement('link');
+      link.rel  = 'manifest';
+      link.href = url;
+      document.head.appendChild(link);
+      // Sync theme-color meta with current mode
+      var themeEl = document.querySelector('meta[name="theme-color"]');
+      if(themeEl) themeEl.setAttribute('content', isDark ? '#312e81' : '#6C63FF');
+    } catch(e) {}
+  })();
+  </script>
+  <?!= include('styles') ?>
+</head>
+<body class="auth-wait">
+
+<?!= include('layout') ?>
+
+<script>
+window.JurnalApp = window.JurnalApp || {};
+</script>
+
+<?!= include('scripts-dashboard') ?>
+<?!= include('scripts-setting') ?>
+<?!= include('scripts-jurnal') ?>
+<?!= include('scripts-superadmin') ?>
+<?!= include('scripts-license') ?>
+<?!= include('scripts-kepsek') ?>
+<?!= include('scripts-jadwal-wali') ?>
+<?!= include('scripts-nilai') ?>
+<?!= include('scripts-modul') ?>
+<?!= include('scripts-nav') ?>
+<?!= include('scripts-notif') ?>
+<?!= include('scripts-catatan') ?>
+<?!= include('scripts-rpp') ?>
+<?!= include('scripts-init') ?>
+
+</body>
+</html>

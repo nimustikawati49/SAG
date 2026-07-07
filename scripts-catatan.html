@@ -1,0 +1,201 @@
+<script>
+/* ============================================================
+   scripts-catatan.html — Catatan Khusus Siswa
+   Guru dapat menambah/edit/hapus catatan per siswa.
+   ============================================================ */
+
+var _catatanKelasAktif = '';
+var _catatanSiswaList  = [];
+
+/** Panggil saat tab catatan dibuka */
+function initCatatanSiswa() {
+  loadKelasForCatatan();
+}
+
+function loadKelasForCatatan() {
+  google.script.run
+    .withSuccessHandler(function(kelasList) {
+      var sel = document.getElementById('catatanKelasSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+      (kelasList || []).forEach(function(k) {
+        var opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        sel.appendChild(opt);
+      });
+      // Jika hanya 1 kelas, langsung tampilkan catatannya
+      if(kelasList && kelasList.length === 1){ sel.value = kelasList[0]; loadCatatanByKelas(); }
+    })
+    .withFailureHandler(function() {})
+    // Hanya ambil kelas dari siswa binaan guru ini
+    .getKelasSiswaBinaan();
+}
+
+function loadCatatanByKelas() {
+  var kelas = (document.getElementById('catatanKelasSelect') || {}).value || '';
+  _catatanKelasAktif = kelas;
+
+  var container = document.getElementById('catatanContainer');
+  if (!container) return;
+  if (!kelas) {
+    container.innerHTML = '<div class="alert-banner info">Pilih kelas untuk melihat catatan siswa binaan Anda.</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="skeleton" style="height:100px;border-radius:12px;margin-bottom:8px"></div>'.repeat(3);
+
+  google.script.run
+    .withSuccessHandler(function(items) {
+      _catatanSiswaList = items || [];
+      _renderCatatanList_(items, kelas);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat catatan') + '</div>';
+    })
+    .getCatatanSiswa(kelas);
+}
+
+function _renderCatatanList_(items, kelas) {
+  var container = document.getElementById('catatanContainer');
+  if (!container) return;
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<h3 style="margin:0;font-size:15px">📝 Catatan Siswa Binaan — Kelas ' + _escC(kelas) + '</h3>' +
+    '<button onclick="openCatatanModal()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">+ Tambah Catatan</button>' +
+    '</div>';
+
+  // Load siswa kelas untuk form
+  google.script.run
+    .withSuccessHandler(function(siswaList) {
+      _catatanSiswaList = siswaList || [];
+      var siswaSel = document.getElementById('catatanNisSel');
+      if (siswaSel) {
+        siswaSel.innerHTML = '<option value="">-- Pilih Siswa --</option>';
+        (siswaList || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s.nis;
+          opt.setAttribute('data-nama', s.nama || '');
+          opt.textContent = s.nama + ' (' + s.nis + ')';
+          siswaSel.appendChild(opt);
+        });
+      }
+    })
+    .withFailureHandler(function() {})
+    // Hanya tampilkan siswa binaan, bukan semua siswa kelas
+    .getSiswaBinaanByKelas(kelas);
+
+  if (!items || items.length === 0) {
+    html += '<div class="alert-banner info">Belum ada catatan untuk siswa binaan kelas ini.</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+  items.forEach(function(c) {
+    var warna = '#fef9c3';
+    html += '<div style="background:' + warna + ';border:1.5px solid #fde68a;border-radius:14px;padding:14px 16px">' +
+      '<div style="font-weight:700;font-size:14px;margin-bottom:4px">🎓 ' + _escC(c.nama) + '</div>' +
+      '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">NIS: ' + _escC(c.nis) + '</div>' +
+      '<div style="font-size:13px;white-space:pre-wrap;background:#fff;border-radius:8px;padding:8px 10px">' + _escC(c.catatan) + '</div>' +
+      '<div style="font-size:11px;color:#9ca3af;margin-top:8px">📅 ' + _escC(c.tgl) + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button onclick="editCatatan(\'' + _escC(c.nis) + '\',\'' + _escC(c.nama) + '\',\'' + _escC(c.catatan).replace(/'/g,"&#39;").replace(/\n/g,' ') + '\')" style="flex:1;background:#dbeafe;color:#1e40af;border:none;border-radius:8px;padding:6px;font-size:12px;cursor:pointer">✏️ Edit</button>' +
+        '<button onclick="deleteCatatan(\'' + _escC(c.nis) + '\')" style="flex:1;background:#fee2e2;color:#991b1b;border:none;border-radius:8px;padding:6px;font-size:12px;cursor:pointer">🗑️ Hapus</button>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function openCatatanModal(nis, nama, catatanTeks) {
+  var m = document.getElementById('catatanModal');
+  if (!m) return;
+  m.style.display = 'flex';
+
+  var nisSel = document.getElementById('catatanNisSel');
+  var teksEl = document.getElementById('catatanTeks');
+  if (nis && nisSel) {
+    for (var i = 0; i < nisSel.options.length; i++) {
+      if (nisSel.options[i].value === nis) { nisSel.selectedIndex = i; break; }
+    }
+    nisSel.disabled = true;
+  } else if (nisSel) {
+    nisSel.selectedIndex = 0;
+    nisSel.disabled = false;
+  }
+  if (teksEl) {
+    teksEl.value = catatanTeks || '';
+    teksEl.focus();
+  }
+  document.getElementById('catatanModalTitle').textContent = nis ? 'Edit Catatan Siswa' : 'Tambah Catatan Siswa';
+}
+
+function editCatatan(nis, nama, catatanTeks) {
+  openCatatanModal(nis, nama, catatanTeks);
+}
+
+function closeCatatanModal() {
+  var m = document.getElementById('catatanModal');
+  if (m) m.style.display = 'none';
+  var nisSel = document.getElementById('catatanNisSel');
+  if (nisSel) nisSel.disabled = false;
+}
+
+function submitCatatan() {
+  var kelas  = _catatanKelasAktif;
+  var nisSel = document.getElementById('catatanNisSel');
+  var teksEl = document.getElementById('catatanTeks');
+
+  if (!kelas) {
+    if (typeof showToast === 'function') showToast('⚠️ Pilih kelas terlebih dahulu', 'warning');
+    return;
+  }
+
+  var nis  = nisSel ? nisSel.value : '';
+  var nama = nisSel && nisSel.selectedOptions[0] ? nisSel.selectedOptions[0].getAttribute('data-nama') || '' : '';
+  var teks = teksEl ? teksEl.value.trim() : '';
+
+  if (!nis) {
+    if (typeof showToast === 'function') showToast('⚠️ Pilih siswa', 'warning');
+    return;
+  }
+  if (!teks) {
+    if (typeof showToast === 'function') showToast('⚠️ Catatan tidak boleh kosong', 'warning');
+    return;
+  }
+
+  var btn = document.getElementById('catatanSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      closeCatatanModal();
+      if (typeof showToast === 'function') showToast('✅ Catatan disimpan', 'success');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      loadCatatanByKelas();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+    })
+    .saveCatatanSiswa({ kelas: kelas, nis: nis, nama: nama, catatan: teks });
+}
+
+function deleteCatatan(nis) {
+  if (!confirm('Hapus catatan untuk siswa ini?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Catatan dihapus', 'success');
+      loadCatatanByKelas();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .deleteCatatanSiswa(_catatanKelasAktif, nis);
+}
+
+function _escC(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>

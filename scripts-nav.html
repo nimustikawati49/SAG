@@ -1,0 +1,432 @@
+<script>
+function toggleSidebar_() {
+  document.getElementById('appSidebar').classList.toggle('sb-open');
+  document.getElementById('sbOverlay').classList.toggle('sb-open');
+}
+
+/** Close sidebar (mobile) */
+function closeSidebar_() {
+  document.getElementById('appSidebar').classList.remove('sb-open');
+  document.getElementById('sbOverlay').classList.remove('sb-open');
+}
+
+/**
+ * Navigate via sidebar.
+ * Calls the existing showTab(), runs optional extra cb, marks active button,
+ * auto-opens parent group if child tab, and auto-closes overlay on mobile.
+ */
+function sbGo_(tabId, extra) {
+  showTab(tabId);
+  if (typeof extra === 'function') extra();
+
+  // Scroll content area to top smoothly after tab switch
+  const mainEl = document.getElementById('sbMain');
+  if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Mark active by data-tab attribute
+  document.querySelectorAll('#sbNav .sb-item').forEach(btn => {
+    btn.classList.remove('sb-active');
+  });
+  const activeBtn = document.querySelector('#sbNav .sb-item[data-tab="' + tabId + '"]');
+  if (activeBtn) {
+    activeBtn.classList.add('sb-active');
+    // Auto-open parent group if this is a child item
+    if (activeBtn.classList.contains('sb-child')) {
+      const grp = activeBtn.closest('.sb-group');
+      if (grp && !grp.classList.contains('sb-open')) grp.classList.add('sb-open');
+    }
+  }
+
+  localStorage.setItem('sbActiveTab', tabId);
+  // Also persist auto-opened group to localStorage
+  if (activeBtn && activeBtn.classList.contains('sb-child')) {
+    const grp = activeBtn.closest('.sb-group');
+    if (grp) {
+      const groupId = grp.id.replace('sbgrp-', '');
+      let openGroups = [];
+      try { openGroups = JSON.parse(localStorage.getItem('sbOpenGroups') || '[]'); } catch(e) {}
+      if (!openGroups.includes(groupId)) {
+        openGroups.push(groupId);
+        localStorage.setItem('sbOpenGroups', JSON.stringify(openGroups));
+      }
+    }
+  }
+  closeSidebar_(); // auto-close overlay on mobile
+}
+
+/** Toggle sidebar collapse (desktop only — ≥900px) */
+function toggleSbCollapse_() {
+  // Collapse mode only applies on desktop; at tablet (768-900px) CSS handles it; mobile uses overlay
+  if (window.innerWidth < 900) return;
+  const sb = document.getElementById('appSidebar');
+  sb.classList.toggle('sb-collapsed');
+  const collapsed = sb.classList.contains('sb-collapsed');
+  localStorage.setItem('sbCollapsed', collapsed ? '1' : '0');
+  const icon = document.getElementById('sbCollapseIcon');
+  if (icon) icon.textContent = collapsed ? '▶' : '◀';
+}
+
+/** Toggle a submenu group open/closed */
+function toggleSbGroup_(groupId) {
+  const grp = document.getElementById('sbgrp-' + groupId);
+  if (!grp) return;
+  grp.classList.toggle('sb-open');
+  const isOpen = grp.classList.contains('sb-open');
+  // Update ARIA expanded state
+  const hd = grp.querySelector('.sb-group-hd');
+  if (hd) hd.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  let openGroups = [];
+  try { openGroups = JSON.parse(localStorage.getItem('sbOpenGroups') || '[]'); } catch(e) {}
+  if (isOpen && !openGroups.includes(groupId)) openGroups.push(groupId);
+  else if (!isOpen) openGroups = openGroups.filter(g => g !== groupId);
+  localStorage.setItem('sbOpenGroups', JSON.stringify(openGroups));
+}
+
+/** Restore sidebar state (collapse + open groups + active tab) on page load */
+function restoreSidebarState_() {
+  // Guard: run only once even if called from both DOMContentLoaded and fallback
+  if (restoreSidebarState_._done) return;
+  restoreSidebarState_._done = true;
+  // Restore collapse
+  if (localStorage.getItem('sbCollapsed') === '1') {
+    const sb = document.getElementById('appSidebar');
+    if (sb) sb.classList.add('sb-collapsed');
+    const icon = document.getElementById('sbCollapseIcon');
+    if (icon) icon.textContent = '▶';
+  }
+  // Restore open groups
+  let openGroups = [];
+  try { openGroups = JSON.parse(localStorage.getItem('sbOpenGroups') || '[]'); } catch(e) {}
+  openGroups.forEach(function(g) {
+    const el = document.getElementById('sbgrp-' + g);
+    if (el) {
+      el.classList.add('sb-open');
+      const hd = el.querySelector('.sb-group-hd');
+      if (hd) hd.setAttribute('aria-expanded', 'true');
+    }
+  });
+  // Restore active tab highlight — check sbActiveTab first, fall back to lastTab
+  const lastTab = localStorage.getItem('sbActiveTab') || localStorage.getItem('lastTab');
+  if (lastTab) {
+    const btn = document.querySelector('#sbNav .sb-item[data-tab="' + lastTab + '"]');
+    if (btn) btn.classList.add('sb-active');
+  } else {
+    const first = document.querySelector('#sbNav .sb-item');
+    if (first) first.classList.add('sb-active');
+  }
+}
+
+/** Logout – arahkan ke halaman logout Google sesungguhnya */
+function doLogout_() {
+  if (confirm('Keluar dari aplikasi?\nAnda akan diarahkan ke halaman logout Google.')) {
+    window.location.href = 'https://accounts.google.com/Logout';
+  }
+}
+
+/**
+ * Sync profile info from existing (hidden) header meta spans
+ * into the sidebar profile section and top bar chips.
+ * Called after initApp() populates the meta spans.
+ */
+function syncSidebarProfile_() {
+  // Update top bar value cells (labels are fixed in HTML)
+  const map = {
+    sbTopSekolah : 'metaSekolah',
+    sbTopTahun   : 'metaTahun',
+    sbTopSemester: 'metaSemester',
+    sbTopMapel   : 'metaMapel',
+    sbTopGuru    : 'metaGuru',
+  };
+  Object.entries(map).forEach(([destId, srcId]) => {
+    const src  = document.getElementById(srcId);
+    const dest = document.getElementById(destId);
+    if (src && dest) {
+      const raw = src.textContent.trim();
+      // Strip leading emoji/non-ASCII prefix (e.g. "\uD83C\uDFEB SMP..." -> "SMP...")
+      const val = raw.replace(/^[^\x00-\x7F\s]+\s*/, '').trim();
+      if (val && val !== '\u2014' && val !== '-') dest.textContent = val;
+    }
+  });
+  // NIP
+  const nipInput     = document.getElementById('set_nip_guru');
+  const sbTopNip     = document.getElementById('sbTopNip');
+  const sbTopNipItem = document.getElementById('sbTopNipItem');
+  if (nipInput && nipInput.value.trim() && sbTopNip && sbTopNipItem) {
+    sbTopNip.textContent       = nipInput.value.trim();
+    sbTopNipItem.style.display = 'flex';
+  }
+  // Logo
+  const origLogo  = document.getElementById('appLogo');
+  const sbLogo    = document.getElementById('sbLogo');
+  const sbLogoIco = document.getElementById('sbLogoIcon');
+  if (origLogo && sbLogo && origLogo.src && origLogo.style.display !== 'none') {
+    sbLogo.src           = origLogo.src;
+    sbLogo.style.display = 'block';
+    if (sbLogoIco) sbLogoIco.style.display = 'none';
+  }
+  updateGreeting_();
+}
+
+function updateGreeting_() {
+  // Target sidebar greeting IDs (single source of truth — old #greetingBar removed)
+  const greet  = document.getElementById('greetingText');
+  const dateEl = document.getElementById('greetingDate');
+  if (!greet) return;
+  const metaEl = document.getElementById('metaGuru');
+  const raw    = metaEl ? metaEl.textContent.trim() : '';
+  const nama   = raw.replace(/^[^\x00-\x7F\s]+\s*/, '').trim() || 'Guru';
+  const jam    = new Date().getHours();
+  const sapa   = jam < 11 ? 'Selamat Pagi' : jam < 15 ? 'Selamat Siang' : jam < 18 ? 'Selamat Sore' : 'Selamat Malam';
+  greet.textContent = sapa + ', ' + nama + ' \uD83D\uDE0A';
+  if (dateEl) {
+    dateEl.textContent = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+  }
+}
+
+// Sync sidebar profile ~1.5 s after page load (enough time for getSetting() to respond)
+setTimeout(syncSidebarProfile_, 1500);
+
+// Also re-sync whenever metaSekolah text changes (robust against slow connections)
+(function() {
+  const trigger = document.getElementById('metaSekolah');
+  if (!trigger) return;
+  new MutationObserver(syncSidebarProfile_)
+    .observe(trigger, { childList: true, characterData: true, subtree: true });
+})();
+
+// Restore sidebar state after DOM is fully ready
+document.addEventListener('DOMContentLoaded', function() {
+  restoreSidebarState_();
+});
+// Fallback: if DOMContentLoaded already fired (GAS includes run after parse)
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
+  restoreSidebarState_();
+}
+
+/* =========================================================
+   SESSION TIMEOUT WARNING
+   Tampilkan notifikasi setelah 30 menit idle.
+   GAS web app tidak memiliki "server session" yang expire
+   di sisi klien, tapi token Google bisa kadaluarsa setelah
+   berjam-jam idle mengakibatkan google.script.run gagal.
+   ========================================================= */
+(function() {
+  const IDLE_WARN    = 30 * 60 * 1000;   // 30 menit → tampilkan warning
+  const IDLE_LOGOUT  = 35 * 60 * 1000;   // 35 menit → auto logout
+  let idleTimer, logoutTimer;
+  let warnShown = false;
+
+  // Buat elemen banner sekali
+  const banner = document.createElement('div');
+  banner.id = 'sessionWarnBanner';
+  banner.style.cssText = [
+    'display:none','position:fixed','bottom:24px','left:50%',
+    'transform:translateX(-50%)','background:#fef3c7','color:#92400e',
+    'border:1.5px solid #f59e0b','border-radius:12px','padding:12px 20px',
+    'font-size:14px','font-weight:600','box-shadow:0 8px 24px rgba(0,0,0,.15)',
+    'z-index:999999','display:none','align-items:center','gap:12px','max-width:90vw'
+  ].join(';');
+  banner.innerHTML =
+    '<span>⚠️ Sesi hampir berakhir. Lanjutkan aktivitas?</span>' +
+    '<button onclick="resetIdleTimer_()" style="' +
+      'background:#f59e0b;color:#fff;border:none;border-radius:8px;' +
+      'padding:6px 14px;cursor:pointer;font-weight:700">Tetap Aktif</button>';
+  document.body.appendChild(banner);
+
+  function showWarn() {
+    if (warnShown) return;
+    warnShown = true;
+    banner.style.display = 'flex';
+    logoutTimer = setTimeout(() => {
+      window.location.reload(); // reload paksa — user harus auth ulang
+    }, IDLE_LOGOUT - IDLE_WARN);
+  }
+
+  window.resetIdleTimer_ = function() {
+    clearTimeout(idleTimer);
+    clearTimeout(logoutTimer);
+    warnShown = false;
+    banner.style.display = 'none';
+    idleTimer = setTimeout(showWarn, IDLE_WARN);
+  };
+
+  // Reset on any user activity
+  ['click','mousemove','keydown','scroll','touchstart'].forEach(ev =>
+    document.addEventListener(ev, window.resetIdleTimer_, { passive: true })
+  );
+  idleTimer = setTimeout(showWarn, IDLE_WARN);
+})();
+
+/* =========================================================
+   PDF EXPORT – Rekap Absensi
+   ========================================================= */
+function doExportRekapPDF() {
+  const dari   = document.getElementById('dari').value;
+  const sampai = document.getElementById('sampai').value;
+  if (!dari || !sampai) {
+    alert('⚠️ Pilih periode (Dari – Sampai) terlebih dahulu');
+    return;
+  }
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(url) {
+      endProgress();
+      window.open(url, '_blank');
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ Gagal export PDF:\n' + err.message);
+    })
+    .exportRekapPDF(dari, sampai);
+}
+
+/* =========================================================
+   BACKUP TRIGGER – SuperAdmin UI
+   ========================================================= */
+function loadBackupTriggerStatus() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      const el = document.getElementById('backupTriggerStatus');
+      if (!el) return;
+      if (res && res.active) {
+        el.innerHTML = '<span style="color:#059669;font-weight:700">✅ Trigger aktif — backup berjalan tiap malam pukul 01:00</span>';
+      } else {
+        el.innerHTML = '<span style="color:#dc2626;font-weight:700">⛔ Trigger belum diaktifkan</span>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      const el = document.getElementById('backupTriggerStatus');
+      if (el) el.innerHTML = '<span style="color:#6b7280">\u26A0\uFE0F Gagal cek status backup</span>';
+      console.warn('[GAS] getBackupTriggerStatus:', err && err.message || err);
+    })
+    .getBackupTriggerStatus();
+}
+
+function activateBackupTrigger() {
+  if (!confirm('Aktifkan backup otomatis harian?\nScript akan menyalin spreadsheet ke folder BACKUP_JURNAL di Drive tiap pukul 01:00.')) return;
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res) {
+      endProgress();
+      alert('✅ ' + (res.message || 'Backup harian diaktifkan'));
+      loadBackupTriggerStatus();
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ ' + err.message);
+    })
+    .setupBackupTrigger();
+}
+
+function deactivateBackupTrigger() {
+  if (!confirm('Nonaktifkan backup otomatis harian?')) return;
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      endProgress();
+      alert('✅ Trigger backup dihapus');
+      loadBackupTriggerStatus();
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ ' + err.message);
+    })
+    .removeBackupTrigger();
+}
+
+/* =========================================================
+   REMINDER TRIGGER – SuperAdmin UI
+   ========================================================= */
+function loadReminderTriggerStatus() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      const el = document.getElementById('reminderTriggerStatus');
+      if (!el) return;
+      if (res && res.active) {
+        el.innerHTML = '<span style="color:#059669;font-weight:700">✅ Trigger aktif — reminder dikirim tiap pagi pukul 07:00</span>';
+      } else {
+        el.innerHTML = '<span style="color:#dc2626;font-weight:700">⛔ Trigger belum diaktifkan</span>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      const el = document.getElementById('reminderTriggerStatus');
+      if (el) el.innerHTML = '<span style="color:#6b7280">\u26A0\uFE0F Gagal cek status reminder</span>';
+      console.warn('[GAS] getReminderTriggerStatus:', err && err.message || err);
+    })
+    .getReminderTriggerStatus();
+}
+
+function activateReminderTrigger() {
+  if (!confirm('Aktifkan reminder pengisian jurnal harian?\nEmail akan dikirim tiap pukul 07:00 ke guru yang belum isi jurnal selama 3 hari terakhir.')) return;
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res) {
+      endProgress();
+      alert('✅ ' + (res.message || 'Reminder harian diaktifkan'));
+      loadReminderTriggerStatus();
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ ' + err.message);
+    })
+    .setupReminderTrigger();
+}
+
+function deactivateReminderTrigger() {
+  if (!confirm('Nonaktifkan reminder pengisian jurnal?')) return;
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      endProgress();
+      alert('✅ Trigger reminder dihapus');
+      loadReminderTriggerStatus();
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ ' + err.message);
+    })
+    .removeReminderTrigger();
+}
+
+/* =========================================================
+   SUPERADMIN EMAIL MANAGEMENT
+   ========================================================= */
+function loadSuperAdminEmailUI() {
+  google.script.run
+    .withSuccessHandler(function(email) {
+      const inp = document.getElementById('inputSuperAdminEmail');
+      if (inp) inp.value = email || '';
+    })
+    .withFailureHandler(function(err) {
+      console.warn('[GAS] getSuperAdminEmailForUI:', err && err.message || err);
+    })
+    .getSuperAdminEmailForUI();
+}
+
+function updateSuperAdminEmail() {
+  const inp = document.getElementById('inputSuperAdminEmail');
+  const info = document.getElementById('superAdminEmailInfo');
+  if (!inp || !inp.value.trim().includes('@')) {
+    alert('⚠️ Masukkan email yang valid');
+    return;
+  }
+  if (!confirm('Ganti SuperAdmin email ke:\n' + inp.value.trim() + '\n\nAnda akan kehilangan akses SuperAdmin jika email ini bukan milik Anda.')) return;
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res) {
+      endProgress();
+      if (info) info.textContent = '✅ Email SuperAdmin diperbarui: ' + res.email;
+      setTimeout(() => { if (info) info.textContent = ''; }, 5000);
+    })
+    .withFailureHandler(function(err) {
+      endProgress();
+      alert('❌ ' + err.message);
+    })
+    .setSuperAdminEmail(inp.value.trim());
+}
+
+
+
+</script>

@@ -1,0 +1,929 @@
+<script>
+function uploadCsv(){
+  const f = document.getElementById('fileSiswa').files[0];
+  if(!f){
+    alert('Pilih file CSV');
+    return;
+  }
+  startProgress();
+  const r=new FileReader();
+  r.onload=e=>{
+    const rows=e.target.result.trim().split('\n').map(x=>x.split(','));
+    google.script.run.withSuccessHandler(()=>{
+      endProgress();
+  //    loadKelas();
+      alert('Upload berhasil');
+      checkAutoLockFrontend(); // 🔥 AUTO LOCK CEK
+
+    }).importSiswa(rows);
+  };
+  r.readAsText(f);
+}
+
+function downloadTemplate(){
+  const csv="kelas,no_absen,nis,nisn,nama,jk,ttl,alamat,orang_tua,kontak,status\n";
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='template_siswa.csv';
+  a.click();
+}
+
+function simpanSetting(){
+
+  if(!settingSudahAda){
+    if(
+      !set_sekolah.value.trim() ||
+      !set_tahun.value.trim() ||
+      !set_semester.value.trim() ||
+      !set_guru.value.trim() ||
+      document.querySelectorAll('.mapel-cb:checked').length === 0
+    ){
+      alert('⚠️ Lengkapi semua data setting terlebih dahulu');
+      return;
+    }
+  }
+
+  startProgress();
+
+  uploadLogoIfAny(function(logoUrl){
+
+    const payload = {
+      sekolah          : set_sekolah.value.trim(),
+      tahun_pelajaran  : set_tahun.value.trim(),
+      semester         : set_semester.value.trim(),
+      nama_guru        : set_guru.value.trim(),
+      nip_guru         : set_nip_guru.value.trim(),
+      mata_pelajaran   : [...document.querySelectorAll('.mapel-cb:checked')].map(cb=>cb.value).join(', '),
+      app_logo_url     : logoUrl || ''
+    };
+
+    pendingSettingPayload = payload;
+
+    // 🔥 COBA SIMPAN SETTING LANGSUNG
+    google.script.run
+      .withSuccessHandler(function(){
+
+        endProgress();
+
+        settingSudahAda = true;
+        applyLockUI(true);
+        lockSiswaUpload(true);
+
+        pendingSettingPayload = null;
+
+        loadSettingForm();
+        checkLicenseStatus();
+
+        alert('✅ Setting berhasil disimpan');
+
+      })
+      .withFailureHandler(function(err){
+
+        endProgress();
+
+        // 🔥 JIKA BUTUH LISENSI
+        if(
+          err.message === 'INPUT_LICENSE' ||
+          err.message === 'LISENSI_EXPIRED'
+        ){
+
+          openLicenseModal(function(key){
+
+            if(!key){
+              alert('Kode lisensi wajib diisi');
+              return;
+            }
+
+            startProgress();
+
+            // 🔑 AKTIVASI LISENSI
+            google.script.run
+              .withSuccessHandler(function(res){
+
+                if(!res || res.status !== true){
+                  endProgress();
+                  alert('❌ Kode lisensi tidak valid');
+                  return;
+                }
+
+                // ✅ AKTIVASI SUKSES → SIMPAN SETTING ULANG
+                google.script.run
+                  .withSuccessHandler(function(){
+
+                    endProgress();
+                    closeLicenseModal();
+
+                    settingSudahAda = true;
+                    applyLockUI(true);
+                    lockSiswaUpload(true);
+
+                    pendingSettingPayload = null;
+
+                    loadSettingForm();
+                    checkLicenseStatus();
+
+                    alert(
+                      '✅ Lisensi aktif 1 tahun\n' +
+                      'Berlaku sampai: ' + (res.expired || '-')
+                    );
+
+                  })
+                  .withFailureHandler(function(e){
+                    endProgress();
+                    alert('❌ Gagal simpan setting:\n' + e.message);
+                  })
+                  .saveSetting(pendingSettingPayload);
+
+              })
+              .withFailureHandler(function(e){
+                endProgress();
+                alert('❌ Aktivasi lisensi gagal:\n' + e.message);
+              })
+              .activateLicense(key);
+
+          });
+
+          return;
+        }
+
+        alert('❌ Gagal menyimpan setting:\n' + err.message);
+
+      })
+      .saveSetting(payload);
+
+  });
+}
+
+function loadDaftarArsip(){
+  const box = document.getElementById('arsipList');
+  box.innerHTML = `<p class="muted">⏳ Memuat arsip...</p>`;
+  google.script.run
+    .withSuccessHandler(list=>{
+      if(!list || list.length === 0){
+        box.innerHTML = `
+          <p class="muted">
+            📭 Belum ada arsip jurnal pembelajaran.
+          </p>`;
+        return;
+      }
+      box.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Tahun Pelajaran</th>
+              <th>Email Guru</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((a,i)=>`
+              <tr>
+                <td>${i+1}</td>
+                <td>${a.tahun}</td>
+                <td class="left">${a.email}</td>
+                <td>
+                  <button onclick="window.open('${a.url}','_blank')">
+                    📥 Download
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    })
+    .getDaftarArsip();
+}
+
+function openArsip(){
+  showTab('arsip');
+  loadDaftarArsip();
+}
+
+function loadArsipTab(){
+  // 🔑 WAJIB: tampilkan tab arsip
+  showTab('arsip');
+  const btn  = document.getElementById('btnArsipTahunan');
+  const info = document.getElementById('infoArsipTahunan');
+  const box  = document.getElementById('arsipList');
+  // 🔒 DEFAULT UI (ANTI KOSONG)
+  btn.disabled = true;
+  info.innerHTML = `
+    📦 Arsip digunakan untuk menyimpan jurnal <b>per Tahun Pelajaran</b>.<br><br>
+    🔹 Tombol <b>Arsipkan Jurnal</b> akan aktif jika:
+    <ul>
+      <li>✔ Ada jurnal <b>Semester Ganjil</b></li>
+      <li>✔ Ada jurnal <b>Semester Genap</b></li>
+    </ul>
+    Arsip yang sudah dibuat akan tampil di bawah.
+  `;
+  box.innerHTML = `
+    <p class="muted">
+      📭 Belum ada arsip jurnal pembelajaran.
+    </p>
+  `;
+  // 🔍 CEK STATUS ARSIP (BACKEND)
+  google.script.run.withSuccessHandler(res=>{
+    if(res.sudahArsip){
+      info.innerHTML = `
+        🔒 Arsip Tahun Pelajaran <b>${res.tahun}</b> sudah dibuat.<br>
+        Anda dapat mengunduh arsip di daftar bawah.
+      `;
+      btn.disabled = true;
+      loadDaftarArsip();
+      return;
+    }
+    if(!res.lengkap){
+      info.innerHTML = `
+        📌 Arsip belum dapat dilakukan.<br><br>
+        Status:
+        <ul>
+          <li>${res.adaGanjil ? '✔' : '❌'} Semester Ganjil</li>
+          <li>${res.adaGenap  ? '✔' : '❌'} Semester Genap</li>
+        </ul>
+      `;
+      btn.disabled = true;
+      return;
+    }
+    // ✅ BOLEH ARSIP
+    info.innerHTML = `
+      ✅ Semester Ganjil & Genap lengkap.<br>
+      Anda dapat mengarsipkan jurnal Tahun Pelajaran <b>${res.tahun}</b>.
+    `;
+    btn.disabled = false;
+  }).getStatusArsipTahunan();
+  // tampilkan daftar arsip (jika ada)
+  loadDaftarArsip();
+}
+
+function downloadArsipExcel(sheet){
+  google.script.run.withSuccessHandler(url=>{
+    window.open(url,'_blank');
+  }).exportArsipExcel(sheet);
+}
+
+function arsipTahunPelajaranUI(){
+  if(!confirm(
+    '⚠️ Proses arsip akan:\n' +
+    '• Membuat file Excel rekap jurnal (Ganjil + Genap)\n' +
+    '• Membuat file Excel rekap absensi per semester\n' +
+    '• MENGHAPUS semua data jurnal & absensi dari sheet\n' +
+    '• Mengosongkan tahun & semester di pengaturan\n\n' +
+    'Proses ini TIDAK BISA DIBATALKAN. Lanjutkan?'
+  )) return;
+
+  const btn = document.getElementById('btnArsipRiwayat');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Mengarsipkan...'; }
+
+  google.script.run
+    .withFailureHandler(err => {
+      alert('❌ Arsip gagal: ' + err.message);
+      if(btn){ btn.disabled = false; btn.textContent = '📦 Arsipkan Jurnal Tahun Pelajaran'; }
+    })
+    .withSuccessHandler(res => {
+      const modal = document.getElementById('modalTahunBaru');
+      const info  = document.getElementById('infoArsipModal');
+      if(info) info.innerHTML =
+        `✅ <b>${res.jumlahJurnal}</b> jurnal tahun <b>${res.tahun}</b> berhasil diarsipkan ke folder Google Drive.`;
+      if(modal) modal.style.display = 'flex';
+    })
+    .arsipTahunPelajaran();
+}
+
+function simpanTahunBaruUI(){
+  const tahun = document.getElementById('inputTahunBaru').value.trim();
+  const sem   = document.getElementById('inputSemesterBaru').value;
+  if(!tahun || !sem){
+    alert('Tahun pelajaran dan semester wajib diisi');
+    return;
+  }
+  google.script.run
+    .withFailureHandler(err => alert('❌ ' + err.message))
+    .withSuccessHandler(res => {
+      document.getElementById('modalTahunBaru').style.display = 'none';
+      alert('✅ Tahun pelajaran ' + res.tahun + ' semester ' + res.semester + ' berhasil disimpan.');
+      location.reload();
+    })
+    .simpanTahunAjaranBaru(tahun, sem);
+}
+
+function backupSemesterUI(){
+  const btn  = document.getElementById('btnBackupSemester');
+  const info = document.getElementById('backupSemesterInfo');
+  if(btn) btn.disabled = true;
+  if(info) info.innerHTML = '<span class="muted">⏳ Sedang membackup...</span>';
+  google.script.run
+    .withSuccessHandler(res=>{
+      if(info) info.innerHTML =
+        `<span style="color:green">✅ Berhasil backup <b>${res.backed}</b> jurnal semester <b>${res.semester}</b> tahun <b>${res.tahun}</b> ke sheet ARSIP.</span>`;
+      if(btn) btn.disabled = false;
+    })
+    .withFailureHandler(err=>{
+      if(info) info.innerHTML = `<span style="color:red">❌ ${err.message}</span>`;
+      if(btn) btn.disabled = false;
+    })
+    .backupSemesterToSheet();
+}
+
+// LOAD DATA SUPERADMIN //
+
+function gantiSemester(){
+  const sem = prompt(
+    'Masukkan semester baru:\ncontoh: Ganjil / Genap / I / II'
+  );
+  if(!sem) return;
+  google.script.run.withSuccessHandler(()=>{
+    alert('✅ Semester aktif berhasil diganti');
+    location.reload();
+  }).updateSemesterAktif(sem);
+}
+
+function resetSiswa(){
+  document.getElementById('fileSiswa').value = '';
+}
+/* ================= LOGO FINAL FIX ================= */
+
+function previewLogo(input){
+  if(!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    logoPreview.src = e.target.result;
+    logoPreview.style.display = 'inline-block';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+async function cropToSquare(base64, size = 96){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.src = base64;
+  });
+}
+
+async function uploadLogoIfAny(callback){
+
+  if(!logoFile.files.length){
+    callback(null);
+    return;
+  }
+
+  const file = logoFile.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async e => {
+
+    const croppedBase64 = await cropToSquare(e.target.result, 96);
+
+    google.script.run
+      .withSuccessHandler(url => {
+        callback(url);
+      })
+      .withFailureHandler(err => {
+
+        // ===============================
+        // 🔑 TRIGGER INPUT LICENSE
+        // ===============================
+        if(
+            err.message &&
+            (
+              err.message.includes('TRIGGER_INPUT_LICENSE') ||
+              err.message.includes('LISENSI_DIBUTUHKAN') ||
+              err.message.includes('LISENSI_EXPIRED')
+            )
+          ){
+
+          openLicenseModal(function(key){
+
+            startProgress();
+
+            google.script.run
+              .withSuccessHandler(function(){
+                endProgress();
+
+                // 🔁 ulang upload setelah aktivasi
+                setTimeout(function(){
+                  uploadLogoIfAny(callback);
+                },300);
+
+              })
+              .withFailureHandler(function(e){
+                endProgress();
+                alert('❌ Aktivasi lisensi gagal:\n' + e.message);
+                callback(null);
+              })
+              .activateLicense(key);
+
+          });
+
+          return;
+        }
+
+        // ===============================
+        // ERROR LAIN
+        // ===============================
+        alert('Upload logo gagal:\n' + err.message);
+        callback(null);
+
+      })
+      .uploadLogoSekolah({
+        data: croppedBase64,
+        type: 'image/png',
+        name: 'logo.png'
+      });
+  };
+
+  reader.readAsDataURL(file);
+}
+
+function fileToBase64(file){
+  return new Promise(function(resolve){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const img = new Image();
+      img.onload = function(){
+        // Kompres: max 1280px lebar, 72% quality JPEG
+        const MAX_W = 1280, QUALITY = 0.72;
+        let w = img.width, h = img.height;
+        if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', QUALITY);
+        resolve({
+          name: file.name.replace(/\.[^.]+$/, '.jpg'),
+          type: 'image/jpeg',
+          data: compressed
+        });
+      };
+      img.onerror = function(){
+        // Fallback ke data asli jika canvas gagal (misal SVG)
+        resolve({ name: file.name, type: file.type, data: e.target.result });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// dipanggil saat klik tab Setting
+function loadSettingForm(){
+
+  google.script.run.withSuccessHandler(function(d){
+
+    if(!d) return;
+
+    // ===============================
+    // FIX: mapping sesuai ID HTML
+    // ===============================
+
+    set_sekolah.value     = d.sekolah || '';
+    set_tahun.value       = d.tahun_pelajaran || '';
+    set_semester.value    = d.semester || '';
+    set_guru.value        = d.nama_guru || '';
+    set_nip_guru.value    = d.nip_guru || '';
+    // Centang mata pelajaran yang tersimpan
+    const savedMapels = (d.mata_pelajaran || '').split(/,\s*/).map(s=>s.trim()).filter(Boolean);
+    document.querySelectorAll('.mapel-cb').forEach(cb=>{
+      cb.checked = savedMapels.some(m=>m.toLowerCase()===cb.value.toLowerCase());
+    });
+    syncMapelSelects();
+
+    // ===============================
+    // LOGO FIX (TIDAK pakai ?v=)
+    // ===============================
+    const img = document.getElementById('appLogo');
+
+    if(d.app_logo_url){
+      img.src = d.app_logo_url;   // ⬅️ HAPUS cache buster
+      img.style.display = 'block';
+
+      logoPreview.src = d.app_logo_url;
+      logoPreview.style.display = 'inline-block';
+    }else{
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      logoPreview.style.display = 'none';
+    }
+
+    // ===============================
+    // LOCK STATUS
+    // ===============================
+    if(d.lock_status === 'LOCKED'){
+      applyLockUI(true);
+      document.getElementById('btnEditSetting').style.display = 'inline-block';
+    }else{
+      applyLockUI(false);
+    }
+
+    // ===============================
+    // UPDATE HEADER META SPANS
+    // ===============================
+    _applySettingToHeader_(d);
+    refreshAcademicQuickInfo();
+    initDashboardAcademicFilter();
+
+  }).getSetting();
+}
+
+/**
+ * Mengisi span meta header (dipakai oleh syncSidebarProfile_)
+ * dari data setting yang sudah diambil.
+ */
+function _applySettingToHeader_(d){
+  if(!d) return;
+  // Cache globally for other tabs (e.g. Input Nilai) to use immediately
+  window._settingCache = d;
+
+  var fields = {
+    sekolah        : d.sekolah         || '',
+    tahun_pelajaran: d.tahun_pelajaran  || '',
+    semester       : d.semester        || '',
+    mata_pelajaran : d.mata_pelajaran   || '',
+    nama_guru      : d.nama_guru        || ''
+  };
+
+  // 1. Populate hidden meta spans (used by syncSidebarProfile_ / MutationObserver)
+  var metaMap = {
+    metaSekolah  : fields.sekolah,
+    metaTahun    : fields.tahun_pelajaran,
+    metaSemester : fields.semester,
+    metaMapel    : fields.mata_pelajaran,
+    metaGuru     : fields.nama_guru
+  };
+  Object.keys(metaMap).forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.textContent = metaMap[id];
+  });
+
+  // 2. Update sbTop elements DIRECTLY (do not rely on syncSidebarProfile_ alone)
+  var sbMap = {
+    sbTopSekolah : fields.sekolah,
+    sbTopTahun   : fields.tahun_pelajaran,
+    sbTopSemester: fields.semester,
+    sbTopMapel   : fields.mata_pelajaran,
+    sbTopGuru    : fields.nama_guru
+  };
+  Object.keys(sbMap).forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && sbMap[id]) el.textContent = sbMap[id];
+  });
+
+  // Logo
+  var img = document.getElementById('appLogo');
+  if(img && d.app_logo_url){
+    img.src           = d.app_logo_url;
+    img.style.display = 'block';
+  }
+
+  // Sync greeting
+  if(typeof updateGreeting_ === 'function') updateGreeting_();
+}
+
+function editSettingUI(){
+
+  if(!confirm('Buka kembali setting untuk diedit?')) return;
+
+  google.script.run
+    .withSuccessHandler(()=>{
+      applyLockUI(false);
+      alert('Setting berhasil dibuka');
+    })
+    .withFailureHandler(err=>{
+      alert(err.message);
+    })
+    .unlockSetting();
+    if(typeof loadJadwalSetting === 'function'){
+   loadJadwalSetting();
+}
+}
+
+// helper
+function lockSiswaUpload(active){
+  document.getElementById('btnUploadSiswa').disabled = !active;
+  document.getElementById('btnDownloadTemplate').disabled = !active;
+  document.getElementById('fileSiswa').disabled = !active;
+}
+// ================= SAFE GUARD =================
+// agar JS tidak crash jika popup lama belum aktif
+if (typeof showWelcomeIfNeeded !== 'function') {
+  function showWelcomeIfNeeded() {
+    // intentionally empty (safe fallback)
+  }
+}
+
+/* ===== SYNC JADWAL MAPEL SELECT + PREVIEW FROM CHECKED MAPEL ===== */
+function syncMapelSelects() {
+  const checked = [...document.querySelectorAll('.mapel-cb:checked')].map(cb=>cb.value);
+
+  // Update select di jadwal
+  const sel = document.getElementById('jadwal_mapel');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
+    checked.forEach(m => {
+      const o = document.createElement('option');
+      o.value = o.textContent = m;
+      sel.appendChild(o);
+    });
+    if (cur && checked.includes(cur)) sel.value = cur;
+  }
+
+  // Update preview teks di bawah pill
+  const preview = document.getElementById('mapelSelectedPreview');
+  if (preview) {
+    if (checked.length === 0) {
+      preview.textContent = '';
+    } else {
+      preview.innerHTML = '✅ Terpilih: ' + checked.map(m =>
+        `<span style="background:#ede9fe;color:#6C63FF;border-radius:6px;padding:1px 8px;margin:0 2px;font-size:11.5px">${m}</span>`
+      ).join('');
+    }
+  }
+}
+
+function showAcademicToast(msg, type){
+  if (typeof showToast === 'function') return showToast(msg, type || 'info', 4000);
+  alert(msg);
+}
+
+function refreshAcademicQuickInfo(){
+  const el = document.getElementById('academicQuickInfo');
+  if(!el) return;
+  google.script.run
+    .withSuccessHandler(function(cfg){
+      const user = cfg && cfg.user ? cfg.user : {};
+      const kelas = (cfg && cfg.kelas_diampu || []).length;
+      const mapel = (cfg && cfg.mapel_diampu || []).length;
+      el.innerHTML =
+        'Aktif: <b>' + (user.tahun_pelajaran || '-') + '</b> | <b>' + (user.semester || '-') + '</b>' +
+        ' | Kelas Diampu: <b>' + kelas + '</b>' +
+        ' | Mapel Diampu: <b>' + mapel + '</b>';
+    })
+    .withFailureHandler(function(err){
+      el.textContent = 'Gagal memuat data akademik: ' + (err.message || err);
+    })
+    .getAcademicConfig();
+}
+
+function closeAcademicModal(){
+  const m = document.getElementById('academicWizardModal');
+  if(m) m.style.display = 'none';
+}
+
+function openAcademicModal(mode){
+  const m = document.getElementById('academicWizardModal');
+  const t = document.getElementById('academicWizardTitle');
+  const b = document.getElementById('academicWizardBody');
+  const a = document.getElementById('academicWizardActions');
+  const p = document.getElementById('academicWizardProgress');
+  if(!m || !t || !b || !a || !p) return;
+
+  p.style.width = '25%';
+  m.style.display = 'flex';
+
+  google.script.run.withSuccessHandler(function(cfg){
+    const years = (cfg && cfg.years || []).map(function(y){ return y.tahun_pelajaran; })
+      .filter(function(v,i,arr){ return v && arr.indexOf(v) === i; });
+    const sems = ['Ganjil','Genap'];
+    const user = (cfg && cfg.user) || {};
+
+    if(mode === 'periode'){
+      t.textContent = 'Pengaturan Tahun Pelajaran';
+      b.innerHTML =
+        '<label>Tahun Pelajaran Aktif</label>' +
+        '<input id="wizTahun" list="wizYears" value="' + (user.tahun_pelajaran || '') + '">' +
+        '<datalist id="wizYears">' + years.map(function(y){ return '<option value="'+y+'">'; }).join('') + '</datalist>';
+      a.innerHTML = '<button onclick="saveAcademicPeriodFromWizard()">Simpan</button>';
+      p.style.width = '60%';
+      return;
+    }
+
+    if(mode === 'semester'){
+      t.textContent = 'Pengaturan Semester Aktif';
+      b.innerHTML =
+        '<label>Semester Aktif</label>' +
+        '<select id="wizSemester">' + sems.map(function(s){ return '<option ' + ((user.semester||'').toLowerCase()===s.toLowerCase()?'selected':'') + '>'+s+'</option>'; }).join('') + '</select>';
+      a.innerHTML = '<button onclick="saveAcademicSemesterFromWizard()">Simpan</button>';
+      p.style.width = '60%';
+      return;
+    }
+
+    if(mode === 'mapel'){
+      t.textContent = 'Mata Pelajaran Diampu';
+      b.innerHTML =
+        '<label>Pisahkan dengan koma</label>' +
+        '<input id="wizMapel" value="' + ((cfg.mapel_diampu || []).join(', ')) + '">';
+      a.innerHTML = '<button onclick="saveGuruMengajarFromWizard()">Simpan</button>';
+      p.style.width = '70%';
+      return;
+    }
+
+    if(mode === 'kelas'){
+      t.textContent = 'Kelas Diampu';
+      b.innerHTML =
+        '<label>Pisahkan dengan koma</label>' +
+        '<input id="wizKelas" value="' + ((cfg.kelas_diampu || []).join(', ')) + '">';
+      a.innerHTML = '<button onclick="saveGuruMengajarFromWizard()">Simpan</button>';
+      p.style.width = '70%';
+      return;
+    }
+
+    if(mode === 'clone'){
+      t.textContent = 'Clone Tahun Pelajaran';
+      b.innerHTML =
+        '<label>Source Tahun</label><input id="wizCloneSource" list="wizYears" value="' + (years[0] || '') + '">' +
+        '<label>Destination Tahun</label><input id="wizCloneDest" placeholder="2026/2027">';
+      a.innerHTML = '<button onclick="runCloneAcademicWizard()">Clone Sekarang</button>';
+      p.style.width = '80%';
+      return;
+    }
+
+    if(mode === 'promosi'){
+      t.textContent = 'Promosi Siswa';
+      b.innerHTML =
+        '<label>Tahun Lama</label><input id="wizPromFromYear" list="wizYears" value="' + (user.tahun_pelajaran || '') + '">' +
+        '<label>Semester Lama</label><select id="wizPromFromSem"><option>Ganjil</option><option>Genap</option></select>' +
+        '<label>Tahun Baru</label><input id="wizPromToYear" placeholder="2026/2027">' +
+        '<label>Semester Baru</label><select id="wizPromToSem"><option>Ganjil</option><option>Genap</option></select>' +
+        '<label>Mapping (format: VII A=VIII A; VII B=VIII B; IX A=ALUMNI)</label>' +
+        '<textarea id="wizPromMap" style="min-height:88px">VII A=VIII A; VII B=VIII B; VIII A=IX A; IX A=ALUMNI</textarea>';
+      a.innerHTML = '<button onclick="runPromosiWizard()">Proses Promosi</button>';
+      p.style.width = '85%';
+      return;
+    }
+
+    if(mode === 'alumni'){
+      t.textContent = 'Info Alumni';
+      b.innerHTML = '<p class="muted">Alumni tidak dihapus. Status disimpan sebagai ALUMNI pada RiwayatKelas dan tetap tampil di histori.</p>';
+      a.innerHTML = '';
+      p.style.width = '100%';
+    }
+  }).withFailureHandler(function(err){
+    b.textContent = 'Gagal memuat wizard: ' + (err.message || err);
+    a.innerHTML = '';
+    p.style.width = '0%';
+  }).getAcademicConfig();
+}
+
+function saveAcademicPeriodFromWizard(){
+  const tahun = (document.getElementById('wizTahun') || {}).value || '';
+  const semester = (window._settingCache && window._settingCache.semester) || (document.getElementById('set_semester') || {}).value || 'Ganjil';
+  if(!tahun.trim()) return showAcademicToast('Tahun pelajaran wajib diisi', 'warning');
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(){
+      endProgress();
+      closeAcademicModal();
+      refreshAcademicQuickInfo();
+      loadSettingForm();
+      loadDashboardV4();
+      showAcademicToast('Tahun pelajaran aktif berhasil disimpan', 'success');
+    })
+    .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal: ' + err.message, 'error'); })
+    .setUserAcademicPeriod(tahun.trim(), semester);
+}
+
+function saveAcademicSemesterFromWizard(){
+  const semester = (document.getElementById('wizSemester') || {}).value || '';
+  const tahun = (window._settingCache && window._settingCache.tahun_pelajaran) || (document.getElementById('set_tahun') || {}).value || '';
+  if(!semester.trim()) return showAcademicToast('Semester wajib diisi', 'warning');
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(){
+      endProgress();
+      closeAcademicModal();
+      refreshAcademicQuickInfo();
+      loadSettingForm();
+      loadDashboardV4();
+      showAcademicToast('Semester aktif berhasil disimpan', 'success');
+    })
+    .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal: ' + err.message, 'error'); })
+    .setUserAcademicPeriod(tahun, semester.trim());
+}
+
+function saveGuruMengajarFromWizard(){
+  const kelasRaw = (document.getElementById('wizKelas') || {}).value || '';
+  const mapelRaw = (document.getElementById('wizMapel') || {}).value || '';
+  const tahun = (window._settingCache && window._settingCache.tahun_pelajaran) || (document.getElementById('set_tahun') || {}).value || '';
+  const semester = (window._settingCache && window._settingCache.semester) || (document.getElementById('set_semester') || {}).value || '';
+  const kelas = kelasRaw.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+  const mapel = mapelRaw.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(){
+      endProgress();
+      closeAcademicModal();
+      refreshAcademicQuickInfo();
+      showAcademicToast('Pengaturan guru mengajar tersimpan', 'success');
+    })
+    .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal: ' + err.message, 'error'); })
+    .saveGuruMengajarSetting({ tahun_pelajaran:tahun, semester:semester, kelas:kelas, mapel:mapel });
+}
+
+function runCloneAcademicWizard(){
+  const source = (document.getElementById('wizCloneSource') || {}).value || '';
+  const dest = (document.getElementById('wizCloneDest') || {}).value || '';
+  if(!source.trim() || !dest.trim()) return showAcademicToast('Source dan destination wajib diisi', 'warning');
+  if(!confirm('Clone akan menyalin Guru Mengajar dan pengaturan tahun. Jurnal/absensi tidak disalin. Lanjutkan?')) return;
+
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res){
+      endProgress();
+      closeAcademicModal();
+      refreshAcademicQuickInfo();
+      showAcademicToast('Clone selesai. Baris guru mengajar: ' + (res.cloned_guru_mengajar || 0), 'success');
+    })
+    .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal clone: ' + err.message, 'error'); })
+    .cloneAcademicYearWizard(source.trim(), dest.trim());
+}
+
+function runPromosiWizard(){
+  const fromYear = (document.getElementById('wizPromFromYear') || {}).value || '';
+  const fromSem = (document.getElementById('wizPromFromSem') || {}).value || '';
+  const toYear = (document.getElementById('wizPromToYear') || {}).value || '';
+  const toSem = (document.getElementById('wizPromToSem') || {}).value || '';
+  const mapRaw = (document.getElementById('wizPromMap') || {}).value || '';
+
+  const mapping = mapRaw.split(';').map(function(s){
+    const p = s.split('=');
+    return { from: (p[0]||'').trim(), to: (p[1]||'').trim() };
+  }).filter(function(x){ return x.from && x.to; });
+
+  if(!fromYear || !fromSem || !toYear || !toSem || mapping.length === 0){
+    return showAcademicToast('Lengkapi semua field promosi', 'warning');
+  }
+  if(!confirm('Proses promosi akan menambah RiwayatKelas tanpa membuat siswa baru. Lanjutkan?')) return;
+
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res){
+      endProgress();
+      closeAcademicModal();
+      showAcademicToast('Promosi selesai. Diproses: ' + (res.processed || 0) + ' siswa', 'success');
+    })
+    .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal promosi: ' + err.message, 'error'); })
+    .promoteSiswaWizard({
+      from_tahun: fromYear,
+      from_semester: fromSem,
+      to_tahun: toYear,
+      to_semester: toSem,
+      mapping: mapping
+    });
+}
+
+function initDashboardAcademicFilter(){
+  const tahunEl = document.getElementById('dashTahunFilter');
+  const semEl = document.getElementById('dashSemesterFilter');
+  if(!tahunEl || !semEl) return;
+
+  google.script.run.withSuccessHandler(function(cfg){
+    const years = (cfg.years || []).map(function(y){ return y.tahun_pelajaran; })
+      .filter(function(v,i,arr){ return v && arr.indexOf(v) === i; });
+    const user = cfg.user || {};
+
+    tahunEl.innerHTML = years.map(function(y){
+      return '<option ' + (String(y)===String(user.tahun_pelajaran)?'selected':'') + '>' + y + '</option>';
+    }).join('');
+    if(!tahunEl.innerHTML) tahunEl.innerHTML = '<option>' + (user.tahun_pelajaran || '-') + '</option>';
+
+    semEl.innerHTML = ['Ganjil','Genap'].map(function(s){
+      return '<option ' + (String(s).toLowerCase()===String(user.semester||'').toLowerCase()?'selected':'') + '>' + s + '</option>';
+    }).join('');
+
+    if(!tahunEl.dataset.binded){
+      tahunEl.addEventListener('change', applyDashboardAcademicFilter);
+      semEl.addEventListener('change', applyDashboardAcademicFilter);
+      tahunEl.dataset.binded = '1';
+    }
+  }).getAcademicConfig();
+}
+
+function applyDashboardAcademicFilter(){
+  const tahunEl = document.getElementById('dashTahunFilter');
+  const semEl = document.getElementById('dashSemesterFilter');
+  if(!tahunEl || !semEl) return;
+
+  google.script.run
+    .withSuccessHandler(function(){ loadDashboardV4(); })
+    .withFailureHandler(function(err){ showAcademicToast('Gagal ubah filter dashboard: ' + err.message, 'error'); })
+    .setUserAcademicPeriod(tahunEl.value, semEl.value);
+}
+
+/* ===================================================
+   FULL POLISH MOBILE UX – JS
+   =================================================== */
+</script>

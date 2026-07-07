@@ -1,0 +1,1584 @@
+<script>
+/** Normalisasi nilai semester ke 'Ganjil' atau 'Genap' */
+function normalizeSemester_(raw) {
+  const s = String(raw || '').toLowerCase().trim();
+  // Genap: mengandung 'genap', 'ii', diakhiri ' 2', atau tepat '2'
+  if (s.includes('genap') || s.includes('ii') || s === '2' || s.endsWith(' 2')) return 'Genap';
+  // Ganjil: mengandung 'ganjil', diakhiri ' i' / ' 1', atau tepat 'i'/'1'
+  if (s.includes('ganjil') || s.endsWith(' i') || s === 'i' || s === '1' || s.endsWith(' 1')) return 'Ganjil';
+  return raw; // kembalikan apa adanya
+}
+
+function _applySettingToNilai_(s) {
+  if (!s) return;
+  // Keep global cache fresh
+  window._settingCache = s;
+  if (s.tahun_pelajaran) {
+    const el = document.getElementById('nilaiTahunInput');
+    if (el) el.value = s.tahun_pelajaran;
+  }
+  const semEl = document.getElementById('nilaiSemesterSelect');
+  if (semEl) {
+    const normalized = normalizeSemester_(s.semester);
+    semEl.value = normalized || '';
+    if (!normalized) semEl.placeholder = 'Pilih semester...';
+  }
+  if (s.mata_pelajaran) {
+    const mapels = s.mata_pelajaran.split(/,\s*/).map(m=>m.trim()).filter(Boolean);
+    const sel = document.getElementById('nilaiMapelSelect');
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
+      mapels.forEach(m => {
+        const o = document.createElement('option');
+        o.value = o.textContent = m;
+        sel.appendChild(o);
+      });
+      if (mapels.length === 1) sel.value = mapels[0];
+    }
+  }
+}
+
+function _setMuatBtn_(ready) {
+  const btn = document.getElementById('btnMuatNilai');
+  if (!btn) return;
+  if (ready) {
+    btn.disabled = false;
+    btn.title = '';
+    btn.style.opacity = '';
+  } else {
+    btn.disabled = true;
+    btn.title = 'Menunggu data setting...';
+    btn.style.opacity = '0.5';
+  }
+}
+
+function initTabNilai() {
+  // Disable muat button while waiting for setting
+  _setMuatBtn_(false);
+
+  // Load daftar kelas milik user
+  google.script.run
+    .withSuccessHandler(list => {
+      const sel = document.getElementById('nilaiKelasSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+      (list || []).forEach(k => {
+        const o = document.createElement('option');
+        o.value = o.textContent = k;
+        sel.appendChild(o);
+      });
+    })
+    .withFailureHandler(e => console.error('[NILAI] getAllKelas:', e))
+    .getAllKelasUntukNilai();
+
+  // Pre-fill from cached setting instantly and enable button
+  if (window._settingCache) {
+    _applySettingToNilai_(window._settingCache);
+    _setMuatBtn_(true);
+    return; // cache is fresh enough; async refresh will run on next open
+  }
+
+  // No cache yet: fetch from GAS, then enable button when ready
+  google.script.run
+    .withSuccessHandler(s => {
+      _applySettingToNilai_(s);
+      _setMuatBtn_(true);
+    })
+    .withFailureHandler(() => {
+      _setMuatBtn_(true); // enable anyway; validation will catch missing fields
+    })
+    .getSetting();
+}
+
+let _nilaiBatchTimer = null;
+function scheduleNilaiBatchRecalc_(delay = 30) {
+  if (_nilaiBatchTimer) clearTimeout(_nilaiBatchTimer);
+  _nilaiBatchTimer = setTimeout(() => {
+    _nilaiBatchTimer = null;
+    nilaiHitungKatrolBatch_UI();
+    updateStatistikUI_nilai();
+  }, delay);
+}
+
+function updateNilaiKelengkapanInfo_() {
+  const el = document.getElementById('nilaiKelengkapanInfo');
+  if (!el) return;
+  const rows = nilaiState.rows || [];
+  if (!rows.length) {
+    el.textContent = 'Kelengkapan: -';
+    el.style.background = '#eef2ff';
+    el.style.color = '#3730a3';
+    return;
+  }
+
+  const isGenap = String(nilaiState.semester || '').toLowerCase().includes('genap');
+  const requiredFields = ['tgs1','tgs2','tgs3','uh1','uh2','uh3','pts', isGenap ? 'pat' : 'pas'];
+
+  let kosong = 0;
+  rows.forEach(r => {
+    requiredFields.forEach(f => {
+      const v = r[f];
+      if (v === null || v === undefined || String(v).trim() === '') kosong++;
+    });
+  });
+
+  const total = rows.length * requiredFields.length;
+  const terisi = total - kosong;
+  const persen = total > 0 ? Math.round((terisi / total) * 100) : 0;
+
+  el.textContent = `Kelengkapan: ${terisi}/${total} (${persen}%) • Kosong: ${kosong}`;
+  if (kosong === 0) {
+    el.style.background = '#dcfce7';
+    el.style.color = '#166534';
+  } else if (persen >= 70) {
+    el.style.background = '#fef3c7';
+    el.style.color = '#92400e';
+  } else {
+    el.style.background = '#fee2e2';
+    el.style.color = '#991b1b';
+  }
+}
+
+const NILAI_DRAFT_VERSION = 1;
+const NILAI_DRAFT_FIELDS = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+let _nilaiAutosaveTimer = null;
+
+/** State terpusat untuk tab Input Nilai */
+let nilaiState = {
+  kelas          : '',
+  mapel          : '',
+  tahun          : '',
+  semester       : '',
+  rows           : [],       // array of row objects {no_absen,nis,nama_siswa,jk,...}
+  locked         : true,     // true = tampilan terkunci / read-only
+  isDirty        : false,    // ada perubahan belum tersimpan
+  dataVersion    : 0,
+  lastAutosaveAt : 0,
+  focusKomponen  : 'all',    // 'all' | 'uh1' | 'tgs1' | dll
+  setting        : {},       // hasil getSettingNilai (kkm, nilai_min_target, dst)
+  cetakPreviewOk : false
+};
+
+function setNilaiAutosaveInfo_(text, color) {
+  const el = document.getElementById('nilaiAutosaveInfo');
+  if (!el) return;
+  el.textContent = text || 'Autosave: standby';
+  el.style.color = color || '#6b7280';
+}
+
+function getNilaiDraftKey_(kelas, mapel, tahun, semester) {
+  const parts = [kelas, mapel, tahun, semester]
+    .map(v => String(v || '').trim().toLowerCase());
+  if (parts.some(v => !v)) return '';
+  return 'nilaiDraft:v' + NILAI_DRAFT_VERSION + ':' + parts.join('|');
+}
+
+function getNilaiDraftKeyFromState_() {
+  return getNilaiDraftKey_(nilaiState.kelas, nilaiState.mapel, nilaiState.tahun, nilaiState.semester);
+}
+
+function sanitizeDraftNilai_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return '';
+  const clamped = Math.min(100, Math.max(0, n));
+  return Math.round(clamped * 100) / 100;
+}
+
+function scheduleNilaiAutosave_(delay = 1200) {
+  if (!nilaiState.isDirty) return;
+  if (_nilaiAutosaveTimer) clearTimeout(_nilaiAutosaveTimer);
+  _nilaiAutosaveTimer = setTimeout(() => {
+    _nilaiAutosaveTimer = null;
+    saveNilaiDraftLocal_();
+  }, delay);
+}
+
+function markNilaiDirty_() {
+  nilaiState.isDirty = true;
+  scheduleNilaiAutosave_();
+}
+
+function saveNilaiDraftLocal_() {
+  const key = getNilaiDraftKeyFromState_();
+  if (!key || !nilaiState.rows?.length || !nilaiState.isDirty) return;
+
+  try {
+    const payload = {
+      v: NILAI_DRAFT_VERSION,
+      savedAt: Date.now(),
+      kelas: nilaiState.kelas,
+      mapel: nilaiState.mapel,
+      tahun: nilaiState.tahun,
+      semester: nilaiState.semester,
+      rows: nilaiState.rows.map(r => {
+        const out = { nis: String(r.nis || ''), nama_siswa: String(r.nama_siswa || '') };
+        NILAI_DRAFT_FIELDS.forEach(f => { out[f] = sanitizeDraftNilai_(r[f]); });
+        return out;
+      })
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+    nilaiState.lastAutosaveAt = payload.savedAt;
+    setNilaiAutosaveInfo_('Autosave: tersimpan ' + new Date(payload.savedAt).toLocaleTimeString('id-ID'), '#2563eb');
+  } catch (e) {
+    setNilaiAutosaveInfo_('Autosave: gagal menyimpan draft lokal', '#dc2626');
+  }
+}
+
+function clearNilaiDraftLocal_() {
+  const key = getNilaiDraftKeyFromState_();
+  if (!key) return;
+  try { localStorage.removeItem(key); } catch (_) {}
+  nilaiState.isDirty = false;
+  nilaiState.lastAutosaveAt = 0;
+  setNilaiAutosaveInfo_('Autosave: tersinkron ke server', '#15803d');
+}
+
+function clearNilaiDraftManual_() {
+  const key = getNilaiDraftKeyFromState_();
+  if (!key) {
+    alert('Muat data nilai terlebih dahulu.');
+    return;
+  }
+
+  const draft = readNilaiDraftLocal_(nilaiState.kelas, nilaiState.mapel, nilaiState.tahun, nilaiState.semester);
+  if (!draft) {
+    setNilaiAutosaveInfo_('Autosave: tidak ada draft lokal', '#6b7280');
+    if (typeof showSoftPopup === 'function') showSoftPopup('Info', 'Tidak ada draft lokal untuk dihapus');
+    return;
+  }
+
+  const ok = confirm('Hapus draft autosave lokal untuk kelas/mapel ini?');
+  if (!ok) return;
+
+  try { localStorage.removeItem(key); } catch (_) {}
+  nilaiState.lastAutosaveAt = 0;
+  nilaiState.isDirty = false;
+  setNilaiAutosaveInfo_('Autosave: draft lokal dihapus', '#6b7280');
+  if (typeof showSoftPopup === 'function') showSoftPopup('Draft Dihapus', 'Draft autosave lokal berhasil dihapus');
+}
+
+function applyNilaiDraftToState_(draft, opts = {}) {
+  if (!draft || !Array.isArray(draft.rows) || !draft.rows.length) return 0;
+  const byNis = {};
+  draft.rows.forEach(r => {
+    const nis = String(r.nis || '').trim();
+    if (nis) byNis[nis] = r;
+  });
+
+  let restored = 0;
+  nilaiState.rows.forEach(r => {
+    const nis = String(r.nis || '').trim();
+    const d = byNis[nis];
+    if (!d) return;
+
+    NILAI_DRAFT_FIELDS.forEach(f => {
+      if (d[f] !== undefined) r[f] = d[f];
+    });
+    const calc = nilaiHitungRow_(r, nilaiState.semester);
+    Object.assign(r, calc);
+    restored++;
+  });
+
+  if (restored > 0) {
+    nilaiState.isDirty = true;
+    nilaiState.lastAutosaveAt = Number(draft.savedAt || Date.now());
+    nilaiHitungKatrolBatch_UI();
+    setNilaiEditMode_(false);
+    updateStatistikUI_nilai();
+    const infoText = opts.infoText || ('Autosave: draft dipulihkan (' + restored + ' siswa)');
+    setNilaiAutosaveInfo_(infoText, '#92400e');
+  }
+
+  return restored;
+}
+
+function restoreNilaiDraftManual_() {
+  const draft = readNilaiDraftLocal_(nilaiState.kelas, nilaiState.mapel, nilaiState.tahun, nilaiState.semester);
+  if (!draft || !draft.rows?.length) {
+    setNilaiAutosaveInfo_('Autosave: tidak ada draft lokal', '#6b7280');
+    if (typeof showSoftPopup === 'function') showSoftPopup('Info', 'Tidak ada draft lokal untuk dipulihkan');
+    return;
+  }
+
+  const savedAt = draft.savedAt ? new Date(draft.savedAt).toLocaleString('id-ID') : 'waktu tidak diketahui';
+  const ok = confirm('Pulihkan draft autosave lokal (' + savedAt + ')?');
+  if (!ok) return;
+
+  const restored = applyNilaiDraftToState_(draft, { infoText: 'Autosave: draft dipulihkan manual (' + savedAt + ')' });
+  if (!restored) {
+    if (typeof showSoftPopup === 'function') showSoftPopup('Info', 'Tidak ada data siswa yang cocok untuk dipulihkan');
+    return;
+  }
+  if (typeof showSoftPopup === 'function') {
+    showSoftPopup('Draft Dipulihkan', restored + ' data siswa dipulihkan dari autosave');
+  }
+}
+
+function readNilaiDraftLocal_(kelas, mapel, tahun, semester) {
+  const key = getNilaiDraftKey_(kelas, mapel, tahun, semester);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.rows)) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function nilaiSnapshotSignature_(rows) {
+  return (rows || []).map(r => {
+    const vals = [String(r.nis || '')];
+    NILAI_DRAFT_FIELDS.forEach(f => vals.push(String(r[f] ?? '')));
+    return vals.join('|');
+  }).join('||');
+}
+
+function maybeRestoreNilaiDraft_() {
+  const draft = readNilaiDraftLocal_(nilaiState.kelas, nilaiState.mapel, nilaiState.tahun, nilaiState.semester);
+  if (!draft || !draft.rows?.length) {
+    setNilaiAutosaveInfo_('Autosave: tidak ada draft lokal', '#6b7280');
+    return;
+  }
+
+  const currentSig = nilaiSnapshotSignature_(nilaiState.rows);
+  const draftSig   = nilaiSnapshotSignature_(draft.rows);
+  if (currentSig === draftSig) {
+    setNilaiAutosaveInfo_('Autosave: draft lokal sama dengan data saat ini', '#6b7280');
+    return;
+  }
+
+  const savedAt = draft.savedAt ? new Date(draft.savedAt) : null;
+  const stamp = savedAt ? savedAt.toLocaleString('id-ID') : 'waktu tidak diketahui';
+  const ok = confirm('Ditemukan autosave lokal (' + stamp + '). Pulihkan pengerjaan terakhir?');
+  if (!ok) {
+    setNilaiAutosaveInfo_('Autosave: draft tersedia (belum dipulihkan)', '#b45309');
+    return;
+  }
+  const restored = applyNilaiDraftToState_(draft);
+  if (!restored) {
+    setNilaiAutosaveInfo_('Autosave: draft tidak cocok dengan daftar siswa aktif', '#b45309');
+    return;
+  }
+  if (typeof showSoftPopup === 'function') {
+    showSoftPopup('Draft Dipulihkan', restored + ' data siswa dipulihkan dari autosave');
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (nilaiState.isDirty) saveNilaiDraftLocal_();
+});
+
+/* ---- Lock / Edit mode ---- */
+function setNilaiEditMode_(lock) {
+  nilaiState.locked = lock;
+  document.getElementById('nilaiLockBadge').style.display    = lock ? 'inline-block' : 'none';
+  document.getElementById('nilaiEditBadge').style.display    = lock ? 'none' : 'inline-block';
+  document.getElementById('btnEditNilai').style.display      = lock ? 'inline-block' : 'none';
+  document.getElementById('btnsEditNilai').style.display     = lock ? 'none' : 'flex';
+  const _bawah = document.getElementById('btnsEditNilaiBawah');
+  if (_bawah) _bawah.style.display = lock ? 'none' : 'flex';
+  document.getElementById('nilaiKomponenCard').style.display = lock ? 'none' : 'block';
+  document.getElementById('nilaiImportSection').style.display= lock ? 'none' : 'block';
+  document.getElementById('nilaiEditHint').style.display     = lock ? 'none' : 'inline-block';
+  // Update FAB: tampil hanya saat terkunci dan ada data
+  if (typeof updateFab_ === 'function') updateFab_('inputNilai');
+  renderTabelNilai();
+}
+
+function editNilai() {
+  nilaiState.focusKomponen = 'all';
+  // Reset pill selection to 'all'
+  document.querySelectorAll('.nil-pill')
+    .forEach(b => b.classList.toggle('nil-pill-active', b.dataset.key === 'all'));
+  setNilaiEditMode_(false);
+}
+
+function lockNilai() {
+  if (!confirm('Kunci daftar nilai? Nilai tidak bisa diedit sebelum dibuka kembali dengan tombol "Edit Nilai".')) return;
+  setNilaiEditMode_(true);
+}
+
+function cancelEditNilai() {
+  const dirty = !!nilaiState.isDirty;
+  const ok = confirm(
+    dirty
+      ? 'Batalkan input/edit nilai? Perubahan yang belum disimpan akan dibatalkan.'
+      : 'Batalkan mode input nilai dan kembali ke mode terkunci?'
+  );
+  if (!ok) return;
+
+  if (_nilaiAutosaveTimer) {
+    clearTimeout(_nilaiAutosaveTimer);
+    _nilaiAutosaveTimer = null;
+  }
+  muatDataNilai(true);
+}
+
+function setFokusKomponen(key) {
+  nilaiState.focusKomponen = key;
+  document.querySelectorAll('.nil-pill')
+    .forEach(b => b.classList.toggle('nil-pill-active', b.dataset.key === key));
+  renderTabelNilai();
+}
+
+/** Muat data siswa + nilai tersimpan + setting pengaturan */
+function muatDataNilai(forceLocked = false) {
+  const kelas = document.getElementById('nilaiKelasSelect').value;
+  const mapel = (document.getElementById('nilaiMapelSelect')?.value || document.getElementById('nilaiMapelInput')?.value || '').trim();
+  const tahun = (document.getElementById('nilaiTahunInput').value  || '').trim();
+  const sem   = document.getElementById('nilaiSemesterSelect').value;
+
+  if (!kelas) { alert('Pilih kelas terlebih dahulu'); return; }
+  if (!mapel) { alert('Pilih mata pelajaran terlebih dahulu'); return; }
+
+  // If tahun/sem still empty, try to fill from cache then retry
+  if (!tahun || !sem) {
+    if (window._settingCache) {
+      _applySettingToNilai_(window._settingCache);
+      setTimeout(() => muatDataNilai(forceLocked), 0);
+    } else {
+      const btn = document.getElementById('btnMuatNilai');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Memuat setting...'; }
+      google.script.run
+        .withSuccessHandler(s => {
+          _applySettingToNilai_(s);
+          if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
+          setTimeout(() => muatDataNilai(forceLocked), 0);
+        })
+        .withFailureHandler(() => {
+          if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
+          alert('Gagal memuat setting. Isi Tahun Pelajaran dan Semester secara manual lalu coba lagi.');
+        })
+        .getSetting();
+    }
+    return;
+  }
+
+  nilaiState.kelas    = kelas;
+  nilaiState.mapel    = mapel;
+  nilaiState.tahun    = tahun;
+  nilaiState.semester = sem;
+
+  const btn = document.getElementById('btnMuatNilai');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memuat...'; }
+  if (typeof startProgress === 'function') startProgress();
+
+  const done = { siswa: false, nilai: false, setting: false };
+  let siswaData = [], nilaiData = [], nilaiVersion = 0, settingData = {};
+
+  const tryRender = () => {
+    if (!done.siswa || !done.nilai || !done.setting) return;
+    if (typeof endProgress === 'function') endProgress();
+    if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
+
+    const nilaiMap = {};
+    nilaiData.forEach(n => { if (n.nis) nilaiMap[String(n.nis).trim()] = n; });
+
+    nilaiState.setting = settingData;
+    nilaiState.dataVersion = Number(nilaiVersion || 0);
+    nilaiState.isDirty = false;
+    nilaiState.lastAutosaveAt = 0;
+    nilaiState.rows = siswaData.map(s => {
+      const saved = nilaiMap[String(s.nis || '').trim()] || {};
+      return {
+        no_absen      : s.no_absen,
+        nis           : s.nis,
+        nama_siswa    : s.nama,
+        jk            : s.jk,
+        uh1           : saved.uh1  ?? '', uh2: saved.uh2 ?? '', uh3: saved.uh3 ?? '',
+        tgs1          : saved.tgs1 ?? '', tgs2: saved.tgs2 ?? '', tgs3: saved.tgs3 ?? '',
+        pts           : saved.pts  ?? '',
+        pas           : saved.pas  ?? '',
+        pat           : saved.pat  ?? '',
+        nilai_remedial: saved.nilai_remedial ?? '',
+        rata_uh       : saved.rata_uh    ?? null,
+        rata_tugas    : saved.rata_tugas  ?? null,
+        nilai_fix     : saved.nilai_fix    ?? null,
+        nilai_asli    : saved.nilai_asli   ?? null,
+        nilai_katrol  : saved.nilai_katrol ?? null,
+        nilai_akhir   : saved.nilai_akhir  ?? null,
+      };
+    });
+
+    // Recalculate turunan untuk setiap baris (dari nilai tersimpan)
+    nilaiState.rows.forEach(r => {
+      const calc = nilaiHitungRow_(r, sem);
+      Object.assign(r, calc);
+    });
+    nilaiHitungKatrolBatch_UI();
+
+    // Isi pengaturan ke form
+    document.getElementById('nilaiMinTarget').value = settingData.nilai_min_target ?? 60;
+    document.getElementById('nilaiMaxTarget').value = settingData.nilai_max_target ?? 95;
+    document.getElementById('nilaiKKM').value       = settingData.kkm ?? 70;
+
+    // Update status bar
+    document.getElementById('nilaiInfoKelas').textContent    = nilaiState.kelas;
+    document.getElementById('nilaiInfoMapel').textContent    = nilaiState.mapel;
+    document.getElementById('nilaiInfoSemTahun').textContent = sem + ' ' + tahun;
+
+    document.getElementById('nilaiMainSection').style.display = 'block';
+    // Default: langsung mode input (edit), kecuali diminta force lock
+    nilaiState.locked = !!forceLocked;
+    nilaiState.focusKomponen = 'all';
+    setNilaiEditMode_(nilaiState.locked);
+    updateStatistikUI_nilai();
+    maybeRestoreNilaiDraft_();
+    // Update FAB setelah data dimuat (FAB inputNilai hanya muncul saat locked + ada data)
+    if (typeof updateFab_ === 'function') updateFab_('inputNilai');
+  };
+
+  google.script.run
+    .withSuccessHandler(d => { siswaData = d || []; done.siswa = true; tryRender(); })
+    .withFailureHandler(e => {
+      if (typeof endProgress === 'function') endProgress();
+      if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
+      // Still complete the render so main section shows (with empty student list + error msg)
+      console.error('[NILAI] getDataSiswaUntukNilai gagal:', e && e.message);
+      siswaData = [];
+      done.siswa = true;
+      tryRender();
+    })
+    .getDataSiswaUntukNilai(kelas);
+
+  google.script.run
+    .withSuccessHandler(d => {
+      nilaiData = d?.rows || [];
+      nilaiVersion = d?.version || 0;
+      done.nilai = true;
+      tryRender();
+    })
+    .withFailureHandler(() => {
+      nilaiData = [];
+      nilaiVersion = 0;
+      done.nilai = true;
+      tryRender();
+    })
+    .getNilaiBundle(kelas, mapel, tahun, sem);
+
+  google.script.run
+    .withSuccessHandler(d => { settingData = d || {}; done.setting = true; tryRender(); })
+    .withFailureHandler(() => { settingData = { nilai_min_target:60, nilai_max_target:95, kkm:70 }; done.setting = true; tryRender(); })
+    .getSettingNilai(kelas, mapel, tahun, sem);
+}
+
+/** Render ulang seluruh tabel – mendukung lock dan fokus komponen */
+function renderTabelNilai() {
+  const tbody = document.getElementById('tabelNilaiBody');
+  if (!tbody) return;
+  const sem     = nilaiState.semester || '';
+  const kkm     = Number(nilaiState.setting?.kkm || 70);
+  const locked  = nilaiState.locked;
+  const focus   = nilaiState.focusKomponen || 'all'; // 'all' or specific key
+  const isGenap = sem.toLowerCase().includes('genap');
+
+  const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    ? Number(v).toFixed(2) : '-';
+
+  const noteValueHtml = (val, { lowCheck = true } = {}) => {
+    if (val === null || val === undefined || val === '' || isNaN(Number(val))) {
+      return '-';
+    }
+    const n = Number(val);
+    if (lowCheck && n < kkm) {
+      return `<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-weight:700">${n.toFixed(2)} • Rendah</span>`;
+    }
+    return n.toFixed(2);
+  };
+
+  if (!nilaiState.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="16" style="padding:20px;color:#9ca3af;text-align:center">'
+      + '⚠️ Tidak ada data siswa untuk kelas <b>' + (nilaiState.kelas || '-') + '</b>. '
+      + 'Pastikan siswa sudah diimport di tab <b>Jurnal → Import Siswa</b> '
+      + 'dan email pengupload sesuai akun yang sedang login.</td></tr>';
+    updateNilaiKelengkapanInfo_();
+    return;
+  }
+
+  /**
+   * Buat cell untuk kolom input (tgs1, uh1, pts, dst)
+   * - Locked: tampilkan nilai sebagai teks
+   * - Unlocked + focus='all': semua input aktif
+   * - Unlocked + focus=key: hanya kolom itu aktif, sisanya teks (dim)
+   */
+  const inputCell = (rowIdx, field, val, dimWhenInactive) => {
+    const isActive = !locked && (focus === 'all' || focus === field);
+    const valStr   = (val !== null && val !== undefined && val !== '') ? val : '';
+    const isLow    = (val !== null && val !== undefined && val !== '' && !isNaN(Number(val)) && Number(val) < kkm);
+    const fmtVal   = noteValueHtml(val, { lowCheck: true });
+
+    if (isActive) {
+      const lowStyle = isLow ? 'background:#fef3c7;border-color:#f59e0b;' : '';
+      return `<td class="ntd-inp">
+        <input type="number" min="0" max="100" step="any" value="${valStr}" placeholder="-"
+               onwheel="this.blur()"
+               onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();}"
+               style="${lowStyle}"
+               oninput="nilaiOnInput(${rowIdx},'${field}',this.value)">
+      </td>`;
+    }
+    // Dimmed when other komponen focused in edit mode
+    const dim = !locked && focus !== 'all' && dimWhenInactive;
+    return `<td class="ntd-plain" ${dim ? 'style="opacity:0.25"' : ''}>${fmtVal}</td>`;
+  };
+
+  const calcCell = (id, val, redBelowKKM) => {
+    if (val === null || val === undefined || val === '' || isNaN(Number(val))) {
+      return `<td class="ntd-calc" id="${id}">-</td>`;
+    }
+    const n   = Number(val);
+    const red = redBelowKKM && n < kkm;
+    return `<td class="ntd-calc" id="${id}">
+      <span ${red ? 'style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-weight:700"' : ''}>${n.toFixed(2)}${red ? ' • Rendah' : ''}</span>
+    </td>`;
+  };
+
+  // Render header dinamis sesuai semester
+  const tHead = document.getElementById('tabelNilaiThead');
+  if (tHead) {
+    const pasPat = isGenap ? 'PAT' : 'PAS';
+    tHead.innerHTML = `
+      <tr>
+        <th rowspan="2" style="min-width:32px">No</th>
+        <th rowspan="2" style="min-width:68px">NIS</th>
+        <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
+        <th colspan="3">Tugas</th>
+        <th colspan="3">Ulangan Harian</th>
+        <th rowspan="2" style="min-width:56px">PTS</th>
+        <th rowspan="2" style="min-width:56px">${pasPat}</th>
+        <th rowspan="2">Rata Tugas</th>
+        <th rowspan="2">Rata UH</th>
+        <th rowspan="2">Rata Total</th>
+        <th rowspan="2" style="background:#4338ca">Total Nilai</th>
+        <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
+      </tr>
+      <tr>
+        <th>TGS1</th><th>TGS2</th><th>TGS3</th>
+        <th>UH1</th><th>UH2</th><th>UH3</th>
+      </tr>`;
+  }
+
+  tbody.innerHTML = nilaiState.rows.map((r, i) => {
+    const nalq   = r.nilai_akhir;
+    const rowRed = (nalq !== null && nalq !== undefined && nalq !== ''
+      && !isNaN(Number(nalq)) && Number(nalq) < kkm);
+
+    return `<tr class="${rowRed ? 'row-kkm' : ''}" id="nilaiTr_${i}">
+      <td class="ntd-plain" style="font-weight:600">${i + 1}</td>
+      <td class="ntd-plain">${r.nis || '-'}</td>
+      <td class="ntd-plain" style="text-align:left;padding-left:8px;white-space:nowrap">${r.nama_siswa || ''}</td>
+      ${inputCell(i, 'tgs1', r.tgs1, true)}
+      ${inputCell(i, 'tgs2', r.tgs2, true)}
+      ${inputCell(i, 'tgs3', r.tgs3, true)}
+      ${inputCell(i, 'uh1',  r.uh1,  true)}
+      ${inputCell(i, 'uh2',  r.uh2,  true)}
+      ${inputCell(i, 'uh3',  r.uh3,  true)}
+      ${inputCell(i, 'pts',  r.pts,  true)}
+      ${isGenap ? inputCell(i, 'pat', r.pat, true) : inputCell(i, 'pas', r.pas, true)}
+      ${calcCell('nRataTGS_' + i, r.rata_tugas)}
+      ${calcCell('nRataUH_'  + i, r.rata_uh)}
+      ${calcCell('nFix_'     + i, r.nilai_fix)}
+      ${calcCell('nAsli_'    + i, r.nilai_asli)}
+      ${calcCell('nAkhir_'   + i, r.nilai_akhir, true)}
+    </tr>`;
+  }).join('');
+
+  updateNilaiKelengkapanInfo_();
+}
+
+/* ---- Client-side formula (mirror backend hitungNilaiRow_) ---- */
+function nilaiHitungRow_(r, semester) {
+  const p  = v => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
+  const avg = arr => {
+    const v = arr.map(p).filter(x => x !== null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const rata_uh    = avg([r.uh1, r.uh2, r.uh3]);
+  const rata_tugas = avg([r.tgs1, r.tgs2, r.tgs3]);
+  let nilai_fix = null;
+  if (rata_uh !== null && rata_tugas !== null) nilai_fix = (rata_uh + rata_tugas) / 2;
+  else if (rata_uh    !== null) nilai_fix = rata_uh;
+  else if (rata_tugas !== null) nilai_fix = rata_tugas;
+
+  const isGenap  = String(semester || '').toLowerCase().includes('genap');
+  const uas      = isGenap ? p(r.pat) : p(r.pas);
+  const pts_num  = p(r.pts);
+  let nilai_asli = null;
+  if (nilai_fix !== null && pts_num !== null && uas !== null) {
+    nilai_asli = (0.4 * nilai_fix) + (0.3 * pts_num) + (0.3 * uas);
+  }
+  return { rata_uh, rata_tugas, nilai_fix, nilai_asli };
+}
+
+/* ---- Batch katrol + nilai_akhir (client-side) ---- */
+function nilaiHitungKatrolBatch_UI() {
+  const minT = Number(document.getElementById('nilaiMinTarget')?.value ?? 60);
+  const maxT = Number(document.getElementById('nilaiMaxTarget')?.value ?? 95);
+  const kkm  = Number(document.getElementById('nilaiKKM')?.value ?? 70);
+
+  const valid = nilaiState.rows
+    .map(r => r.nilai_asli)
+    .filter(v => v !== null && v !== undefined && !isNaN(v));
+
+  if (!valid.length) return;
+
+  const minA = Math.min(...valid);
+  const maxA = Math.max(...valid);
+
+  nilaiState.rows.forEach((r, i) => {
+    if (r.nilai_asli === null || r.nilai_asli === undefined || isNaN(r.nilai_asli)) {
+      r.nilai_katrol = null; r.nilai_akhir = null;
+    } else {
+      let k = (maxA === minA) ? minT
+        : ((r.nilai_asli - minA) / (maxA - minA)) * (maxT - minT) + minT;
+      k = Math.round(k * 100) / 100;
+      r.nilai_katrol = k;
+      const rem = (r.nilai_remedial !== null && r.nilai_remedial !== '' && !isNaN(Number(r.nilai_remedial)))
+        ? Number(r.nilai_remedial) : null;
+      r.nilai_akhir = rem !== null ? Math.round(Math.max(k, rem) * 100) / 100 : k;
+    }
+
+    // Update DOM cells
+    const updCell = (id, val, colorKKM) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (val === null || val === undefined) { el.innerHTML = '<span>-</span>'; return; }
+      const n = Number(val);
+      const red = colorKKM && n < kkm;
+      el.innerHTML = `<span ${red ? 'style="color:red;font-weight:700"' : ''}>${isNaN(n) ? '-' : n.toFixed(2)}</span>`;
+    };
+    updCell('nAkhir_'  + i, r.nilai_akhir, true);
+
+    // Row background
+    const tr = document.getElementById('nilaiTr_' + i);
+    if (tr) tr.style.background = (r.nilai_akhir !== null && !isNaN(r.nilai_akhir) && r.nilai_akhir < kkm)
+      ? '#fff0f0' : '';
+  });
+}
+
+/** Dipanggil saat nilai input diubah */
+function nilaiOnInput(rowIdx, field, val) {
+  const r = nilaiState.rows[rowIdx];
+  r[field] = (val === '') ? '' : val;
+
+  const calc = nilaiHitungRow_(r, nilaiState.semester);
+  r.rata_uh    = calc.rata_uh;
+  r.rata_tugas = calc.rata_tugas;
+  r.nilai_fix  = calc.nilai_fix;
+  r.nilai_asli = calc.nilai_asli;
+
+  const fmtCell = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (v !== null && v !== undefined && !isNaN(Number(v)))
+      el.innerHTML = `<span>${Number(v).toFixed(2)}</span>`;
+    else el.innerHTML = '<span>-</span>';
+  };
+  fmtCell('nRataUH_'  + rowIdx, r.rata_uh);
+  fmtCell('nRataTGS_' + rowIdx, r.rata_tugas);
+  fmtCell('nFix_'     + rowIdx, r.nilai_fix);
+  fmtCell('nAsli_'    + rowIdx, r.nilai_asli);
+
+  markNilaiDirty_();
+  scheduleNilaiBatchRecalc_();
+}
+
+/** Update panel statistik + grafik */
+function updateStatistikUI_nilai() {
+  const kkm  = Number(nilaiState.setting.kkm || 70);
+  const vals = nilaiState.rows
+    .map(r => r.nilai_akhir)
+    .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    .map(Number);
+
+  const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
+  if (!vals.length) {
+    ['nilaiStatRata','nilaiStatMax','nilaiStatMin','nilaiStatTuntas','nilaiStatBelum']
+      .forEach(id => setEl(id, '-'));
+    updateNilaiKelengkapanInfo_();
+    return;
+  }
+  const rata = vals.reduce((a, b) => a + b, 0) / vals.length;
+  setEl('nilaiStatRata',   rata.toFixed(2));
+  setEl('nilaiStatMax',    Math.max(...vals).toFixed(2));
+  setEl('nilaiStatMin',    Math.min(...vals).toFixed(2));
+  setEl('nilaiStatTuntas', vals.filter(v => v >= kkm).length);
+  setEl('nilaiStatBelum',  vals.filter(v => v <  kkm).length);
+
+  updateGrafikNilai_(vals, kkm);
+  updateNilaiKelengkapanInfo_();
+}
+
+let _nilaiChart = null;
+function updateGrafikNilai_(vals, kkm) {
+  const canvas = document.getElementById('canvasNilai');
+  if (!canvas) return;
+  const ranges = [
+    { label: '< 60',   min: 0,   max: 60  },
+    { label: '60–69',  min: 60,  max: 70  },
+    { label: '70–79',  min: 70,  max: 80  },
+    { label: '80–89',  min: 80,  max: 90  },
+    { label: '90–100', min: 90,  max: 101 }
+  ];
+  const counts = ranges.map(r => vals.filter(v => v >= r.min && v < r.max).length);
+  const colors = ['#ef4444','#f97316','#3b82f6','#22c55e','#6C63FF'];
+
+  if (_nilaiChart) _nilaiChart.destroy();
+  _nilaiChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ranges.map(r => r.label),
+      datasets: [{ label: 'Jumlah Siswa', data: counts, backgroundColor: colors, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+}
+
+/** Simpan pengaturan (KKM + target katrol) */
+function simpanPengaturanNilai(ev) {
+  const { kelas, mapel, tahun, semester } = nilaiState;
+  if (!kelas || !mapel) { alert('Muat data siswa terlebih dahulu'); return; }
+
+  const minT = Number(document.getElementById('nilaiMinTarget').value);
+  const maxT = Number(document.getElementById('nilaiMaxTarget').value);
+  const kkm  = Number(document.getElementById('nilaiKKM').value);
+
+  if (isNaN(minT) || isNaN(maxT) || isNaN(kkm)) { alert('Input pengaturan tidak valid'); return; }
+  if (minT >= maxT) { alert('Nilai terendah target harus lebih kecil dari nilai tertinggi target'); return; }
+
+  const btn = (ev && ev.currentTarget) ? ev.currentTarget : document.querySelector('button[onclick*="simpanPengaturanNilai"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  nilaiState.setting = { nilai_min_target: minT, nilai_max_target: maxT, kkm };
+
+  google.script.run
+    .withSuccessHandler(() => {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Pengaturan'; }
+      showSoftPopup('Berhasil', 'Pengaturan nilai tersimpan');
+      nilaiHitungKatrolBatch_UI();
+      updateStatistikUI_nilai();
+      renderTabelNilai(); // update baris merah sesuai KKM baru
+    })
+    .withFailureHandler(e => {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Pengaturan'; }
+      alert('Gagal: ' + e.message);
+    })
+    .simpanSettingNilai({ kelas, mapel, tahun, semester, nilai_min_target: minT, nilai_max_target: maxT, kkm });
+}
+
+/** Simpan semua nilai siswa ke backend + auto-lock setelah berhasil */
+function simpanSemuaNilai() {
+  const { kelas, mapel, tahun, semester, rows, setting, dataVersion } = nilaiState;
+  if (!kelas || !mapel || !rows.length) { alert('Tidak ada data untuk disimpan'); return; }
+
+  const btn = document.getElementById('btnSimpanNilai');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  const payload = {
+    kelas, mapel, tahun, semester, setting,
+    base_version: Number(dataVersion || 0),
+    rows: rows.map(r => ({
+      nis: r.nis, nama_siswa: r.nama_siswa,
+      uh1: r.uh1, uh2: r.uh2, uh3: r.uh3,
+      tgs1: r.tgs1, tgs2: r.tgs2, tgs3: r.tgs3,
+      pts: r.pts, pas: r.pas, pat: r.pat,
+      nilai_remedial: r.nilai_remedial
+    }))
+  };
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      nilaiState.dataVersion = Number(res?.version || Date.now());
+      clearNilaiDraftLocal_();
+      showSoftPopup('Tersimpan ✅', `${res.jumlah} data nilai berhasil disimpan`);
+      setNilaiEditMode_(true); // auto-lock setelah simpan
+    })
+    .withFailureHandler(e => {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      const msg = String(e?.message || 'Gagal menyimpan');
+      if (msg.includes('KONFLIK_DATA')) {
+        alert('Data sudah berubah dari sesi lain. Sistem akan memuat ulang data terbaru.');
+        muatDataNilai();
+        return;
+      }
+      alert('Gagal menyimpan: ' + msg);
+    })
+    .simpanNilaiSiswa(payload);
+}
+
+/** Import Excel via SheetJS */
+function importNilaiExcelUI(btnEl) {
+  const fileInput = document.getElementById('nilaiImportFile');
+  const f = fileInput?.files[0];
+  if (!f) { alert('Pilih file Excel terlebih dahulu'); return; }
+  if (!nilaiState.kelas || !nilaiState.mapel) {
+    alert('Muat data siswa terlebih dahulu sebelum import'); return;
+  }
+
+  const btn = btnEl || event.currentTarget;
+  btn.disabled = true; btn.textContent = '⏳ Memproses...';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb      = XLSX.read(e.target.result, { type: 'array' });
+      const ws      = wb.Sheets[wb.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      google.script.run
+        .withSuccessHandler(res => {
+          btn.disabled = false; btn.textContent = '📊 Import';
+          if (!res.success) { alert(res.message || 'Gagal parse data'); return; }
+          if (res.errors && res.errors.length)
+            alert('Peringatan:\n' + res.errors.slice(0, 10).join('\n'));
+
+          // Merge ke state berdasarkan NIS
+          const importMap = {};
+          (res.data || []).forEach(d => { if (d.nis) importMap[String(d.nis).trim()] = d; });
+
+          nilaiState.rows.forEach(r => {
+            const imp = importMap[String(r.nis || '').trim()];
+            if (!imp) return;
+            ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'].forEach(fk => {
+              if (imp[fk] !== undefined && imp[fk] !== '') r[fk] = imp[fk];
+            });
+            const calc = nilaiHitungRow_(r, nilaiState.semester);
+            Object.assign(r, calc);
+          });
+
+          nilaiHitungKatrolBatch_UI();
+          renderTabelNilai();
+          updateStatistikUI_nilai();
+          markNilaiDirty_();
+          showSoftPopup('Import Berhasil', `${res.data.length} siswa diimport`);
+        })
+        .withFailureHandler(e => {
+          btn.disabled = false; btn.textContent = '📊 Import';
+          alert('Error: ' + e.message);
+        })
+        .importNilaiData(rawRows);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = '📊 Import';
+      alert('Gagal baca file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+/** Download template Excel kosong */
+function downloadTemplateNilai() {
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
+  const header = ['nis','nama_siswa','kelas','uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+  const ws = XLSX.utils.aoa_to_sheet([header]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
+  XLSX.writeFile(wb, 'Template_Input_Nilai.xlsx');
+}
+
+/* ---- Cetak / Export (v2 – multi-kelas, format header kiri-kanan) ---- */
+
+function openCetakNilai() {
+  if (!nilaiState.rows.length) { alert('Data belum dimuat'); return; }
+  const modal = document.getElementById('modalCetakNilai');
+  if (modal) modal.style.display = 'flex';
+  setCetakReady_(false);
+  bindCetakModalGuard_();
+  loadKelasUntukCetak_();
+}
+
+function closeCetakNilai() {
+  const modal = document.getElementById('modalCetakNilai');
+  if (modal) modal.style.display = 'none';
+}
+
+function setCetakReady_(ready) {
+  nilaiState.cetakPreviewOk = !!ready;
+  const statusEl = document.getElementById('cetakPreviewStatus');
+  if (statusEl) {
+    statusEl.textContent = ready
+      ? '✅ Preview terverifikasi — siap Print / Export'
+      : '⚠️ Preview belum diverifikasi';
+    statusEl.style.color = ready ? '#15803d' : '#b45309';
+  }
+
+  const btnPrint = document.getElementById('btnDoCetak');
+  if (btnPrint) {
+    btnPrint.disabled = !ready;
+    btnPrint.title = ready ? '' : 'Lakukan preview terlebih dahulu';
+  }
+  const btnExcel = document.getElementById('btnDoExcel');
+  if (btnExcel) {
+    btnExcel.disabled = !ready;
+    btnExcel.title = ready ? '' : 'Lakukan preview terlebih dahulu';
+  }
+}
+
+function bindCetakModalGuard_() {
+  const modal = document.getElementById('modalCetakNilai');
+  if (!modal || modal.dataset.previewGuardBound === '1') return;
+  modal.dataset.previewGuardBound = '1';
+
+  modal.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!t) return;
+    const isCetakInput = t.closest('#cetakKelasContainer')
+      || t.name === 'cetakType'
+      || /^cetakCol/.test(t.id || '');
+    if (isCetakInput) setCetakReady_(false);
+  });
+}
+
+/** Load daftar kelas yang punya nilai (untuk checkbox di modal) */
+function loadKelasUntukCetak_() {
+  const { mapel, tahun, semester, kelas } = nilaiState;
+  const container = document.getElementById('cetakKelasContainer');
+  if (!container) return;
+
+  container.innerHTML = '<p class="muted" style="font-size:12px">⏳ Memuat daftar kelas...</p>';
+
+  google.script.run
+    .withSuccessHandler(list => {
+      // Ensure current class is always in list
+      if (!list.includes(kelas)) list.unshift(kelas);
+      container.innerHTML = list.map(k =>
+        `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
+          <input type="checkbox" value="${k}" ${k === kelas ? 'checked' : ''} onchange="setCetakReady_(false)">
+          ${k} ${k === kelas ? '<span class="muted" style="font-size:11px">(dimuat)</span>' : ''}
+        </label>`
+      ).join('');
+    })
+    .withFailureHandler(() => {
+      // Fallback: show only current class
+      container.innerHTML = `<label style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <input type="checkbox" value="${kelas}" checked onchange="setCetakReady_(false)"> ${kelas}
+      </label>`;
+    })
+    .getKelasYangAdaNilai(mapel, tahun, semester);
+}
+
+/**
+ * Generate HTML tabel nilai untuk satu kelas (untuk print/export)
+ * @param {string} kelasNm  – nama kelas
+ * @param {Array}  rows     – array row data nilai
+ * @param {object} opts     – { type, showCols, isGenap, kkm, rankMap }
+ * @returns {string} HTML string
+ */
+function buildNilaiTableHtml_(kelasNm, rows, opts) {
+  const { type, sc, isGenap, kkm } = opts;
+  const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    ? Number(v).toFixed(2) : '-';
+  const noteHtml = (v, markLow = true) => {
+    if (v === null || v === undefined || v === '' || isNaN(Number(v))) {
+      return '<span class="note-missing">Belum mengumpulkan</span>';
+    }
+    const n = Number(v);
+    if (markLow && n < kkm) {
+      return `<span class="note-low">${n.toFixed(2)} • Rendah</span>`;
+    }
+    return n.toFixed(2);
+  };
+
+  // Ranking
+  const sorted  = [...rows].filter(r => r.nilai_akhir !== null && !isNaN(Number(r.nilai_akhir)))
+    .sort((a, b) => Number(b.nilai_akhir) - Number(a.nilai_akhir));
+  const rankMap = {};
+  let rk = 1;
+  sorted.forEach((r, i) => {
+    if (i > 0 && Number(r.nilai_akhir) < Number(sorted[i-1].nilai_akhir)) rk = i + 1;
+    rankMap[r.nis] = rk;
+  });
+
+  // Build header
+  let hdr = '<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th>';
+  if (sc.tgs) hdr += '<th>TGS1</th><th>TGS2</th><th>TGS3</th>';
+  if (sc.uh)  hdr += '<th>UH1</th><th>UH2</th><th>UH3</th>';
+  if (sc.pts) hdr += '<th>PTS</th>';
+  if (sc.pas) hdr += `<th>${isGenap ? 'PAT' : 'PAS'}</th>`;
+  if (sc.rata) hdr += '<th>Rata</th>';
+  if (sc.total) hdr += `<th>${type === 'katrol' ? 'Katrol' : 'Murni'}</th>`;
+  if (sc.remedi) hdr += '<th>Remidi</th>';
+  hdr += '<th>Nilai Akhir</th><th>Ket</th>';
+  if (sc.ranking) hdr += '<th>Rank</th>';
+
+  const bodyRows = rows.map((r, i) => {
+    const finalVal = r.nilai_akhir;
+    const lulus    = finalVal !== null && !isNaN(Number(finalVal)) && Number(finalVal) >= kkm;
+    const akhirFmt = noteHtml(finalVal, true);
+
+    let tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>`;
+    if (sc.tgs)  tds += `<td>${noteHtml(r.tgs1, true)}</td><td>${noteHtml(r.tgs2, true)}</td><td>${noteHtml(r.tgs3, true)}</td>`;
+    if (sc.uh)   tds += `<td>${noteHtml(r.uh1, true)}</td><td>${noteHtml(r.uh2, true)}</td><td>${noteHtml(r.uh3, true)}</td>`;
+    if (sc.pts)  tds += `<td>${noteHtml(r.pts, true)}</td>`;
+    if (sc.pas)  tds += `<td>${noteHtml(isGenap ? r.pat : r.pas, true)}</td>`;
+    if (sc.rata) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.rata_uh, true)}</td>`;
+    if (sc.total) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.nilai_asli, true)}</td>`;
+    if (sc.remedi) tds += `<td>${noteHtml(r.nilai_remedial, true)}</td>`;
+    tds += `<td>${akhirFmt}</td><td>${lulus ? 'T' : 'BT'}</td>`;
+    if (sc.ranking) tds += `<td>${rankMap[r.nis] || '-'}</td>`;
+
+    return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
+  }).join('');
+
+  return `<thead><tr>${hdr}</tr></thead><tbody>${bodyRows}</tbody>`;
+}
+
+function previewCetakNilai() {
+  doCetakNilai('preview');
+}
+
+/** Buka window cetak dengan format header kiri-kanan */
+function doCetakNilai(mode = 'print') {
+  const kelasChecked = [...document.querySelectorAll('#cetakKelasContainer input:checked')]
+    .map(el => el.value);
+  if (!kelasChecked.length) { alert('Pilih minimal satu kelas'); return; }
+
+  const isPreview = String(mode || '').toLowerCase() === 'preview';
+  if (!isPreview && !nilaiState.cetakPreviewOk) {
+    alert('Lakukan preview terlebih dahulu sebelum cetak.');
+    return;
+  }
+
+  const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
+  const sc = {
+    tgs    : document.getElementById('cetakColTGS')?.checked,
+    uh     : document.getElementById('cetakColUH')?.checked,
+    pts    : document.getElementById('cetakColPTS')?.checked,
+    pas    : document.getElementById('cetakColPAS')?.checked,
+    rata   : document.getElementById('cetakColRata')?.checked,
+    total  : document.getElementById('cetakColTotal')?.checked,
+    remedi : document.getElementById('cetakColRemedi')?.checked,
+    ranking: document.getElementById('cetakColRanking')?.checked,
+  };
+
+  const btn = document.getElementById(isPreview ? 'btnPreviewCetak' : 'btnDoCetak');
+  const defaultBtnLabel = isPreview ? '👁️ Preview' : '🖨️ Print / Simpan PDF';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
+
+  const { mapel, tahun, semester, setting } = nilaiState;
+  const isGenap = semester.toLowerCase().includes('genap');
+  const kkm     = Number(setting.kkm || 70);
+
+  // Collect data: current class already in state; others fetched
+  const allData = {}; // { kelas: rows[] }
+  allData[nilaiState.kelas] = nilaiState.rows;
+
+  const toFetch = kelasChecked.filter(k => k !== nilaiState.kelas);
+  let pending   = toFetch.length;
+
+  const buildAndPrint = (settingGuru) => {
+    const namaGuru    = settingGuru?.nama_guru    || '___________________';
+    const nip         = settingGuru?.nip_guru || settingGuru?.nip || '-';
+    const namaSekolah = settingGuru?.nama_sekolah || '';
+    const tanggal     = new Date().toLocaleDateString('id-ID', { year:'numeric', month:'long', day:'numeric' });
+
+    let pagesHtml = '';
+    kelasChecked.forEach((k, ki) => {
+      const rows = allData[k] || [];
+      if (!rows.length) { return; } // skip empty
+      const tbl = buildNilaiTableHtml_(k, rows, { type, sc, isGenap, kkm });
+      pagesHtml += `
+        ${ ki > 0 ? '<div class="pb"></div>' : '' }
+        <div class="page">
+          ${namaSekolah ? `<p class="sekolah">${namaSekolah}</p>` : ''}
+          <h1>DAFTAR NILAI ${type === 'katrol' ? 'KATROL' : 'MURNI'}</h1>
+          <table class="info">
+            <tr><td colspan="2" class="info-title">DAFTAR NILAI ${mapel.toUpperCase()}</td></tr>
+            <tr>
+              <td class="info-left">
+                <b>Mata Pelajaran</b> : ${mapel}<br>
+                <b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${k}<br>
+                <b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${kkm}
+              </td>
+              <td class="info-right">
+                <b>Tahun Pelajaran</b> : ${tahun}<br>
+                <b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${semester}
+              </td>
+            </tr>
+          </table>
+          <table class="nilai">${tbl}</table>
+          <div class="ttd">
+            <div class="box">
+              <p>${tanggal}</p>
+              <p>Guru Mata Pelajaran</p>
+              <div class="garis"></div>
+              <p><b>${namaGuru}</b></p>
+              <p>NIP. ${nip}</p>
+            </div>
+          </div>
+          <p class="ket" style="margin-top:6px;font-size:10px;color:#555">
+            Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas
+          </p>
+        </div>`;
+    });
+
+    if (!pagesHtml) {
+      if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+      alert('Tidak ada data nilai untuk kelas yang dipilih');
+      return;
+    }
+
+    const html = `<!DOCTYPE html><html lang="id"><head>
+<meta charset="UTF-8">
+<title>${isPreview ? 'Preview Daftar Nilai' : 'Daftar Nilai'} – ${mapel}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;font-size:11px;background:#fff;color:#000}
+.page{padding:18px 22px;max-width:960px;margin:0 auto}
+.preview-note{max-width:960px;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;
+  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}
+h1{display:none}
+.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}
+.info{width:100%;border:1px solid #333;border-collapse:collapse}
+.info-title{text-align:center;font-size:14px;font-weight:700;font-variant:small-caps;
+  background:#e8e8f4;border-bottom:1px solid #333;padding:6px;text-transform:uppercase
+  ;letter-spacing:1px}
+.info-left{width:50%;padding:5px 10px;vertical-align:top;border-right:1px solid #333}
+.info-right{width:50%;padding:5px 10px;vertical-align:top}
+.nilai{width:100%;border-collapse:collapse;margin-top:10px;font-size:11px}
+.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center}
+.nilai th{background:#dde0f0;font-weight:700}
+.nilai .tl{text-align:left;min-width:120px}
+.nilai .blt td{background:#ffeeee}
+.note-missing{color:#dc2626;font-weight:700}
+.note-low{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-weight:700}
+.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px}
+.box{text-align:center;width:200px}
+.garis{border-bottom:1px solid #000;margin:44px 0 4px}
+.pb{page-break-after:always;height:0}
+.no-print{margin:20px auto;text-align:center;display:block}
+.btn-pr{padding:10px 28px;background:#6C63FF;color:#fff;border:none;border-radius:8px;
+  cursor:pointer;font-size:14px;font-weight:600}
+@media print{
+  .no-print{display:none!important}
+  .preview-note{display:none!important}
+  .pb{height:0}
+  body{font-size:10px}
+  .page{padding:10px 14px}
+}
+</style></head><body>
+${isPreview ? `<div class="preview-note no-print"><b>Mode Preview</b> — Periksa data sebelum dibagikan ke siswa.</div>` : ''}
+${pagesHtml}
+<div class="no-print">
+  <button class="btn-pr" onclick="window.print()">🖨️ ${isPreview ? 'Konfirmasi Cetak / Simpan PDF' : 'Cetak / Simpan sebagai PDF'}</button>
+</div>
+</body></html>`;
+
+    if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+    const w = window.open('', '_blank', 'width=1000,height=750');
+    if (!w) { alert('Popup diblokir browser. Aktifkan popup dan coba lagi.'); return; }
+    w.document.write(html);
+    w.document.close();
+    if (isPreview) setCetakReady_(true);
+    closeCetakNilai();
+  };
+
+  // Fetch setting + additional classes
+  google.script.run
+    .withSuccessHandler(settingGuru => {
+      if (!pending) {
+        buildAndPrint(settingGuru);
+        return;
+      }
+      // Fetch nilai for additional kelas sequentially
+      let fetched = 0;
+      toFetch.forEach(k => {
+        google.script.run
+          .withSuccessHandler(rows => {
+            allData[k] = rows || [];
+            fetched++;
+            if (fetched === toFetch.length) buildAndPrint(settingGuru);
+          })
+          .withFailureHandler(() => {
+            allData[k] = [];
+            fetched++;
+            if (fetched === toFetch.length) buildAndPrint(settingGuru);
+          })
+          .getNilaiSiswa(k, mapel, tahun, semester);
+      });
+    })
+    .withFailureHandler(() => {
+      if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+      alert('Gagal ambil data setting guru');
+    })
+    .getSetting();
+}
+
+/** Export ke file Excel via SheetJS (multi-kelas) */
+function exportNilaiExcelUI() {
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap'); return; }
+  if (!nilaiState.cetakPreviewOk) {
+    alert('Lakukan preview terlebih dahulu sebelum export Excel.');
+    return;
+  }
+
+  const kelasChecked = [...document.querySelectorAll('#cetakKelasContainer input:checked')]
+    .map(el => el.value);
+  if (!kelasChecked.length) { alert('Pilih minimal satu kelas'); return; }
+
+  const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
+  const sc = {
+    tgs    : document.getElementById('cetakColTGS')?.checked,
+    uh     : document.getElementById('cetakColUH')?.checked,
+    pts    : document.getElementById('cetakColPTS')?.checked,
+    pas    : document.getElementById('cetakColPAS')?.checked,
+    rata   : document.getElementById('cetakColRata')?.checked,
+    total  : document.getElementById('cetakColTotal')?.checked,
+    remedi : document.getElementById('cetakColRemedi')?.checked,
+    ranking: document.getElementById('cetakColRanking')?.checked,
+  };
+
+  const btn = document.getElementById('btnDoExcel');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
+
+  const { mapel, tahun, semester, setting } = nilaiState;
+  const isGenap = semester.toLowerCase().includes('genap');
+  const kkm     = Number(setting.kkm || 70);
+  const pasPat  = isGenap ? 'PAT' : 'PAS';
+
+  const allData = {};
+  allData[nilaiState.kelas] = nilaiState.rows;
+  const toFetch = kelasChecked.filter(k => k !== nilaiState.kelas);
+  let fetched   = 0;
+
+  const buildAndExport = () => {
+    const wb = XLSX.utils.book_new();
+    const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+      ? Number(Number(v).toFixed(2)) : '-';
+
+    kelasChecked.forEach(k => {
+      const rows = allData[k] || [];
+      // Ranking
+      const sorted2 = [...rows].filter(r => r.nilai_akhir !== null && !isNaN(Number(r.nilai_akhir)))
+        .sort((a, b) => Number(b.nilai_akhir) - Number(a.nilai_akhir));
+      const rankMap2 = {};
+      let rk2 = 1;
+      sorted2.forEach((r, i) => {
+        if (i > 0 && Number(r.nilai_akhir) < Number(sorted2[i-1].nilai_akhir)) rk2 = i + 1;
+        rankMap2[r.nis] = rk2;
+      });
+
+      // Header info rows
+      const meta = [
+        [`Daftar Nilai ${mapel}`], [],
+        ['Kelas', k], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm],
+        ['Jenis Nilai', type === 'katrol' ? 'Nilai Katrol' : 'Nilai Murni'], []
+      ];
+      let colHdr = ['No','NIS','Nama Siswa'];
+      if (sc.tgs) colHdr = colHdr.concat(['TGS1','TGS2','TGS3']);
+      if (sc.uh)  colHdr = colHdr.concat(['UH1','UH2','UH3']);
+      if (sc.pts) colHdr.push('PTS');
+      if (sc.pas) colHdr.push(pasPat);
+      if (sc.rata) colHdr.push('Rata-rata');
+      if (sc.total) colHdr.push(type === 'katrol' ? 'Nilai Katrol' : 'Nilai Murni');
+      if (sc.remedi) colHdr.push('Remedial');
+      colHdr.push('Nilai Akhir', 'Keterangan');
+      if (sc.ranking) colHdr.push('Ranking');
+
+      const dataRows = rows.map((r, i) => {
+        const akhir = fmt(r.nilai_akhir);
+        let row = [i + 1, r.nis || '', r.nama_siswa || ''];
+        if (sc.tgs)  row = row.concat([fmt(r.tgs1), fmt(r.tgs2), fmt(r.tgs3)]);
+        if (sc.uh)   row = row.concat([fmt(r.uh1), fmt(r.uh2), fmt(r.uh3)]);
+        if (sc.pts)  row.push(fmt(r.pts));
+        if (sc.pas)  row.push(fmt(isGenap ? r.pat : r.pas));
+        if (sc.rata) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.rata_uh));
+        if (sc.total) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.nilai_asli));
+        if (sc.remedi) row.push(fmt(r.nilai_remedial));
+        row.push(akhir);
+        row.push((akhir !== '' && akhir >= kkm) ? 'Tuntas' : 'Belum Tuntas');
+        if (sc.ranking) row.push(rankMap2[r.nis] || '-');
+        return row;
+      });
+
+      const sheetData = [...meta, colHdr, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      const sheetName = k.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
+    });
+
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
+    XLSX.writeFile(wb, `Nilai_${mapel}_${semester}_${tahun}.xlsx`);
+    closeCetakNilai();
+  };
+
+  if (!toFetch.length) { buildAndExport(); return; }
+
+  toFetch.forEach(k => {
+    google.script.run
+      .withSuccessHandler(rows => {
+        allData[k] = rows || [];
+        fetched++;
+        if (fetched === toFetch.length) buildAndExport();
+      })
+      .withFailureHandler(() => {
+        allData[k] = [];
+        fetched++;
+        if (fetched === toFetch.length) buildAndExport();
+      })
+      .getNilaiSiswa(k, mapel, tahun, semester);
+  });
+}
+
+
+/* ===================================================================
+   SIDEBAR HELPERS (v2) – new functions, does NOT modify any existing ones
+   =================================================================== */
+
+/** Toggle sidebar open/closed (mobile) */
+
+/* =========================================================
+   CLIPBOARD PASTE FOR NILAI � Excel TSV Auto-fill
+   ========================================================= */
+(function(){
+  // Ordered input fields in the nilai table (remedial removed from UI)
+  const NILAI_FIELDS = ['tgs1','tgs2','tgs3','uh1','uh2','uh3','pts','pas','pat'];
+
+  function parseNilaiPaste_(raw) {
+    const cleaned = String(raw ?? '')
+      .replace(/\s+/g, '')
+      .replace(',', '.');
+    if (!cleaned) return null;
+    const num = Number(cleaned);
+    if (isNaN(num)) return null;
+    const clamped = Math.min(100, Math.max(0, num));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  document.addEventListener('paste', function(e) {
+    const target = e.target;
+    if (!target || target.tagName !== 'INPUT') return;
+
+    // Only handle inputs inside #tabelNilaiBody
+    const tbody = document.getElementById('tabelNilaiBody');
+    if (!tbody || !tbody.contains(target)) return;
+
+    // Find rowIdx and field from oninput attribute
+    const oninput = target.getAttribute('oninput') || '';
+    const m = oninput.match(/nilaiOnInput\((\d+),'([^']+)'/);
+    if (!m) return;
+
+    const startRow  = parseInt(m[1]);
+    const startField = m[2];
+    const startCol  = NILAI_FIELDS.indexOf(startField);
+    if (startCol < 0) return;
+
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    if (!text) return;
+
+    const lines = text
+      .split(/\r?\n/)
+      .map(v => String(v || ''))
+      .filter(v => v !== '');
+    if (!lines.length) return;
+
+    const matrix = lines.map(rowTxt => rowTxt.split('\t'));
+    const singleColMode = matrix.every(cols => cols.length <= 1);
+
+    // Jika copas 1 kolom dari Excel dan baris pertama bukan angka (header), auto-skip header.
+    let startPasteIndex = 0;
+    if (singleColMode && matrix.length > 1) {
+      const firstVal = parseNilaiPaste_(matrix[0][0]);
+      if (firstVal === null) startPasteIndex = 1;
+    }
+
+    let changedCount = 0;
+    let skippedCount = 0;
+
+    for (let ri = startPasteIndex; ri < matrix.length; ri++) {
+      const rowIdx = startRow + (ri - startPasteIndex);
+      if (rowIdx >= nilaiState.rows.length) break;
+
+      const cols = singleColMode ? [matrix[ri][0]] : matrix[ri];
+      for (let ci = 0; ci < cols.length; ci++) {
+        const colIdx = singleColMode ? startCol : (startCol + ci);
+        if (colIdx >= NILAI_FIELDS.length) continue;
+
+        const parsed = parseNilaiPaste_(cols[ci]);
+        if (parsed === null) {
+          skippedCount++;
+          continue;
+        }
+
+        const field = NILAI_FIELDS[colIdx];
+        const useVal = String(parsed);
+
+        nilaiOnInput(rowIdx, field, useVal);
+        changedCount++;
+
+        const sel = 'input[oninput="nilaiOnInput(' + rowIdx + ',\'' + field + '\',this.value)"]';
+        const inp = tbody.querySelector(sel);
+        if (inp) inp.value = useVal;
+      }
+    }
+
+    if (changedCount === 0) {
+      alert('Tidak ada nilai numerik yang bisa diproses dari clipboard.');
+      return;
+    }
+
+    renderTabelNilai();
+    if (typeof showSoftPopup === 'function') {
+      showSoftPopup('Paste berhasil', `${changedCount} nilai terisi${skippedCount ? ` (${skippedCount} dilewati)` : ''}`);
+    }
+
+    // Refocus original cell
+    const refSel = 'input[oninput="nilaiOnInput(' + startRow + ',\'' + startField + '\',this.value)"]';
+    const inp = tbody.querySelector(refSel);
+    if (inp) inp.focus();
+  });
+
+  // Visual hint on focus
+  document.addEventListener('focusin', function(e) {
+    if (e.target.tagName !== 'INPUT') return;
+    const tbody = document.getElementById('tabelNilaiBody');
+    if (!tbody || !tbody.contains(e.target)) return;
+    e.target.setAttribute('title', 'Bisa paste Excel (Ctrl+V) dari sini � data akan mengisi ke bawah/kanan');
+  });
+})();
+/* =========================================================
+   AUDIT TRAIL NILAI — load & render
+   ========================================================= */
+function loadAuditNilai() {
+  const wrap = document.getElementById('auditNilaiWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<p class="muted">⏳ Memuat riwayat...</p>';
+  google.script.run
+    .withFailureHandler(function(err) {
+      wrap.innerHTML = '<p style="color:#dc2626">❌ ' + err.message + '</p>';
+    })
+    .withSuccessHandler(function(data) {
+      if (!data || !data.length) {
+        wrap.innerHTML = '<p class="muted">📭 Belum ada riwayat perubahan nilai.</p>';
+        return;
+      }
+      var html = '<div class="table-wrap"><table><thead><tr>'
+        + '<th>Waktu</th><th>Aksi</th><th>Kelas</th>'
+        + '<th>Mapel</th><th>Tahun</th><th>Semester</th><th>Siswa</th>'
+        + '</tr></thead><tbody>';
+      data.forEach(function(r) {
+        html += '<tr>'
+          + '<td style="white-space:nowrap">' + r.timestamp + '</td>'
+          + '<td><span class="badge" style="background:#dbeafe;color:#1e40af">' + r.aksi + '</span></td>'
+          + '<td>' + r.kelas + '</td>'
+          + '<td>' + r.mapel + '</td>'
+          + '<td>' + r.tahun + '</td>'
+          + '<td>' + r.semester + '</td>'
+          + '<td>' + r.jumlah + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      wrap.innerHTML = html;
+    })
+    .getAuditNilai();
+}</script>
