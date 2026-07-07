@@ -710,3 +710,70 @@ function promoteSiswaWizard(payload) {
   logAudit('PROMOSI_SISWA', auth.email, fromYear + '/' + fromSem + ' -> ' + toYear + '/' + toSem + ' | ' + processed);
   return { success: true, processed: processed };
 }
+
+function getAcademicGlobalManagementData() {
+  ensureAcademicSchema_();
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+
+  const usersSh = sheet('USERS');
+  const setSh = sheet('SETTING');
+  const users = usersSh ? usersSh.getDataRange().getValues() : [];
+  const setting = setSh ? setSh.getDataRange().getValues() : [];
+
+  const setMap = {};
+  if (setting.length > 1) {
+    const h = setting[0].map(function(x) { return String(x || '').toLowerCase().trim(); });
+    const iEmail = h.indexOf('email');
+    const iGuru = h.indexOf('guru');
+    const iSekolah = h.indexOf('sekolah');
+    const iTa = h.indexOf('tahun_pelajaran_aktif');
+    const iSem = h.indexOf('semester_aktif');
+    const iTaOld = h.indexOf('tahun');
+    const iSemOld = h.indexOf('semester');
+
+    setting.slice(1).forEach(function(r) {
+      const email = String(r[iEmail > -1 ? iEmail : 0] || '').toLowerCase().trim();
+      if (!email) return;
+      setMap[email] = {
+        nama_guru: iGuru > -1 ? String(r[iGuru] || '') : '',
+        sekolah: iSekolah > -1 ? String(r[iSekolah] || '') : '',
+        tahun_pelajaran_aktif: (iTa > -1 ? String(r[iTa] || '') : '') || (iTaOld > -1 ? String(r[iTaOld] || '') : ''),
+        semester_aktif: (iSem > -1 ? String(r[iSem] || '') : '') || (iSemOld > -1 ? String(r[iSemOld] || '') : '')
+      };
+    });
+  }
+
+  const guruPeriods = [];
+  if (users.length > 1) {
+    users.slice(1).forEach(function(r, idx) {
+      const email = String(r[0] || '').toLowerCase().trim();
+      if (!email) return;
+      const s = setMap[email] || {};
+      const period = getUserAcademicPeriod(email);
+      guruPeriods.push({
+        no: idx + 1,
+        email: email,
+        role: String(r[1] || '-').toLowerCase(),
+        status: String(r[2] || 'inactive').toLowerCase(),
+        nama_guru: s.nama_guru || '-',
+        sekolah: s.sekolah || '-',
+        tahun_pelajaran_aktif: s.tahun_pelajaran_aktif || period.tahun_pelajaran || '-',
+        semester_aktif: s.semester_aktif || period.semester || '-'
+      });
+    });
+  }
+
+  return {
+    global: getGlobalAcademicPeriod_(),
+    years: listAcademicYears(),
+    guru_periods: guruPeriods
+  };
+}
+
+function setGlobalAcademicPeriodBySuperAdmin(tahun, semester) {
+  ensureAcademicSchema_();
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const res = setGlobalAcademicPeriod(tahun, semester);
+  logAudit('SET_GLOBAL_TAHUN_SA', getLoginEmail(), tahun + ' | ' + semester);
+  return res;
+}

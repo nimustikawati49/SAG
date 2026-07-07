@@ -28,8 +28,108 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadSchoolLicenseUI, 1500);
       setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
-    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);    })
+    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);
+      setTimeout(loadAcademicGlobalPanel, 2800);
+    })
     .getSuperAdminDashboard();
+}
+
+let _saGuruPeriodRows = [];
+
+function loadAcademicGlobalPanel() {
+  const info = document.getElementById('saGlobalPeriodInfo');
+  const tahunSel = document.getElementById('saGlobalTahun');
+  const semSel = document.getElementById('saGlobalSemester');
+  const body = document.getElementById('saGuruPeriodBody');
+  if (info) info.textContent = '⏳ Memuat periode global...';
+  if (body) body.innerHTML = '<tr><td colspan="7" class="muted">⏳ Memuat data periode aktif...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      const years = ((res && res.years) || []).map(function(y){ return y.tahun_pelajaran; })
+        .filter(function(v, i, arr){ return v && arr.indexOf(v) === i; })
+        .sort();
+      const g = (res && res.global) || {};
+
+      if (tahunSel) {
+        tahunSel.innerHTML = years.map(function(y){
+          return '<option ' + (String(y) === String(g.tahun_pelajaran || '') ? 'selected' : '') + '>' + y + '</option>';
+        }).join('');
+      }
+      if (semSel && g.semester) {
+        semSel.value = g.semester;
+      }
+      if (info) {
+        info.innerHTML = 'Periode global aktif: <b>' + (g.tahun_pelajaran || '-') + '</b> | <b>' + (g.semester || '-') + '</b>';
+      }
+
+      _saGuruPeriodRows = (res && res.guru_periods) || [];
+      renderGuruPeriodTable_(_saGuruPeriodRows);
+    })
+    .withFailureHandler(function(err) {
+      if (info) info.textContent = '❌ ' + (err.message || err);
+      if (body) body.innerHTML = '<tr><td colspan="7" style="color:#dc2626">❌ ' + (err.message || err) + '</td></tr>';
+    })
+    .getAcademicGlobalManagementData();
+}
+
+function saveGlobalAcademicPeriodUI() {
+  const tahun = (document.getElementById('saGlobalTahun') || {}).value || '';
+  const semester = (document.getElementById('saGlobalSemester') || {}).value || '';
+  if (!tahun || !semester) {
+    if (typeof showToast === 'function') showToast('⚠️ Pilih tahun dan semester global', 'warning');
+    else alert('Pilih tahun dan semester global');
+    return;
+  }
+  if (!confirm('Set periode global ke ' + tahun + ' | ' + semester + ' ?')) return;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Periode global diperbarui', 'success');
+      loadAcademicGlobalPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || err), 'error');
+      else alert('❌ ' + (err.message || err));
+    })
+    .setGlobalAcademicPeriodBySuperAdmin(tahun, semester);
+}
+
+function renderGuruPeriodTable_(rows) {
+  const body = document.getElementById('saGuruPeriodBody');
+  if (!body) return;
+  if (!rows || rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="muted">📭 Tidak ada data user.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(function(r, i){
+    const st = String(r.status || '').toLowerCase();
+    const statusBadge = st === 'active'
+      ? '<span class="badge badge-green">active</span>'
+      : '<span class="badge badge-red">inactive</span>';
+    return '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td class="left">' + (r.nama_guru || '-') + '</td>' +
+      '<td class="left">' + (r.email || '-') + '</td>' +
+      '<td>' + (r.role || '-') + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td>' + (r.tahun_pelajaran_aktif || '-') + '</td>' +
+      '<td>' + (r.semester_aktif || '-') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function filterGuruPeriodTable_() {
+  const q = String((document.getElementById('saGuruPeriodFilter') || {}).value || '').toLowerCase().trim();
+  if (!q) return renderGuruPeriodTable_(_saGuruPeriodRows);
+  const filtered = (_saGuruPeriodRows || []).filter(function(r) {
+    const hay = [r.nama_guru, r.email, r.role, r.status, r.tahun_pelajaran_aktif, r.semester_aktif]
+      .join(' ')
+      .toLowerCase();
+    return hay.indexOf(q) !== -1;
+  });
+  renderGuruPeriodTable_(filtered);
 }
 
 

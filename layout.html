@@ -1357,6 +1357,60 @@
 </div>
 <!-- ===== END TIER MANAGEMENT ===== -->
 
+<div class="card" style="margin-top:16px;border:1.5px solid #bae6fd;background:linear-gradient(180deg,#f0f9ff,#ffffff)">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+    <div>
+      <h3 style="margin:0">🗓️ Manajemen Tahun Pelajaran Global</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Hanya SuperAdmin: pilih satu periode global aktif untuk sistem.</p>
+    </div>
+    <button class="ghost" onclick="loadAcademicGlobalPanel()" style="font-size:12px">🔄 Refresh</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end;margin-bottom:10px">
+    <div>
+      <label style="font-size:12px;color:#6b7280">Tahun Pelajaran Global</label>
+      <select id="saGlobalTahun" style="width:100%"></select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:#6b7280">Semester Global</label>
+      <select id="saGlobalSemester" style="width:100%">
+        <option>Ganjil</option>
+        <option>Genap</option>
+      </select>
+    </div>
+    <div>
+      <button onclick="saveGlobalAcademicPeriodUI()" style="width:100%">💾 Simpan Global</button>
+    </div>
+  </div>
+  <div id="saGlobalPeriodInfo" class="muted" style="font-size:12px">⏳ Memuat periode global...</div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <h3 style="margin:0">👥 Monitoring Tahun Aktif Per Guru</h3>
+    <input id="saGuruPeriodFilter" placeholder="Filter nama/email/tahun" style="min-width:220px" oninput="filterGuruPeriodTable_()">
+  </div>
+  <p class="muted" style="margin-top:4px;font-size:12px">Pantau periode aktif user untuk audit saat pergantian tahun.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama Guru</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Tahun Aktif</th>
+          <th>Semester Aktif</th>
+        </tr>
+      </thead>
+      <tbody id="saGuruPeriodBody">
+        <tr><td colspan="7" class="muted">⏳ Memuat data periode aktif...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ===== LISENSI SEKOLAH ===== -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
