@@ -547,38 +547,120 @@ function getNotifikasiGuru() {
   return result;
 }
 // =====================================================================
-// VENDOR MULTI-DEPLOYMENT TRACKER
-// Sheet DEPLOYMENTS: [0]=id, [1]=nama_sekolah, [2]=email_sa, [3]=script_id, [4]=tanggal, [5]=status, [6]=catatan
+// CENTRAL REGISTRY HUB
+// DEPLOYMENTS   : identitas deployment per sekolah/tenant
+// RESOURCE_MAP  : resource penyimpanan per guru/deployment
+// APP_RELEASES  : versi rilis aplikasi yang boleh disebar
+// UPDATE_LOG    : histori update, approval, dan migrasi
 // =====================================================================
 
-var DEPLOYMENTS_SHEET = 'DEPLOYMENTS';
+var DEPLOYMENTS_SHEET  = 'DEPLOYMENTS';
+var RESOURCE_MAP_SHEET = 'RESOURCE_MAP';
+var APP_RELEASES_SHEET = 'APP_RELEASES';
+var UPDATE_LOG_SHEET   = 'UPDATE_LOG';
+
+var DEPLOYMENTS_HEADERS = [
+  'id', 'nama_sekolah', 'email_sa', 'script_id', 'spreadsheet_id', 'owner_email',
+  'folder_data_id', 'folder_export_id', 'webapp_url', 'app_version', 'schema_version',
+  'maintenance_until', 'allow_update', 'release_channel', 'status', 'last_sync',
+  'last_update', 'tanggal', 'catatan'
+];
+
+var RESOURCE_MAP_HEADERS = [
+  'id', 'deployment_id', 'email_guru', 'resource_type', 'resource_id', 'resource_name',
+  'owner_email', 'status', 'created_at', 'updated_at', 'catatan'
+];
+
+var APP_RELEASES_HEADERS = [
+  'id', 'version', 'schema_version', 'channel', 'status', 'allow_migration',
+  'manifest_json', 'created_at', 'created_by', 'catatan'
+];
+
+var UPDATE_LOG_HEADERS = [
+  'id', 'deployment_id', 'target_email', 'from_version', 'to_version', 'from_schema',
+  'to_schema', 'action', 'status', 'approved_by', 'executed_by', 'executed_at', 'catatan'
+];
+
+function _ensureRegistrySheet_(sheetName, headers) {
+  var ss = getSpreadsheet_();
+  var sh = ss.getSheetByName(sheetName);
+  if (!sh) {
+    sh = ss.insertSheet(sheetName);
+    sh.appendRow(headers);
+    sh.setFrozenRows(1);
+    return sh;
+  }
+
+  var lastCol = sh.getLastColumn();
+  var current = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(v) {
+    return String(v || '').trim();
+  }) : [];
+
+  if (!current.length) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+    return sh;
+  }
+
+  headers.forEach(function(header) {
+    if (current.indexOf(header) === -1) {
+      sh.getRange(1, sh.getLastColumn() + 1).setValue(header);
+      current.push(header);
+    }
+  });
+
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+function _ensureCentralRegistrySchema_() {
+  _ensureRegistrySheet_(DEPLOYMENTS_SHEET, DEPLOYMENTS_HEADERS);
+  _ensureRegistrySheet_(RESOURCE_MAP_SHEET, RESOURCE_MAP_HEADERS);
+  _ensureRegistrySheet_(APP_RELEASES_SHEET, APP_RELEASES_HEADERS);
+  _ensureRegistrySheet_(UPDATE_LOG_SHEET, UPDATE_LOG_HEADERS);
+}
+
+function _getHeaderIndexMap_(sheetObj) {
+  var lastCol = sheetObj.getLastColumn();
+  var header = lastCol > 0 ? sheetObj.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var map = {};
+  header.forEach(function(h, i) { map[String(h || '').trim()] = i; });
+  return map;
+}
 
 function _ensureDeploymentsSheet_() {
-  var ss = getSpreadsheet_();
-  var sh = ss.getSheetByName(DEPLOYMENTS_SHEET);
-  if (!sh) {
-    sh = ss.insertSheet(DEPLOYMENTS_SHEET);
-    sh.appendRow(['id', 'nama_sekolah', 'email_sa', 'script_id', 'tanggal', 'status', 'catatan']);
-    sh.setFrozenRows(1);
-  }
-  return sh;
+  _ensureCentralRegistrySchema_();
+  return getSpreadsheet_().getSheetByName(DEPLOYMENTS_SHEET);
 }
 
 function getDeployments() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
   var sh   = _ensureDeploymentsSheet_();
   var data = sh.getDataRange().getValues();
+  var idx  = _getHeaderIndexMap_(sh);
   var result = [];
   for (var i = 1; i < data.length; i++) {
-    if (!data[i][0]) continue;
+    if (!data[i][idx.id]) continue;
     result.push({
-      id           : String(data[i][0]),
-      nama_sekolah : String(data[i][1] || ''),
-      email_sa     : String(data[i][2] || ''),
-      script_id    : String(data[i][3] || ''),
-      tanggal      : String(data[i][4] || ''),
-      status       : String(data[i][5] || 'aktif'),
-      catatan      : String(data[i][6] || '')
+      id                : String(data[i][idx.id] || ''),
+      nama_sekolah      : String(data[i][idx.nama_sekolah] || ''),
+      email_sa          : String(data[i][idx.email_sa] || ''),
+      script_id         : String(data[i][idx.script_id] || ''),
+      spreadsheet_id    : String(data[i][idx.spreadsheet_id] || ''),
+      owner_email       : String(data[i][idx.owner_email] || ''),
+      folder_data_id    : String(data[i][idx.folder_data_id] || ''),
+      folder_export_id  : String(data[i][idx.folder_export_id] || ''),
+      webapp_url        : String(data[i][idx.webapp_url] || ''),
+      app_version       : String(data[i][idx.app_version] || ''),
+      schema_version    : String(data[i][idx.schema_version] || ''),
+      maintenance_until : String(data[i][idx.maintenance_until] || ''),
+      allow_update      : String(data[i][idx.allow_update] || 'true'),
+      release_channel   : String(data[i][idx.release_channel] || 'stable'),
+      tanggal           : String(data[i][idx.tanggal] || ''),
+      last_sync         : String(data[i][idx.last_sync] || ''),
+      last_update       : String(data[i][idx.last_update] || ''),
+      status            : String(data[i][idx.status] || 'aktif'),
+      catatan           : String(data[i][idx.catatan] || '')
     });
   }
   return result;
@@ -591,16 +673,34 @@ function saveDeployment(obj) {
 
   var sh   = _ensureDeploymentsSheet_();
   var data = sh.getDataRange().getValues();
+  var idx  = _getHeaderIndexMap_(sh);
   var tz   = Session.getScriptTimeZone();
+
+  function setDeploymentRow_(rowNumber, payload, createdAt) {
+    sh.getRange(rowNumber, idx.nama_sekolah + 1).setValue(payload.nama_sekolah || '');
+    sh.getRange(rowNumber, idx.email_sa + 1).setValue(payload.email_sa || '');
+    sh.getRange(rowNumber, idx.script_id + 1).setValue(payload.script_id || '');
+    sh.getRange(rowNumber, idx.spreadsheet_id + 1).setValue(payload.spreadsheet_id || '');
+    sh.getRange(rowNumber, idx.owner_email + 1).setValue(payload.owner_email || payload.email_sa || '');
+    sh.getRange(rowNumber, idx.folder_data_id + 1).setValue(payload.folder_data_id || '');
+    sh.getRange(rowNumber, idx.folder_export_id + 1).setValue(payload.folder_export_id || '');
+    sh.getRange(rowNumber, idx.webapp_url + 1).setValue(payload.webapp_url || '');
+    sh.getRange(rowNumber, idx.app_version + 1).setValue(payload.app_version || '');
+    sh.getRange(rowNumber, idx.schema_version + 1).setValue(payload.schema_version || '');
+    sh.getRange(rowNumber, idx.maintenance_until + 1).setValue(payload.maintenance_until || '');
+    sh.getRange(rowNumber, idx.allow_update + 1).setValue(String(payload.allow_update !== false));
+    sh.getRange(rowNumber, idx.release_channel + 1).setValue(payload.release_channel || 'stable');
+    sh.getRange(rowNumber, idx.status + 1).setValue(payload.status || 'aktif');
+    sh.getRange(rowNumber, idx.last_sync + 1).setValue(payload.last_sync || '');
+    sh.getRange(rowNumber, idx.last_update + 1).setValue(payload.last_update || '');
+    sh.getRange(rowNumber, idx.tanggal + 1).setValue(createdAt || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'));
+    sh.getRange(rowNumber, idx.catatan + 1).setValue(payload.catatan || '');
+  }
 
   if (obj.id) {
     for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]) !== String(obj.id)) continue;
-      sh.getRange(i + 1, 2).setValue(obj.nama_sekolah || '');
-      sh.getRange(i + 1, 3).setValue(obj.email_sa || '');
-      sh.getRange(i + 1, 4).setValue(obj.script_id || '');
-      sh.getRange(i + 1, 6).setValue(obj.status || 'aktif');
-      sh.getRange(i + 1, 7).setValue(obj.catatan || '');
+      if (String(data[i][idx.id] || '') !== String(obj.id)) continue;
+      setDeploymentRow_(i + 1, obj, String(data[i][idx.tanggal] || '') || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'));
       logAudit('UPDATE_DEPLOYMENT', getLoginEmail(), obj.nama_sekolah);
       return { success: true, action: 'updated' };
     }
@@ -608,7 +708,10 @@ function saveDeployment(obj) {
 
   var id      = 'DEP_' + new Date().getTime();
   var tanggal = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
-  sh.appendRow([id, obj.nama_sekolah, obj.email_sa, obj.script_id || '', tanggal, obj.status || 'aktif', obj.catatan || '']);
+  sh.appendRow(new Array(DEPLOYMENTS_HEADERS.length).fill(''));
+  var newRow = sh.getLastRow();
+  sh.getRange(newRow, idx.id + 1).setValue(id);
+  setDeploymentRow_(newRow, obj, tanggal);
   logAudit('ADD_DEPLOYMENT', getLoginEmail(), obj.nama_sekolah);
   return { success: true, action: 'created', id: id };
 }
@@ -617,14 +720,60 @@ function deleteDeployment(id) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
   var sh   = _ensureDeploymentsSheet_();
   var data = sh.getDataRange().getValues();
+  var idx  = _getHeaderIndexMap_(sh);
 
   for (var i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) !== String(id)) continue;
+    if (String(data[i][idx.id] || '') !== String(id)) continue;
     sh.deleteRow(i + 1);
     logAudit('DELETE_DEPLOYMENT', getLoginEmail(), 'ID: ' + id);
     return { success: true };
   }
   return { success: false };
+}
+
+function getCentralRegistryOverview() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  _ensureCentralRegistrySchema_();
+
+  var deployments = getDeployments();
+  var resourceSh  = getSpreadsheet_().getSheetByName(RESOURCE_MAP_SHEET);
+  var releaseSh   = getSpreadsheet_().getSheetByName(APP_RELEASES_SHEET);
+  var updateSh    = getSpreadsheet_().getSheetByName(UPDATE_LOG_SHEET);
+
+  var resources = resourceSh ? Math.max(resourceSh.getLastRow() - 1, 0) : 0;
+  var releases  = releaseSh ? Math.max(releaseSh.getLastRow() - 1, 0) : 0;
+  var updates   = updateSh ? Math.max(updateSh.getLastRow() - 1, 0) : 0;
+
+  var latestRelease = null;
+  if (releaseSh && releaseSh.getLastRow() > 1) {
+    var releaseRows = releaseSh.getDataRange().getValues();
+    var ridx = _getHeaderIndexMap_(releaseSh);
+    var last = releaseRows[releaseRows.length - 1];
+    latestRelease = {
+      version: String(last[ridx.version] || ''),
+      schema_version: String(last[ridx.schema_version] || ''),
+      channel: String(last[ridx.channel] || 'stable'),
+      status: String(last[ridx.status] || ''),
+      created_at: String(last[ridx.created_at] || '')
+    };
+  }
+
+  return {
+    counts: {
+      deployments: deployments.length,
+      allow_update: deployments.filter(function(d) { return String(d.allow_update).toLowerCase() === 'true'; }).length,
+      resources: resources,
+      releases: releases,
+      updates: updates
+    },
+    latestRelease: latestRelease,
+    sheets: {
+      deployments: DEPLOYMENTS_HEADERS,
+      resource_map: RESOURCE_MAP_HEADERS,
+      app_releases: APP_RELEASES_HEADERS,
+      update_log: UPDATE_LOG_HEADERS
+    }
+  };
 }
 
 /* =====================================================

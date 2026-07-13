@@ -29,9 +29,48 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadSchoolLicenseUI, 1500);
       setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
     setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);
+      setTimeout(loadCentralRegistryOverview, 2700);
       setTimeout(loadAcademicGlobalPanel, 2800);
     })
     .getSuperAdminDashboard();
+}
+
+function loadCentralRegistryOverview() {
+  var el = document.getElementById('centralRegistryOverview');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:72px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:72px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!el) return;
+      var counts = (data && data.counts) || {};
+      var rel = (data && data.latestRelease) || null;
+      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">' +
+        '<div class="card stat" style="padding:12px"><div class="label">Deployments</div><div class="value">' + (counts.deployments || 0) + '</div></div>' +
+        '<div class="card stat" style="padding:12px"><div class="label">Allow Update</div><div class="value">' + (counts.allow_update || 0) + '</div></div>' +
+        '<div class="card stat" style="padding:12px"><div class="label">Resource Map</div><div class="value">' + (counts.resources || 0) + '</div></div>' +
+        '<div class="card stat" style="padding:12px"><div class="label">App Releases</div><div class="value">' + (counts.releases || 0) + '</div></div>' +
+        '<div class="card stat" style="padding:12px"><div class="label">Update Log</div><div class="value">' + (counts.updates || 0) + '</div></div>' +
+        '</div>';
+
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">';
+      html += '<div style="border:1px solid #dbeafe;border-radius:12px;padding:12px;background:#f8fbff"><div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:8px">APP RELEASE TERAKHIR</div>' +
+        (rel
+          ? '<div style="font-size:13px;line-height:1.7"><b>Versi:</b> ' + _escSA(rel.version || '-') + '<br><b>Schema:</b> ' + _escSA(rel.schema_version || '-') + '<br><b>Channel:</b> ' + _escSA(rel.channel || '-') + '<br><b>Status:</b> ' + _escSA(rel.status || '-') + '</div>'
+          : '<div class="muted" style="font-size:12px">Belum ada release tercatat.</div>') +
+        '</div>';
+
+      html += '<div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">SHEET REGISTRY AKTIF</div>' +
+        '<div style="font-size:12px;line-height:1.8">' +
+        '• DEPLOYMENTS<br>• RESOURCE_MAP<br>• APP_RELEASES<br>• UPDATE_LOG' +
+        '</div></div>';
+      html += '</div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat registry hub') + '</div>';
+    })
+    .getCentralRegistryOverview();
 }
 
 let _saGuruPeriodRows = [];
