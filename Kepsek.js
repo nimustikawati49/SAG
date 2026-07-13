@@ -44,6 +44,8 @@ function getRekapSekolah() {
   var shJurnal  = ss.getSheetByName('JURNAL');
   var shSiswa   = ss.getSheetByName('SISWA');
   var shSetting = ss.getSheetByName('SETTING');
+  var shNilai   = ss.getSheetByName('NILAI_SISWA');
+  var shNilaiSet= ss.getSheetByName('SETTING_NILAI');
 
   // ── Setting sekolah ──
   var sekolah         = '';
@@ -181,6 +183,92 @@ function getRekapSekolah() {
   var totalJurnalBulan = guruList.reduce(function(s, g) { return s + g.totalJurnalBulan; }, 0);
   var totalSiswa       = guruList.reduce(function(s, g) { return s + g.totalSiswa; }, 0);
 
+  // ── Kelas favorit berdasarkan frekuensi jurnal ──
+  var kelasCount = {};
+  for (var kj = 1; kj < jurnalRows.length; kj++) {
+    var kelasKey = String(jurnalRows[kj][2] || '').trim();
+    var emailKey = String(jurnalRows[kj][12] || '').toLowerCase().trim();
+    if (!kelasKey || !guruMap[emailKey]) continue;
+    kelasCount[kelasKey] = (kelasCount[kelasKey] || 0) + 1;
+  }
+  var kelasFavorit = Object.keys(kelasCount).map(function(kelas) {
+    return { kelas: kelas, totalJurnal: kelasCount[kelas] };
+  }).sort(function(a, b) { return b.totalJurnal - a.totalJurnal; }).slice(0, 5);
+
+  // ── Ketuntasan siswa per kelas berdasarkan nilai akhir ──
+  var kelasKetuntasan = [];
+  if (shNilai) {
+    var nilaiRows = shNilai.getDataRange().getValues();
+    if (nilaiRows.length > 1) {
+      var nh = nilaiRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+      var nidx = {};
+      nh.forEach(function(h, i) { nidx[h] = i; });
+
+      var settingRows = shNilaiSet ? shNilaiSet.getDataRange().getValues() : [];
+      var kkmMap = {};
+      if (settingRows.length > 1) {
+        var shh = settingRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+        var sidx = {};
+        shh.forEach(function(h, i) { sidx[h] = i; });
+        for (var si = 1; si < settingRows.length; si++) {
+          var klsSet = String(settingRows[si][sidx.kelas] || '').trim();
+          var thnSet = String(settingRows[si][sidx.tahun] || '').trim();
+          var semSet = String(settingRows[si][sidx.semester] || '').trim();
+          var kkmSet = Number(settingRows[si][sidx.kkm]);
+          if (!klsSet || !thnSet || !semSet || isNaN(kkmSet)) continue;
+          if (String(thnSet) !== String(tahun_pelajaran || '')) continue;
+          if (String(semSet).toLowerCase() !== String(semester_aktif || '').toLowerCase()) continue;
+          if (!kkmMap[klsSet]) kkmMap[klsSet] = [];
+          kkmMap[klsSet].push(kkmSet);
+        }
+      }
+
+      var classStudents = {};
+      for (var ni = 1; ni < nilaiRows.length; ni++) {
+        var rowTahun = String(nilaiRows[ni][nidx.tahun] || '').trim();
+        var rowSem = String(nilaiRows[ni][nidx.semester] || '').toLowerCase().trim();
+        if (tahun_pelajaran && rowTahun !== String(tahun_pelajaran)) continue;
+        if (semester_aktif && rowSem !== String(semester_aktif).toLowerCase()) continue;
+
+        var kelasNilai = String(nilaiRows[ni][nidx.kelas] || '').trim();
+        var nisNilai = String(nilaiRows[ni][nidx.nis] || '').trim();
+        var akhirRaw = nilaiRows[ni][nidx.nilai_akhir];
+        var akhir = akhirRaw === '' || akhirRaw === null || akhirRaw === undefined ? null : Number(akhirRaw);
+        if (!kelasNilai || !nisNilai || isNaN(akhir)) continue;
+        if (!classStudents[kelasNilai]) classStudents[kelasNilai] = {};
+        if (!classStudents[kelasNilai][nisNilai]) classStudents[kelasNilai][nisNilai] = [];
+        classStudents[kelasNilai][nisNilai].push(akhir);
+      }
+
+      Object.keys(classStudents).forEach(function(kelas) {
+        var siswaMap = classStudents[kelas];
+        var nisList = Object.keys(siswaMap);
+        if (!nisList.length) return;
+        var kkmList = kkmMap[kelas] || [70];
+        var kkm = Math.round((kkmList.reduce(function(a, b) { return a + b; }, 0) / kkmList.length) * 100) / 100;
+        var tuntas = 0;
+        nisList.forEach(function(nis) {
+          var avg = siswaMap[nis].reduce(function(a, b) { return a + b; }, 0) / siswaMap[nis].length;
+          if (avg >= kkm) tuntas++;
+        });
+        kelasKetuntasan.push({
+          kelas: kelas,
+          totalSiswa: nisList.length,
+          tuntas: tuntas,
+          belumTuntas: nisList.length - tuntas,
+          kkm: kkm,
+          persenTuntas: Math.round((tuntas / nisList.length) * 100)
+        });
+      });
+
+      kelasKetuntasan.sort(function(a, b) {
+        if (b.persenTuntas !== a.persenTuntas) return b.persenTuntas - a.persenTuntas;
+        return b.totalSiswa - a.totalSiswa;
+      });
+      kelasKetuntasan = kelasKetuntasan.slice(0, 10);
+    }
+  }
+
   return {
     sekolah         : sekolah,
     tahun_pelajaran : tahun_pelajaran,
@@ -190,6 +278,8 @@ function getRekapSekolah() {
     guruAktif       : guruAktif,
     totalJurnalBulan: totalJurnalBulan,
     totalSiswa      : totalSiswa,
+    kelasFavorit    : kelasFavorit,
+    kelasKetuntasan : kelasKetuntasan,
     guruList        : guruList
   };
 }

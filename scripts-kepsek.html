@@ -78,6 +78,12 @@ function _renderRekapSekolah_(data) {
   });
   html += '</div>';
 
+  // ── KPI tambahan sekolah: kelas favorit & ketuntasan ──
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px">';
+  html += '<div class="card stat" style="border-top:3px solid #0ea5e9;padding:14px 16px"><div class="label">⭐ Kelas Favorit</div><div class="value" style="color:#0ea5e9">' + ((data.kelasFavorit && data.kelasFavorit[0] && data.kelasFavorit[0].kelas) || '-') + '</div><div class="muted" style="font-size:12px">' + (((data.kelasFavorit && data.kelasFavorit[0] && data.kelasFavorit[0].totalJurnal) || 0) + ' jurnal') + '</div></div>';
+  html += '<div class="card stat" style="border-top:3px solid #22c55e;padding:14px 16px"><div class="label">📈 Kelas Tertinggi Tuntas</div><div class="value" style="color:#22c55e">' + ((data.kelasKetuntasan && data.kelasKetuntasan[0] && data.kelasKetuntasan[0].kelas) || '-') + '</div><div class="muted" style="font-size:12px">' + (((data.kelasKetuntasan && data.kelasKetuntasan[0] && data.kelasKetuntasan[0].persenTuntas) || 0) + '% tuntas') + '</div></div>';
+  html += '</div>';
+
   // ── Filter absensi + Export ──
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">' +
     '<button onclick="loadRekapAbsensiSekolah()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📊 Rekap Kehadiran</button>' +
@@ -146,12 +152,16 @@ function _renderRekapSekolah_(data) {
 
   // Charts + Early Warning + Raport section placeholders
   html += '<div id="kepsekChartsSection" style="margin-top:28px"></div>';
+  html += '<div id="kepsekKelasFavoritSection" style="margin-top:28px"></div>';
+  html += '<div id="kepsekKetuntasanSection" style="margin-top:28px"></div>';
   html += '<div id="kepsekEarlyWarningSection" style="margin-top:32px"></div>';
   html += '<div id="kepsekRaportSection" style="margin-top:32px"></div>';
   container.innerHTML = html;
 
   // Auto-load charts + early warning
   setTimeout(loadKepsekCharts, 300);
+  setTimeout(loadKelasFavoritSekolah, 450);
+  setTimeout(loadKetuntasanSekolah, 550);
   setTimeout(loadEarlyWarning, 600);
 }
 
@@ -227,6 +237,74 @@ function loadKepsekCharts() {
       section.innerHTML = '<div class="alert-banner error">❌ Gagal memuat chart: ' + _esc(err.message || '') + '</div>';
     })
     .getJurnalChartData();
+}
+
+function loadKelasFavoritSekolah() {
+  var section = document.getElementById('kepsekKelasFavoritSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:140px;border-radius:14px"></div>';
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var rows = (data && data.kelasFavorit) || [];
+      if (!rows.length) {
+        section.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada data kelas favorit.</div>';
+        return;
+      }
+      var html = '<h3 style="margin:0 0 12px;font-size:15px">⭐ Kelas Favorit</h3>' +
+        '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+        '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:20%"><col style="width:20%"></colgroup>' +
+        '<thead><tr><th style="padding:7px 8px">No</th><th style="padding:7px 8px;text-align:left">Kelas</th><th style="padding:7px 8px">Jurnal</th><th style="padding:7px 8px">Peringkat</th></tr></thead><tbody>';
+      rows.forEach(function(r, i) {
+        html += '<tr>' +
+          '<td style="padding:7px 8px;text-align:center">' + (i + 1) + '</td>' +
+          '<td style="padding:7px 8px;font-weight:700">' + _esc(r.kelas) + '</td>' +
+          '<td style="padding:7px 8px;text-align:center">' + r.totalJurnal + '</td>' +
+          '<td style="padding:7px 8px;text-align:center"><span class="badge" style="background:#e0f2fe;color:#0369a1">#' + (i + 1) + '</span></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      section.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal memuat kelas favorit') + '</div>';
+    })
+    .getRekapSekolah();
+}
+
+function loadKetuntasanSekolah() {
+  var section = document.getElementById('kepsekKetuntasanSection');
+  if (!section) return;
+  section.innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+  google.script.run
+    .withSuccessHandler(function(data) {
+      var rows = (data && data.kelasKetuntasan) || [];
+      if (!rows.length) {
+        section.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada data ketuntasan kelas.</div>';
+        return;
+      }
+      var html = '<h3 style="margin:0 0 12px;font-size:15px">📚 Ketuntasan Siswa per Kelas</h3>' +
+        '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+        '<colgroup><col style="width:10%"><col style="width:20%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:22%"></colgroup>' +
+        '<thead><tr><th style="padding:7px 8px">No</th><th style="padding:7px 8px;text-align:left">Kelas</th><th style="padding:7px 8px">KKM</th><th style="padding:7px 8px">Tuntas</th><th style="padding:7px 8px">Belum</th><th style="padding:7px 8px">% Tuntas</th></tr></thead><tbody>';
+      rows.forEach(function(r, i) {
+        var pctBg = r.persenTuntas >= 80 ? '#dcfce7' : r.persenTuntas >= 60 ? '#fef9c3' : '#fee2e2';
+        var pctCl = r.persenTuntas >= 80 ? '#166534' : r.persenTuntas >= 60 ? '#854d0e' : '#991b1b';
+        html += '<tr>' +
+          '<td style="padding:7px 8px;text-align:center">' + (i + 1) + '</td>' +
+          '<td style="padding:7px 8px;font-weight:700">' + _esc(r.kelas) + '</td>' +
+          '<td style="padding:7px 8px;text-align:center">' + r.kkm + '</td>' +
+          '<td style="padding:7px 8px;text-align:center;color:#166534;font-weight:700">' + r.tuntas + '</td>' +
+          '<td style="padding:7px 8px;text-align:center;color:#991b1b;font-weight:700">' + r.belumTuntas + '</td>' +
+          '<td style="padding:7px 8px;text-align:center"><span style="background:' + pctBg + ';color:' + pctCl + ';padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">' + r.persenTuntas + '%</span></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      section.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal memuat ketuntasan') + '</div>';
+    })
+    .getRekapSekolah();
 }
 
 function _renderKepsekCharts_(d, section) {

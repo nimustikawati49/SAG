@@ -73,6 +73,46 @@ function loadAcademicGlobalPanel() {
     .getAcademicGlobalManagementData();
 }
 
+function loadStatistikGlobal() {
+  const box = document.getElementById('saStatistikGlobalBox');
+  if (box) box.innerHTML = '<p class="muted">⏳ Memuat statistik guru...</p>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      const top = (res && res.ringkasan && res.ringkasan.topGuru) || [];
+      const totalGuru = (res && res.ringkasan && res.ringkasan.totalGuru) || 0;
+      const guruAktif = (res && res.ringkasan && res.ringkasan.guruAktif) || 0;
+      if (!box) return;
+      if (!top.length) {
+        box.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada statistik guru.</div>';
+        return;
+      }
+      var html = '<div class="card" style="margin-top:16px"><h3 style="margin:0 0 12px">📊 KPI Per Guru</h3>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px">' +
+        '<div class="stat card" style="padding:12px"><div class="label">Total Guru</div><div class="value">' + totalGuru + '</div></div>' +
+        '<div class="stat card" style="padding:12px"><div class="label">Guru Aktif</div><div class="value">' + guruAktif + '</div></div>' +
+        '<div class="stat card" style="padding:12px"><div class="label">Top Guru</div><div class="value">' + top.length + '</div></div>' +
+        '</div>' +
+        '<div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+        '<thead><tr><th style="padding:7px 8px">No</th><th style="padding:7px 8px;text-align:left">Guru</th><th style="padding:7px 8px;text-align:left">Email</th><th style="padding:7px 8px">Jurnal</th><th style="padding:7px 8px">Kelas</th><th style="padding:7px 8px">Terakhir</th></tr></thead><tbody>';
+      top.forEach(function(g, i) {
+        html += '<tr>' +
+          '<td style="padding:7px 8px;text-align:center">' + (i + 1) + '</td>' +
+          '<td style="padding:7px 8px">' + _escSA(g.nama_guru || '-') + '</td>' +
+          '<td style="padding:7px 8px;font-size:12px">' + _escSA(g.email || '-') + '</td>' +
+          '<td style="padding:7px 8px;text-align:center">' + g.totalJurnal + '</td>' +
+          '<td style="padding:7px 8px;text-align:center">' + g.totalKelas + '</td>' +
+          '<td style="padding:7px 8px;text-align:center;font-size:12px">' + _escSA(g.lastActivity || '-') + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+      box.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      if (box) box.innerHTML = '<div class="alert-banner error">❌ ' + _escSA(err.message || 'Gagal memuat statistik guru') + '</div>';
+    })
+    .getStatistikGlobal();
+}
+
 function saveGlobalAcademicPeriodUI() {
   const tahun = (document.getElementById('saGlobalTahun') || {}).value || '';
   const semester = (document.getElementById('saGlobalSemester') || {}).value || '';
@@ -645,19 +685,23 @@ function _confirmDeleteArsip_(fileId, nama){
     .deleteArsipFromDrive(fileId);
 }
 
-/** LOAD STATISTIK GLOBAL USER **/
-function loadStatistikGlobal(){
+/** LOAD STATISTIK GLOBAL USER (legacy helper) **/
+function loadStatistikGuruKPI(){
   renderRiwayatSkeleton(cols);
   const body = document.getElementById('globalStatBody');
+  const box = document.getElementById('saStatistikGlobalBox');
+  if (box) box.innerHTML = '<p class="muted">⏳ Memuat statistik guru...</p>';
   google.script.run
     .withFailureHandler(err=>{
       body.innerHTML = `
         <tr><td colspan="6" class="muted">❌ ${err.message}</td></tr>
       `;
+      if (box) box.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat statistik guru') + '</div>';
     })
     .withSuccessHandler(res=>{
       if(!res.perGuru || res.perGuru.length === 0){
         body.innerHTML = '<tr><td colspan="6" class="muted">📤 Belum ada jurnal dari guru manapun.</td></tr>';
+        if (box) box.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada statistik guru.</div>';
         return;
       }
       body.innerHTML = res.perGuru.map((g,i)=>`
@@ -670,6 +714,35 @@ function loadStatistikGlobal(){
           <td>${g.lastActivity || '-'}</td>
         </tr>
       `).join('');
+
+      if (box) {
+        const summary = (res.ringkasan || {});
+        const top = (summary.topGuru || []).slice(0, 5);
+        box.innerHTML = `
+          <div class="card" style="margin-top:16px">
+            <h3 style="margin:0 0 12px">📊 KPI Per Guru</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px">
+              <div class="stat card" style="padding:12px"><div class="label">Total Guru</div><div class="value">${summary.totalGuru || 0}</div></div>
+              <div class="stat card" style="padding:12px"><div class="label">Guru Aktif</div><div class="value">${summary.guruAktif || 0}</div></div>
+              <div class="stat card" style="padding:12px"><div class="label">Top Guru</div><div class="value">${top.length}</div></div>
+            </div>
+            <div style="width:100%;overflow:hidden"><table style="table-layout:fixed;width:100%;border-collapse:collapse">
+              <thead><tr><th style="padding:7px 8px">No</th><th style="padding:7px 8px;text-align:left">Guru</th><th style="padding:7px 8px;text-align:left">Email</th><th style="padding:7px 8px">Jurnal</th><th style="padding:7px 8px">Kelas</th><th style="padding:7px 8px">Terakhir</th></tr></thead>
+              <tbody>
+                ${top.map(function(g, i) {
+                  return '<tr>' +
+                    '<td style="padding:7px 8px;text-align:center">' + (i + 1) + '</td>' +
+                    '<td style="padding:7px 8px">' + _escSA(g.nama_guru || '-') + '</td>' +
+                    '<td style="padding:7px 8px;font-size:12px">' + _escSA(g.email || '-') + '</td>' +
+                    '<td style="padding:7px 8px;text-align:center">' + g.totalJurnal + '</td>' +
+                    '<td style="padding:7px 8px;text-align:center">' + g.totalKelas + '</td>' +
+                    '<td style="padding:7px 8px;text-align:center;font-size:12px">' + _escSA(g.lastActivity || '-') + '</td>' +
+                    '</tr>';
+                }).join('')}
+              </tbody>
+            </table></div>
+          </div>`;
+      }
     })
     .getStatistikGlobal();
 }

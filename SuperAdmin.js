@@ -59,7 +59,14 @@ function getStatistikGlobal(){
   perGuru.sort((a, b) => b.totalJurnal - a.totalJurnal);
   perGuru.forEach((g, i) => g.no = i + 1);
 
-  return { perGuru };
+  return {
+    perGuru,
+    ringkasan: {
+      totalGuru: perGuru.length,
+      guruAktif: perGuru.filter(function(g) { return g.totalJurnal > 0; }).length,
+      topGuru: perGuru.slice(0, 5)
+    }
+  };
 }
 
 function getDaftarArsip(){
