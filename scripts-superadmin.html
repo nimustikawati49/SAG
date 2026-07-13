@@ -892,7 +892,7 @@ function setSchoolLicenseUI() {
 }
 
 function renewSchoolLicenseUI(years) {
-  if (!confirm('Perpanjang lisensi sekolah +' + years + ' tahun?')) return;
+  if (!confirm('Perpanjang lisensi aplikasi +' + years + ' tahun?')) return;
   google.script.run
     .withFailureHandler(function(err) {
       if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
@@ -907,7 +907,7 @@ function renewSchoolLicenseUI(years) {
 }
 
 function deactivateSchoolLicenseUI() {
-  if (!confirm('Nonaktifkan lisensi sekolah sekarang?\nSemua guru tidak dapat mengakses aplikasi.')) return;
+  if (!confirm('Nonaktifkan lisensi aplikasi sekarang?\nSemua guru tidak dapat mengakses aplikasi.')) return;
   google.script.run
     .withFailureHandler(function(err) {
       if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
@@ -937,7 +937,7 @@ function genSchoolLicenseKey_() {
     .generateSchoolLicenseKey();
 }
 
-/* ---- Reminder Trigger untuk Lisensi Sekolah ---- */
+/* ---- Reminder Trigger untuk Lisensi Aplikasi ---- */
 function loadLicenseReminderTriggerStatus_() {
   var el = document.getElementById('licReminderStatus');
   if (!el) return;
@@ -965,7 +965,7 @@ function activateLicenseReminderTrigger_() {
 }
 
 function deactivateLicenseReminderTrigger_() {
-  if (!confirm('Nonaktifkan reminder renewal lisensi sekolah?')) return;
+  if (!confirm('Nonaktifkan reminder renewal lisensi aplikasi?')) return;
   google.script.run
     .withSuccessHandler(function() {
       if (typeof showToast === 'function') showToast('Reminder dinonaktifkan', 'warning');

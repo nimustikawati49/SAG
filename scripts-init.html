@@ -341,7 +341,7 @@ function checkLicenseStatusBadge(){
           badge.style.color      = '#fff';
           badge.innerText        = '🎁 Trial: ' + info.daysLeft + ' hari';
           if (info.daysLeft <= 7 && typeof showToast === 'function') {
-            showToast('⚠️ Masa trial hampir habis (' + info.daysLeft + ' hari). Aktifkan lisensi sekolah!', 'warning', 8000);
+            showToast('⚠️ Masa trial hampir habis (' + info.daysLeft + ' hari). Aktifkan lisensi aplikasi!', 'warning', 8000);
           }
         } else if (info.daysLeft <= 7) {
           badge.style.background = '#dc2626';
@@ -362,7 +362,7 @@ function checkLicenseStatusBadge(){
         badge.innerText        = '❌ Lisensi Tidak Aktif';
         // Tampilkan info — tidak minta kode, guru tidak bisa aktivasi sendiri
         if (typeof showToast === 'function') {
-          showToast('🔒 Lisensi sekolah tidak aktif. Hubungi admin sekolah untuk perpanjangan.', 'warning', 0);
+          showToast('🔒 Lisensi aplikasi tidak aktif. Hubungi admin sekolah untuk perpanjangan.', 'warning', 0);
         }
         if (typeof openLicenseModal === 'function') openLicenseModal();
       }

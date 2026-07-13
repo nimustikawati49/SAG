@@ -383,7 +383,7 @@ function updateRoleLabel_() {
 }
 
 /*************************************************
- * LICENSE INFO MODAL — School-wide (info only, no key input)
+ * LICENSE INFO MODAL — Aplikasi (info only, no key input)
  *************************************************/
 function openLicenseModal() {
   var m = document.getElementById('licenseModal');
@@ -413,11 +413,11 @@ function runWithLicenseGuard(run){
           err.message === 'INPUT_LICENSE' ||
           err.message.includes('LISENSI')
         ){
-          // Lisensi sekolah bermasalah — guru tidak bisa aktivasi sendiri
+          // Lisensi aplikasi bermasalah — guru tidak bisa aktivasi sendiri
           if (typeof showToast === 'function') {
-            showToast('🔒 Lisensi sekolah tidak aktif. Hubungi Admin Sekolah untuk perpanjangan.', 'warning', 0);
+            showToast('🔒 Lisensi aplikasi tidak aktif. Hubungi Admin Sekolah untuk perpanjangan.', 'warning', 0);
           } else {
-            alert('Lisensi sekolah tidak aktif. Hubungi Admin Sekolah.');
+            alert('Lisensi aplikasi tidak aktif. Hubungi Admin Sekolah.');
           }
           if (typeof openLicenseModal === 'function') openLicenseModal();
           return;
@@ -633,7 +633,7 @@ function checkAutoLockFrontend(){
 
 }
 
-/* ===== LICENSE EXPIRY WARNING — SCHOOL-WIDE ===== */
+/* ===== LICENSE EXPIRY WARNING — APLIKASI ===== */
 function checkLicenseExpiryWarning_() {
   google.script.run
     .withSuccessHandler(function(info) {
@@ -662,7 +662,7 @@ function checkLicenseExpiryWarning_() {
         _showExpiryModal_('danger', d);
       } else if (d <= 30) {
         if (typeof showToast === 'function')
-          showToast('⚠️ Lisensi sekolah akan berakhir dalam ' + d + ' hari!', 'warning', 7000);
+          showToast('⚠️ Lisensi aplikasi akan berakhir dalam ' + d + ' hari!', 'warning', 7000);
       }
     })
     .withFailureHandler(function() {})
@@ -677,14 +677,14 @@ function _showExpiryModal_(level, days) {
   const body  = document.getElementById('lemBody');
   if (level === 'expired') {
     if (icon)  icon.textContent  = '⛔';
-    if (title) title.textContent = 'Lisensi Sekolah Sudah Habis';
+    if (title) title.textContent = 'Lisensi Aplikasi Sudah Habis';
     if (title) title.style.color = '#ef4444';
-    if (body)  body.textContent  = 'Lisensi sekolah telah melewati tanggal kedaluwarsa. Segera hubungi Admin Sekolah atau vendor untuk perpanjangan agar semua fitur dapat digunakan kembali.';
+    if (body)  body.textContent  = 'Lisensi aplikasi telah melewati tanggal kedaluwarsa. Segera hubungi Admin Sekolah atau vendor untuk perpanjangan agar semua fitur dapat digunakan kembali.';
   } else {
     if (icon)  icon.textContent  = '⚠️';
-    if (title) title.textContent = 'Lisensi Sekolah Hampir Habis!';
+    if (title) title.textContent = 'Lisensi Aplikasi Hampir Habis!';
     if (title) title.style.color = '#d97706';
-    if (body)  body.textContent  = 'Lisensi sekolah akan berakhir dalam ' + days + ' hari lagi. Hubungi Admin Sekolah sekarang untuk perpanjangan agar layanan tidak terputus.';
+    if (body)  body.textContent  = 'Lisensi aplikasi akan berakhir dalam ' + days + ' hari lagi. Hubungi Admin Sekolah sekarang untuk perpanjangan agar layanan tidak terputus.';
   }
   modal.style.display = 'flex';
 }

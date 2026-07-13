@@ -4,9 +4,9 @@
  */
 
 /* =========================================================
-   LICENSE RENEWAL REMINDER TRIGGER
-   Kirim email ke SA saat lisensi sekolah hampir habis (H-60/30/7)
-   ========================================================= */
+  LICENSE RENEWAL REMINDER TRIGGER
+  Kirim email ke SA saat lisensi aplikasi hampir habis (H-60/30/7)
+  ========================================================= */
 
 function setupLicenseReminderTrigger() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
@@ -21,7 +21,7 @@ function setupLicenseReminderTrigger() {
     .everyDays(1)
     .atHour(8)
     .create();
-  logAudit('SETUP_LICENSE_REMINDER_TRIGGER', getLoginEmail(), 'Reminder lisensi sekolah aktif (08:00)');
+  logAudit('SETUP_LICENSE_REMINDER_TRIGGER', getLoginEmail(), 'Reminder lisensi aplikasi aktif (08:00)');
   return { status: true, message: 'Trigger reminder lisensi berhasil diaktifkan (08:00)' };
 }
 

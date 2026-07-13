@@ -399,7 +399,7 @@
     <div id="panduanSA" style="display:none">
       <ol style="line-height:1.7;font-size:14px">
         <li><b>👥 Manajemen User</b><br>Tambah, edit, dan nonaktifkan akun guru dari dashboard SuperAdmin.</li>
-        <li><b>🔑 Lisensi Sekolah</b><br>Set dan perpanjang lisensi school-wide dari dashboard SuperAdmin.</li>
+        <li><b>🔑 Lisensi Aplikasi</b><br>Set dan perpanjang lisensi dari dashboard SuperAdmin untuk akun guru aktif.</li>
         <li><b>📢 Broadcast Notif</b><br>Kirim pengumuman ke seluruh guru via in-app notification.</li>
         <li><b>🛰️ Deployment Tracker</b><br>Lacak semua deployment (sekolah) yang menggunakan sistem ini.</li>
         <li><b>📝 Audit Log</b><br>Lihat riwayat aktivitas penting seluruh pengguna.</li>
@@ -1304,7 +1304,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
     <div>
       <h3 style="margin:0">⚡ Manajemen Tier Lisensi</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Generate kode PRO/SCHOOL untuk diberikan ke pengguna. Tier aktif berlaku untuk semua guru di sekolah ini.</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Generate kode PRO untuk guru atau kode admin sekolah untuk mengelola akses akun aktif.</p>
     </div>
     <span id="currentTierBadge" style="background:#f3f4f6;color:#374151;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">⏳ Memuat...</span>
   </div>
@@ -1320,8 +1320,8 @@
       <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur LITE<br>✅ Unlimited kelas & siswa<br>✅ Katrol nilai<br>✅ Modul Ajar & RPP<br>✅ Export Excel semua laporan<br>❌ Rekap Sekolah</div>
     </div>
     <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:2px solid #22c55e">
-      <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">SCHOOL — Multi Guru</div>
-      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur PRO<br>✅ Multi-guru (tambah user)<br>✅ Rekap Sekolah (kepsek)<br>✅ Early Warning Siswa<br>✅ Dashboard Kepala Sekolah</div>
+      <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">ADMIN SEKOLAH</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur PRO<br>✅ Kelola akun guru aktif<br>✅ Rekap Sekolah (kepsek)<br>✅ Early Warning Siswa<br>✅ Dashboard Kepala Sekolah</div>
     </div>
   </div>
 
@@ -1330,7 +1330,7 @@
     <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#4338ca">🎲 Generate Kode Lisensi</summary>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button onclick="genTierKey_('PRO')" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🎲 Generate PRO Key</button>
-      <button onclick="genTierKey_('SCHOOL')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🎲 Generate SCHOOL Key</button>
+      <button onclick="genTierKey_('SCHOOL')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">🎲 Generate Admin Key</button>
       <input id="generatedTierKey" readonly placeholder="Kode akan muncul di sini" style="flex:1;min-width:180px;font-family:monospace;font-size:13px;background:#f8fafc;cursor:pointer" onclick="this.select()" title="Klik untuk pilih semua">
     </div>
   </details>
@@ -1344,11 +1344,11 @@
         <select id="setTierSelect" style="width:100%">
           <option value="LITE">LITE (Gratis)</option>
           <option value="PRO">PRO</option>
-          <option value="SCHOOL">SCHOOL</option>
+          <option value="SCHOOL">ADMIN SEKOLAH</option>
         </select>
       </div>
       <div style="flex:2;min-width:180px">
-        <label style="font-size:12px;color:#6b7280">Kode Lisensi (untuk PRO/SCHOOL)</label>
+        <label style="font-size:12px;color:#6b7280">Kode Lisensi (untuk PRO/ADMIN SEKOLAH)</label>
         <input id="setTierKeyInput" placeholder="PRO-XXXX-XXXX" style="width:100%;font-family:monospace;text-transform:uppercase">
       </div>
       <button onclick="setTierUI_()" style="background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">💾 Simpan Tier</button>
@@ -1420,12 +1420,12 @@
   </div>
 </div>
 
-<!-- ===== LISENSI SEKOLAH ===== -->
+<!-- ===== LISENSI APLIKASI ===== -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
     <div>
-      <h3 style="margin:0">🔑 Lisensi Sekolah</h3>
-      <p class="muted" style="margin:4px 0 0">Lisensi berlaku untuk seluruh pengguna di sekolah ini (school-wide).</p>
+      <h3 style="margin:0">🔑 Lisensi Aplikasi</h3>
+      <p class="muted" style="margin:4px 0 0">Lisensi berlaku untuk akun guru aktif dan akses admin sekolah.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button onclick="loadSchoolLicenseUI()" class="ghost" style="font-size:13px">🔄 Refresh</button>
@@ -1474,7 +1474,7 @@
     </div>
   </div>
 </div>
-<!-- ===== END LISENSI SEKOLAH ===== -->
+<!-- ===== END LISENSI APLIKASI ===== -->
 
       <div style="
         display:flex;
@@ -1876,7 +1876,7 @@
   <button id="btnDarkModeMobile" onclick="toggleDarkMode()">🌙 Dark Mode</button>
 </div>
 
-<!-- ================= MODAL: LISENSI SEKOLAH TIDAK AKTIF ================= -->
+<!-- ================= MODAL: LISENSI APLIKASI TIDAK AKTIF ================= -->
 <div id="licenseModal" style="
   position:fixed;
   inset:0;
@@ -1896,9 +1896,9 @@
     text-align:center;
   ">
     <div style="font-size:48px;margin-bottom:10px">🔒</div>
-    <h3 style="margin:0 0 8px;color:#dc2626">Lisensi Sekolah Tidak Aktif</h3>
+    <h3 style="margin:0 0 8px;color:#dc2626">Lisensi Aplikasi Tidak Aktif</h3>
     <p class="muted" style="font-size:14px;line-height:1.7">
-      Masa lisensi sekolah sudah habis atau belum diaktifkan.<br>
+      Masa lisensi aplikasi sudah habis atau belum diaktifkan.<br>
       Silakan hubungi <b>Admin Sekolah</b> untuk perpanjangan.
     </p>
     <div style="margin-top:20px">
@@ -2455,11 +2455,11 @@
 <div id="notifOverlay" onclick="toggleNotifPanel()" style="
   display:none;position:fixed;inset:0;background:rgba(0,0,0,0.25);z-index:9998
 "></div>
-<!-- ===== MODAL: LICENSE EXPIRY WARNING (SCHOOL-WIDE) ===== -->
+<!-- ===== MODAL: LICENSE EXPIRY WARNING (1 SEKOLAH) ===== -->
 <div id="licenseExpiryModal">
   <div style="background:#fff;width:90%;max-width:400px;border-radius:18px;padding:28px 26px;box-shadow:0 30px 80px rgba(0,0,0,.4);text-align:center">
     <div style="font-size:48px;margin-bottom:8px" id="lemIcon">⚠️</div>
-    <h3 id="lemTitle" style="margin:0 0 10px">Peringatan Lisensi Sekolah</h3>
+    <h3 id="lemTitle" style="margin:0 0 10px">Peringatan Lisensi Aplikasi</h3>
     <p id="lemBody" class="muted" style="font-size:14px;line-height:1.6"></p>
     <p style="font-size:12px;color:#9ca3af;margin-top:8px">Hubungi Admin Sekolah atau vendor untuk perpanjangan.</p>
     <button onclick="closeLicenseExpiryModal_()" style="margin-top:16px;width:100%">✅ Mengerti</button>
