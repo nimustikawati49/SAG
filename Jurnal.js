@@ -59,7 +59,7 @@ function importSiswa(rows){
     throw new Error('AKSES_DITOLAK');
   }
 
-  const sh = getSpreadsheet_().getSheetByName('SISWA');
+  const sh = sheet('SISWA');
   if(!sh) throw new Error('Sheet SISWA tidak ditemukan');
 
   const setting = getSetting();
@@ -216,9 +216,9 @@ function simpanJurnal(data){
 
   assertLicenseActive();
 
-  const ss = getSpreadsheet_();
-  const sh = ss.getSheetByName('JURNAL');
-  const absSheet = ss.getSheetByName('ABSENSI');
+  const sh = sheet('JURNAL');
+  const absSheet = sheet('ABSENSI');
+  if (!sh || !absSheet) throw new Error('Sheet operasional jurnal belum tersedia');
 
   const jurnalId = Date.now().toString();
   const now = new Date();

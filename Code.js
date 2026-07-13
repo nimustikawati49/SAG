@@ -78,6 +78,29 @@ function _getCentralSheetByName_(name) {
   return getCentralSpreadsheet_().getSheetByName(name);
 }
 
+function _ensureOperationalSheetFromCentral_(targetSpreadsheet, name) {
+  if (!targetSpreadsheet) return null;
+  let localSheet = targetSpreadsheet.getSheetByName(name);
+  if (localSheet) return localSheet;
+
+  const centralSheet = _getCentralSheetByName_(name);
+  if (!centralSheet) return null;
+
+  localSheet = targetSpreadsheet.insertSheet(name);
+  const lastCol = centralSheet.getLastColumn();
+  if (lastCol > 0) {
+    const header = centralSheet.getRange(1, 1, 1, lastCol).getValues();
+    localSheet.getRange(1, 1, 1, lastCol).setValues(header);
+    localSheet.setFrozenRows(1);
+    try {
+      const bg = centralSheet.getRange(1, 1, 1, lastCol).getBackgrounds();
+      const fw = centralSheet.getRange(1, 1, 1, lastCol).getFontWeights();
+      localSheet.getRange(1, 1, 1, lastCol).setBackgrounds(bg).setFontWeights(fw);
+    } catch (e) {}
+  }
+  return localSheet;
+}
+
 function _getResourceMapEntryForUser_(email, resourceType) {
   try {
     const targetEmail = String(email || '').toLowerCase().trim();
@@ -193,6 +216,9 @@ function sheet(name, options) {
   opts.sheetName = name;
   const ss = getSpreadsheet_(opts);
   let sh = ss.getSheetByName(name);
+  if (!sh && ss.getId() !== getCentralSpreadsheet_().getId() && !_isCentralOnlySheet_(name)) {
+    sh = _ensureOperationalSheetFromCentral_(ss, name);
+  }
   if (!sh && ss.getId() !== getCentralSpreadsheet_().getId()) {
     sh = getCentralSpreadsheet_().getSheetByName(name);
   }

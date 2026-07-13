@@ -169,10 +169,8 @@ function getDashboardMetaData(){
 
   const email = String(auth.email).toLowerCase().trim();
   const period = getUserAcademicPeriod(email);
-  const ss = getSpreadsheet_();
-
-  const shJurnal = ss.getSheetByName('JURNAL');
-  const shSiswa  = ss.getSheetByName('SISWA');
+  const shJurnal = sheet('JURNAL');
+  const shSiswa  = sheet('SISWA');
 
   let totalKelas = 0;
   let totalSiswa = 0;

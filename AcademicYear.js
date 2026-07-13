@@ -4,18 +4,24 @@
  */
 
 function ensureAcademicSchema_() {
+  var cacheKey = 'ACADEMIC_SCHEMA_READY';
+  try {
+    var mode = (typeof getStorageMode_ === 'function' ? getStorageMode_() : 'central');
+    var email = Session.getEffectiveUser().getEmail().toLowerCase().trim();
+    if (mode === 'per_guru' && email) cacheKey += '_' + email.replace(/[^a-z0-9]/gi, '_');
+  } catch (e) {}
+
   const cache = CacheService.getScriptCache();
-  const hit = cache.get('ACADEMIC_SCHEMA_READY');
+  const hit = cache.get(cacheKey);
   if (hit) return;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
-    const hit2 = cache.get('ACADEMIC_SCHEMA_READY');
+    const hit2 = cache.get(cacheKey);
     if (hit2) return;
 
-    const ssId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || SPREADSHEET_ID;
-    const ss = SpreadsheetApp.openById(ssId);
+    const ss = getSpreadsheet_();
 
     ensureSheetWithHeader_(ss, 'MasterTahunPelajaran', [
       'id', 'tahun_pelajaran', 'semester', 'status', 'created_at'
@@ -34,7 +40,7 @@ function ensureAcademicSchema_() {
     ensureJurnalAcademicColumns_(ss);
     migrateLegacyData_();
 
-    cache.put('ACADEMIC_SCHEMA_READY', '1', 3600);
+    cache.put(cacheKey, '1', 3600);
   } finally {
     lock.releaseLock();
   }
@@ -96,7 +102,13 @@ function getLegacyDefaultYear_() {
 
 function migrateLegacyData_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('ACADEMIC_MIGRATED')) return;
+  var cacheKey = 'ACADEMIC_MIGRATED';
+  try {
+    var mode = (typeof getStorageMode_ === 'function' ? getStorageMode_() : 'central');
+    var email = Session.getEffectiveUser().getEmail().toLowerCase().trim();
+    if (mode === 'per_guru' && email) cacheKey += '_' + email.replace(/[^a-z0-9]/gi, '_');
+  } catch (e) {}
+  if (cache.get(cacheKey)) return;
 
   const ss = getSpreadsheet_();
   const shSiswa = ss.getSheetByName('SISWA');
@@ -189,7 +201,7 @@ function migrateLegacyData_() {
     }
   }
 
-  cache.put('ACADEMIC_MIGRATED', '1', 21600);
+  cache.put(cacheKey, '1', 21600);
 }
 
 function ensureAcademicYearExists_(tahun, semester, setActive) {

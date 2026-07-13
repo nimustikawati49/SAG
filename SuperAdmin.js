@@ -582,7 +582,7 @@ var UPDATE_LOG_HEADERS = [
 ];
 
 function _ensureRegistrySheet_(sheetName, headers) {
-  var ss = getSpreadsheet_();
+  var ss = getCentralSpreadsheet_();
   var sh = ss.getSheetByName(sheetName);
   if (!sh) {
     sh = ss.insertSheet(sheetName);
@@ -736,9 +736,9 @@ function getCentralRegistryOverview() {
   _ensureCentralRegistrySchema_();
 
   var deployments = getDeployments();
-  var resourceSh  = getSpreadsheet_().getSheetByName(RESOURCE_MAP_SHEET);
-  var releaseSh   = getSpreadsheet_().getSheetByName(APP_RELEASES_SHEET);
-  var updateSh    = getSpreadsheet_().getSheetByName(UPDATE_LOG_SHEET);
+  var resourceSh  = getCentralSpreadsheet_().getSheetByName(RESOURCE_MAP_SHEET);
+  var releaseSh   = getCentralSpreadsheet_().getSheetByName(APP_RELEASES_SHEET);
+  var updateSh    = getCentralSpreadsheet_().getSheetByName(UPDATE_LOG_SHEET);
 
   var resources = resourceSh ? Math.max(resourceSh.getLastRow() - 1, 0) : 0;
   var releases  = releaseSh ? Math.max(releaseSh.getLastRow() - 1, 0) : 0;

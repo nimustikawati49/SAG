@@ -185,7 +185,7 @@ function getNilaiDataVersion_(kelas, mapel, tahun, semester, ownerEmail, sheetRe
  */
 function getAllKelasUntukNilai() {
   const auth = authAdmin_();
-  const sh = getSpreadsheet_().getSheetByName('SISWA');
+  const sh = sheet('SISWA');
   if (!sh) return [];
 
   const email = auth.email.toLowerCase().trim();
@@ -202,7 +202,7 @@ function getAllKelasUntukNilai() {
  */
 function getDataSiswaUntukNilai(kelas) {
   const auth = authAdmin_();
-  const sh = getSpreadsheet_().getSheetByName('SISWA');
+  const sh = sheet('SISWA');
   if (!sh) return [];
 
   const email = auth.email.toLowerCase().trim();
