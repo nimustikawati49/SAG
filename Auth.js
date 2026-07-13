@@ -21,7 +21,6 @@ function getSuperAdminEmailForUI() {
 
 function getLicenseBadge(){
   const auth = getAuth();
-  if(auth.role === 'superadmin' || auth.role === 'kepsek') return null;
   // Delegasi ke License.js (school-wide)
   return getSchoolLicenseBadge_();
 } 

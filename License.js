@@ -6,7 +6,7 @@
  * SuperAdmin yang mengelola (set / renew / deactivate / tier).
  *
  * TIER SYSTEM:
- *   LITE  — default gratis, maks 5 kelas, 160 siswa, tanpa fitur premium
+ *   LITE  — default gratis, maks 6 kelas, 192 siswa, tanpa fitur premium
  *   PRO   — unlock semua fitur 1 guru (modul ajar, RPP, export, katrol nilai)
  *   SCHOOL — PRO + multi-guru + rekap sekolah (dihandle via role kepsek)
  */
@@ -15,14 +15,14 @@ var LIC_ = {
   KEY         : 'SCHOOL_LICENSE_KEY',
   EXPIRES     : 'SCHOOL_LICENSE_EXPIRES',   // ISO date string
   STATUS      : 'SCHOOL_LICENSE_STATUS',    // 'active' | 'inactive'
-  INSTALL_DATE: 'SCHOOL_INSTALL_DATE',      // ISO — untuk trial 30 hari
+  INSTALL_DATE: 'SCHOOL_INSTALL_DATE',      // ISO — untuk trial 6 bulan
   TIER        : 'SCHOOL_TIER'              // 'LITE' | 'PRO' | 'SCHOOL'
 };
 
 /* Batas fitur tier LITE */
 var LITE_LIMITS_ = {
-  MAX_KELAS : 5,
-  MAX_SISWA : 160
+  MAX_KELAS : 6,
+  MAX_SISWA : 192
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -36,8 +36,8 @@ function _readSchoolLicense_() {
   var status  = props.getProperty(LIC_.STATUS)  || 'inactive';
   var isTrial = false;
 
-  // ── TRIAL OTOMATIS 30 HARI ──
-  // Jika belum ada lisensi sama sekali, beri trial 30 hari sejak pertama install
+  // ── TRIAL OTOMATIS 6 BULAN ──
+  // Jika belum ada lisensi sama sekali, beri trial 6 bulan sejak pertama install
   if (!key && !expires) {
     var installDate = props.getProperty(LIC_.INSTALL_DATE);
     if (!installDate) {
@@ -45,7 +45,7 @@ function _readSchoolLicense_() {
       props.setProperty(LIC_.INSTALL_DATE, installDate);
     }
     var trialEnd = new Date(installDate);
-    trialEnd.setDate(trialEnd.getDate() + 30);
+    trialEnd.setMonth(trialEnd.getMonth() + 6);
     if (trialEnd > new Date()) {
       expires = trialEnd.toISOString();
       status  = 'active';
@@ -95,7 +95,8 @@ function assertSchoolLicenseActive_() {
 
 /** Ambil info lisensi sekolah (SuperAdmin only) */
 function getSchoolLicense() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var auth = getAuth();
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
   return _readSchoolLicense_();
 }
 
@@ -105,7 +106,8 @@ function getSchoolLicense() {
  * @param {string} expiredDate 'YYYY-MM-DD'
  */
 function setSchoolLicense(key, expiredDate) {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var auth = getAuth();
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
   if (!key || !expiredDate) throw new Error('Key dan tanggal expired wajib diisi');
 
   key = String(key).trim().toUpperCase();
@@ -128,7 +130,8 @@ function setSchoolLicense(key, expiredDate) {
  * @param {number} years Jumlah tahun perpanjangan (default: 1)
  */
 function renewSchoolLicense(years) {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var auth = getAuth();
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
   years = parseInt(years) || 1;
   if (years < 1 || years > 10) throw new Error('Tahun perpanjangan harus antara 1-10');
 
@@ -151,7 +154,8 @@ function renewSchoolLicense(years) {
 
 /** Non-aktifkan lisensi sekolah (SuperAdmin only) */
 function deactivateSchoolLicense() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var auth = getAuth();
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
 
   var props = PropertiesService.getScriptProperties();
   props.setProperty(LIC_.STATUS, 'inactive');
@@ -165,7 +169,8 @@ function deactivateSchoolLicense() {
  * Format: SEKOLAH-YYYYMMDD-XXXX
  */
 function generateSchoolLicenseKey() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var auth = getAuth();
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
 
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   var rand  = '';
@@ -196,8 +201,7 @@ function getSchoolLicenseBadge_() {
  */
 function getSchoolLicenseInfo() {
   var auth = getAuth();
-  // SA & kepsek tidak perlu badge lisensi
-  if (auth.role === 'superadmin' || auth.role === 'kepsek') return null;
+  if (auth.role !== 'superadmin' && auth.role !== 'admin') return null;
   var lic = _readSchoolLicense_();
   return {
     isActive : lic.isActive,
@@ -394,8 +398,8 @@ function checkSchoolLicenseExpiryReminder() {
   var shouldSend = REMINDER_DAYS.some(function(d) { return Math.abs(days - d) <= 1; });
   if (!shouldSend) return;
 
-  var saEmail = getSuperAdminEmail_();
-  if (!saEmail) return;
+  var recipients = _getLicenseReminderRecipients_();
+  if (!recipients.length) return;
 
   var appUrl  = ScriptApp.getService().getUrl();
   var bgColor = days <= 7 ? '#dc2626' : '#d97706';
@@ -414,6 +418,32 @@ function checkSchoolLicenseExpiryReminder() {
     '<a href="' + appUrl + '" style="display:inline-block;background:#6C63FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0">⚙️ Buka SuperAdmin Panel</a>' +
     '</div></div>';
 
-  GmailApp.sendEmail(saEmail, subject, '', { htmlBody: htmlBody });
+  recipients.forEach(function(email) {
+    GmailApp.sendEmail(email, subject, '', { htmlBody: htmlBody });
+  });
   logAudit('SCHOOL_LICENSE_REMINDER', 'SYSTEM', 'H-' + days + ' | expired: ' + lic.expires);
+}
+
+function _getLicenseReminderRecipients_() {
+  var recipients = [];
+  try {
+    var sa = getSuperAdminEmail_();
+    if (sa) recipients.push(String(sa).toLowerCase().trim());
+  } catch (e) {}
+
+  try {
+    var rows = sheet('USERS').getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var email = String(rows[i][0] || '').toLowerCase().trim();
+      var role = String(rows[i][1] || '').toLowerCase().trim();
+      var status = String(rows[i][2] || '').toLowerCase().trim();
+      if (email && status === 'active' && (role === 'admin' || role === 'superadmin')) {
+        recipients.push(email);
+      }
+    }
+  } catch (e) {}
+
+  return recipients.filter(function(email, idx, arr) {
+    return email && arr.indexOf(email) === idx;
+  });
 }

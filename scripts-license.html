@@ -121,6 +121,7 @@ function bootApp(){
     if (badge) badge.style.display = 'inline-flex';
 
     initApp();
+    setTimeout(checkLicenseExpiryWarning_, 2500);
     return;
   }
 
@@ -481,7 +482,7 @@ function _showUpgradeBanner_() {
   banner.onclick     = function() { _openUpgradeModal_(); };
   banner.innerHTML   =
     '<div style="font-size:11px;font-weight:800;color:#78350f;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">⚡ Versi LITE</div>' +
-    '<div style="font-size:12px;color:#92400e;line-height:1.4">Maks 5 kelas & 160 siswa.<br>Upgrade ke <b>PRO</b> untuk semua fitur.</div>' +
+    '<div style="font-size:12px;color:#92400e;line-height:1.4">Maks 6 kelas & 192 siswa.<br>Upgrade ke <b>PRO</b> untuk semua fitur.</div>' +
     '<div style="margin-top:8px;background:#92400e;color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;text-align:center">🚀 Upgrade Sekarang</div>';
 
   // Insert sebelum item pertama
@@ -570,7 +571,6 @@ function applyLockUI(isLocked){
 
   const headerInputs = [
     set_sekolah,
-    set_tahun,
     set_guru,
     set_nip_guru
   ];
@@ -645,7 +645,7 @@ function checkLicenseExpiryWarning_() {
       if (info.isTrial) {
         if (d <= 0) {
           _showExpiryModal_('expired', 0);
-        } else if (d <= 7) {
+        } else if (d <= 30) {
           _showExpiryModal_('danger', d);
         } else {
           // Tampilkan sekali sebagai toast info ringan, bukan warning merah
