@@ -925,7 +925,7 @@ function loadSchoolLicenseUI() {
     .withSuccessHandler(function(lic) {
       var statusColor = lic.isActive ? '#166534' : '#991b1b';
       var statusBg    = lic.isActive ? '#dcfce7' : '#fee2e2';
-      var statusLabel = lic.isActive ? '✅ Aktif' : '❌ Tidak Aktif';
+      var statusLabel = lic.isLifetime ? '♾️ Lifetime' : (lic.isActive ? '✅ Aktif' : '❌ Tidak Aktif');
       var daysStr     = '';
       if (lic.expires) {
         daysStr = lic.isActive
@@ -936,7 +936,7 @@ function loadSchoolLicenseUI() {
         '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">' +
         '<span style="background:' + statusBg + ';color:' + statusColor + ';padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">' + statusLabel + '</span>' +
         (lic.key ? '<span style="font-family:monospace;font-size:13px;background:#f3f4f6;padding:4px 10px;border-radius:8px">🔑 ' + lic.key + '</span>' : '') +
-        (lic.expires ? '<span style="font-size:13px">📅 s.d. <b>' + lic.expires + '</b>' + daysStr + '</span>' : '<span class="muted">Belum ada tanggal expired</span>') +
+        (lic.expires ? '<span style="font-size:13px">📅 s.d. <b>' + lic.expires + '</b>' + daysStr + '</span>' : '<span class="muted">Lisensi aktif seumur hidup</span>') +
         '</div>';
     })
     .getSchoolLicense();

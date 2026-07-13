@@ -21,6 +21,20 @@ function getDashboardV4Data(dari, sampai){
   const from = dari ? new Date(dari + 'T00:00:00') : null;
   const to   = sampai ? new Date(sampai + 'T23:59:59') : null;
 
+  const absensiMap = {};
+  for (let ai = 1; ai < absen.length; ai++) {
+    const jurnalId = absen[ai][0];
+    const status = String(absen[ai][3] || '').trim();
+    if (!jurnalId || !status) continue;
+    if (!absensiMap[jurnalId]) {
+      absensiMap[jurnalId] = { H: 0, S: 0, I: 0, A: 0, total: 0 };
+    }
+    if (absensiMap[jurnalId][status] !== undefined) {
+      absensiMap[jurnalId][status]++;
+      absensiMap[jurnalId].total++;
+    }
+  }
+
   let totalJurnal = 0;
   let kelasSet = new Set();
   let kelasData = {};
@@ -48,13 +62,14 @@ function getDashboardV4Data(dari, sampai){
     }
 
     const jurnalId = row[0];
-
-    absen.forEach(a=>{
-      if(a[0] == jurnalId){
-        kelasData[kelas][a[3]]++;
-        kelasData[kelas].total++;
-      }
-    });
+    const absSummary = absensiMap[jurnalId];
+    if (absSummary) {
+      kelasData[kelas].H += absSummary.H;
+      kelasData[kelas].S += absSummary.S;
+      kelasData[kelas].I += absSummary.I;
+      kelasData[kelas].A += absSummary.A;
+      kelasData[kelas].total += absSummary.total;
+    }
   }
 
   if(totalJurnal === 0){

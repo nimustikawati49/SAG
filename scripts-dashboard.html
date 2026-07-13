@@ -490,7 +490,7 @@ function initDashboardMeta(){
     if(_prog >= 78) clearInterval(_progInterval);
   }, 150);
 
-  // 6. Safety timeout 20s
+  // 6. Safety timeout 35s
   const _skeletonTimeout = setTimeout(function(){
     clearInterval(_progInterval);
     _dashSetProgress(0);
@@ -502,13 +502,15 @@ function initDashboardMeta(){
         if(el) el.innerHTML = '<span style="color:#ef4444;font-size:12px">—</span>';
       });
       const rankingBox = document.getElementById('rankingBox');
-      if(rankingBox) rankingBox.innerHTML = '<p class="muted">⚠️ Server lambat. Coba refresh.</p>';
+      if(rankingBox) rankingBox.innerHTML = '<p class="muted">⚠️ Data dashboard belum selesai dimuat. Coba lagi sebentar.</p>';
       const insightBox = document.getElementById('insightBox');
       if(insightBox) insightBox.innerHTML = '<li style="color:#6b7280">Tidak ada data.</li>';
+      const dash = document.getElementById('dashboard');
+      if (dash && typeof showToast === 'function') {
+        showToast('⚠️ Dashboard masih memuat data. Coba lagi sebentar.', 'warning', 7000);
+      }
     }
-    if(typeof showToast === 'function')
-      showToast('⚠️ Server lambat merespons. Coba refresh halaman.', 'warning', 8000);
-  }, 20000);
+  }, 35000);
 
   // 7. Single GAS call — getDashboardAllData() combines meta + V4
   google.script.run

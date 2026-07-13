@@ -336,7 +336,11 @@ function checkLicenseStatusBadge(){
       badge.style.display = 'inline-flex';
 
       if (info.isActive) {
-        if (info.isTrial) {
+        if (info.isLifetime) {
+          badge.style.background = '#059669';
+          badge.style.color      = '#fff';
+          badge.innerText        = '♾️ Lifetime';
+        } else if (info.isTrial) {
           badge.style.background = '#7c3aed';
           badge.style.color      = '#fff';
           badge.innerText        = '🎁 Trial: ' + info.daysLeft + ' hari';

@@ -15,7 +15,8 @@ var LIC_ = {
   KEY         : 'SCHOOL_LICENSE_KEY',
   EXPIRES     : 'SCHOOL_LICENSE_EXPIRES',   // ISO date string
   STATUS      : 'SCHOOL_LICENSE_STATUS',    // 'active' | 'inactive'
-  INSTALL_DATE: 'SCHOOL_INSTALL_DATE',      // ISO — untuk trial 6 bulan
+  INSTALL_DATE: 'SCHOOL_INSTALL_DATE',      // legacy
+  TRIAL       : 'SCHOOL_LICENSE_IS_TRIAL',
   TIER        : 'SCHOOL_TIER'              // 'LITE' | 'PRO' | 'SCHOOL'
 };
 
@@ -33,35 +34,28 @@ function _readSchoolLicense_() {
   var props   = PropertiesService.getScriptProperties();
   var key     = props.getProperty(LIC_.KEY)     || '';
   var expires = props.getProperty(LIC_.EXPIRES) || '';
-  var status  = props.getProperty(LIC_.STATUS)  || 'inactive';
+  var status  = props.getProperty(LIC_.STATUS)  || '';
+  var trialFlag = String(props.getProperty(LIC_.TRIAL) || '').toLowerCase() === 'true';
   var isTrial = false;
-
-  // ── TRIAL OTOMATIS 6 BULAN ──
-  // Jika belum ada lisensi sama sekali, beri trial 6 bulan sejak pertama install
-  if (!key && !expires) {
-    var installDate = props.getProperty(LIC_.INSTALL_DATE);
-    if (!installDate) {
-      installDate = new Date().toISOString();
-      props.setProperty(LIC_.INSTALL_DATE, installDate);
-    }
-    var trialEnd = new Date(installDate);
-    trialEnd.setMonth(trialEnd.getMonth() + 6);
-    if (trialEnd > new Date()) {
-      expires = trialEnd.toISOString();
-      status  = 'active';
-      key     = 'TRIAL';
-      isTrial = true;
-    }
-  }
-
-  var daysLeft = 0;
+  var isLifetime = false;
+  var daysLeft = null;
   var isActive = false;
 
-  if (expires) {
+  // Default baru: jika belum pernah diset lisensi aplikasi, anggap lifetime aktif.
+  if (!key && !expires && !status) {
+    key = 'LIFETIME';
+    status = 'active';
+    isLifetime = true;
+    isActive = true;
+  } else if (expires) {
     var exp  = new Date(expires);
     var now  = new Date();
     daysLeft = Math.ceil((exp - now) / 86400000);
     isActive = (status === 'active') && (daysLeft > 0);
+    isTrial  = trialFlag;
+  } else {
+    isLifetime = (status === 'active');
+    isActive   = (status === 'active');
   }
 
   return {
@@ -70,7 +64,8 @@ function _readSchoolLicense_() {
     status  : status,
     daysLeft: daysLeft,
     isActive: isActive,
-    isTrial : isTrial
+    isTrial : isTrial,
+    isLifetime: isLifetime
   };
 }
 
@@ -119,6 +114,7 @@ function setSchoolLicense(key, expiredDate) {
   props.setProperty(LIC_.KEY,     key);
   props.setProperty(LIC_.EXPIRES, expDate.toISOString());
   props.setProperty(LIC_.STATUS,  'active');
+  props.setProperty(LIC_.TRIAL,   key.indexOf('TRIAL') === 0 ? 'true' : 'false');
 
   logAudit('SET_SCHOOL_LICENSE', getLoginEmail(), 'Key: ' + key + ' | Expires: ' + expiredDate);
 
@@ -146,6 +142,7 @@ function renewSchoolLicense(years) {
 
   props.setProperty(LIC_.EXPIRES, base.toISOString());
   props.setProperty(LIC_.STATUS,  'active');
+  props.setProperty(LIC_.TRIAL,   'false');
 
   logAudit('RENEW_SCHOOL_LICENSE', getLoginEmail(), '+' + years + ' tahun → ' + base.toISOString().split('T')[0]);
 
@@ -159,6 +156,7 @@ function deactivateSchoolLicense() {
 
   var props = PropertiesService.getScriptProperties();
   props.setProperty(LIC_.STATUS, 'inactive');
+  props.setProperty(LIC_.TRIAL,  'false');
 
   logAudit('DEACTIVATE_SCHOOL_LICENSE', getLoginEmail(), '');
   return { status: 'inactive' };
@@ -190,6 +188,9 @@ function getSchoolLicenseBadge_() {
   if (!lic.isActive) {
     return { level: 'expired', days: lic.daysLeft };
   }
+  if (lic.isLifetime) {
+    return { level: 'ok', days: null, isLifetime: true };
+  }
   if (lic.daysLeft <= 30) return { level: 'danger',  days: lic.daysLeft };
   if (lic.daysLeft <= 60) return { level: 'warning', days: lic.daysLeft };
   return { level: 'ok', days: lic.daysLeft };
@@ -208,7 +209,8 @@ function getSchoolLicenseInfo() {
     daysLeft : lic.daysLeft,
     expires  : lic.expires,
     status   : lic.status,
-    isTrial  : lic.isTrial
+    isTrial  : lic.isTrial,
+    isLifetime: lic.isLifetime
   };
 }
 

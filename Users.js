@@ -71,15 +71,16 @@ function getUsers(){
   } 
   return users.slice(1).map((u,i)=>{ 
     const email = String(u[0] || '').toLowerCase(); 
+    const role = String(u[1] || '-').toLowerCase();
     const lic = licMap[email] || {}; 
     let sisaHari = null; 
-    if(lic.expired){ 
+    if(role !== 'superadmin' && lic.expired){ 
       sisaHari = Math.ceil((new Date(lic.expired) - new Date()) / 86400000); 
     } 
     return { 
       no: i+1, email: email, role: u[1] || '-', status: u[2] || 'inactive', 
       dibuat: u[3] ? Utilities.formatDate(new Date(u[3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-', 
-      nama_guru: '-', sekolah: '-', licenseKey: lic.key || null, expired: lic.expired || '-', sisaHari: sisaHari 
+      nama_guru: '-', sekolah: '-', licenseKey: lic.key || null, expired: role === 'superadmin' ? '-' : (lic.expired || '-'), sisaHari: role === 'superadmin' ? null : sisaHari 
     }; 
   }); 
 } 

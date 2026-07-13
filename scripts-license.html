@@ -641,6 +641,10 @@ function checkLicenseExpiryWarning_() {
       var d    = info.daysLeft;
       var tier = window._schoolTier || 'LITE';
 
+      if (info.isLifetime) {
+        return;
+      }
+
       // Trial (isTrial=true) → tampilkan sebagai info ringan, bukan modal panik
       if (info.isTrial) {
         if (d <= 0) {
