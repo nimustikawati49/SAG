@@ -42,15 +42,142 @@ function getSuperAdminEmail_() {
 const FOLDER_DOKUMENTASI  = 'JURNAL_DOKUMENTASI';
 const MAX_IMAGE_SIZE_KB   = 900;
 const THUMB_SIZE_KB       = 100;
+const APP_STORAGE_MODE_PROPERTY = 'APP_STORAGE_MODE';
+const DEFAULT_APP_STORAGE_MODE  = 'central';
 
 // =========================================================
 // SPREADSHEET CONNECTION
 // =========================================================
 const SPREADSHEET_ID = '1fsdShDdm7ULvaiWE0QOTRfspi7U64HrL5ZPUX0l_As4';
 
-function getSpreadsheet_() {
+function getCentralSpreadsheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || SPREADSHEET_ID;
   return SpreadsheetApp.openById(id);
+}
+
+function getStorageMode_() {
+  const mode = String(PropertiesService.getScriptProperties().getProperty(APP_STORAGE_MODE_PROPERTY) || DEFAULT_APP_STORAGE_MODE).toLowerCase().trim();
+  return mode === 'per_guru' ? 'per_guru' : 'central';
+}
+
+function _isCentralOnlySheet_(name) {
+  const centralSheets = {
+    'USERS': true,
+    'LICENSES': true,
+    'AUDIT_LOG': true,
+    '_LOG_ERROR_': true,
+    'DEPLOYMENTS': true,
+    'RESOURCE_MAP': true,
+    'APP_RELEASES': true,
+    'UPDATE_LOG': true
+  };
+  return !!centralSheets[String(name || '').trim().toUpperCase()];
+}
+
+function _getCentralSheetByName_(name) {
+  return getCentralSpreadsheet_().getSheetByName(name);
+}
+
+function _getResourceMapEntryForUser_(email, resourceType) {
+  try {
+    const targetEmail = String(email || '').toLowerCase().trim();
+    if (!targetEmail) return null;
+    const sh = _getCentralSheetByName_('RESOURCE_MAP');
+    if (!sh || sh.getLastRow() < 2) return null;
+
+    const rows = sh.getDataRange().getValues();
+    const header = rows[0].map(h => String(h || '').toLowerCase().trim());
+    const idx = {};
+    header.forEach((h, i) => idx[h] = i);
+    const typeNeed = String(resourceType || '').toLowerCase().trim();
+
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const rowEmail = String(rows[i][idx.email_guru] || '').toLowerCase().trim();
+      const rowType = String(rows[i][idx.resource_type] || '').toLowerCase().trim();
+      const rowStatus = String(rows[i][idx.status] || 'active').toLowerCase().trim();
+      if (rowEmail !== targetEmail) continue;
+      if (rowType !== typeNeed) continue;
+      if (rowStatus !== 'active') continue;
+      return {
+        id: String(rows[i][idx.id] || ''),
+        deployment_id: String(rows[i][idx.deployment_id] || ''),
+        email_guru: rowEmail,
+        resource_type: rowType,
+        resource_id: String(rows[i][idx.resource_id] || ''),
+        resource_name: String(rows[i][idx.resource_name] || ''),
+        owner_email: String(rows[i][idx.owner_email] || ''),
+        status: rowStatus,
+        catatan: String(rows[i][idx.catatan] || '')
+      };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function _getDeploymentEntryForUser_(email) {
+  try {
+    const targetEmail = String(email || '').toLowerCase().trim();
+    if (!targetEmail) return null;
+    const sh = _getCentralSheetByName_('DEPLOYMENTS');
+    if (!sh || sh.getLastRow() < 2) return null;
+    const rows = sh.getDataRange().getValues();
+    const header = rows[0].map(h => String(h || '').toLowerCase().trim());
+    const idx = {};
+    header.forEach((h, i) => idx[h] = i);
+
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const ownerEmail = String(rows[i][idx.owner_email] || '').toLowerCase().trim();
+      const saEmail = String(rows[i][idx.email_sa] || '').toLowerCase().trim();
+      const status = String(rows[i][idx.status] || 'aktif').toLowerCase().trim();
+      if (status !== 'aktif' && status !== 'active') continue;
+      if (ownerEmail !== targetEmail && saEmail !== targetEmail) continue;
+      return {
+        id: String(rows[i][idx.id] || ''),
+        spreadsheet_id: String(rows[i][idx.spreadsheet_id] || ''),
+        folder_data_id: String(rows[i][idx.folder_data_id] || ''),
+        folder_export_id: String(rows[i][idx.folder_export_id] || ''),
+        owner_email: ownerEmail,
+        email_sa: saEmail
+      };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function resolveSpreadsheetIdForUser_(email) {
+  const targetEmail = String(email || '').toLowerCase().trim();
+  if (!targetEmail) return '';
+  const fromResource = _getResourceMapEntryForUser_(targetEmail, 'data_spreadsheet');
+  if (fromResource && fromResource.resource_id) return fromResource.resource_id;
+  const deployment = _getDeploymentEntryForUser_(targetEmail);
+  if (deployment && deployment.spreadsheet_id) return deployment.spreadsheet_id;
+  return '';
+}
+
+function getSpreadsheet_(options) {
+  const opts = options || {};
+  if (opts.forceCentral) return getCentralSpreadsheet_();
+  if (opts.sheetName && _isCentralOnlySheet_(opts.sheetName)) return getCentralSpreadsheet_();
+  if (getStorageMode_() !== 'per_guru') return getCentralSpreadsheet_();
+
+  let targetEmail = String(opts.email || '').toLowerCase().trim();
+  if (!targetEmail) {
+    try {
+      targetEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim();
+    } catch (e) {
+      targetEmail = '';
+    }
+  }
+  if (!targetEmail) return getCentralSpreadsheet_();
+
+  const userSpreadsheetId = resolveSpreadsheetIdForUser_(targetEmail);
+  if (!userSpreadsheetId) return getCentralSpreadsheet_();
+
+  try {
+    return SpreadsheetApp.openById(userSpreadsheetId);
+  } catch (e) {
+    return getCentralSpreadsheet_();
+  }
 }
 
 // =========================================================
@@ -61,8 +188,15 @@ function daysBetween(d1, d2) {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function sheet(name) {
-  return getSpreadsheet_().getSheetByName(name);
+function sheet(name, options) {
+  const opts = options || {};
+  opts.sheetName = name;
+  const ss = getSpreadsheet_(opts);
+  let sh = ss.getSheetByName(name);
+  if (!sh && ss.getId() !== getCentralSpreadsheet_().getId()) {
+    sh = getCentralSpreadsheet_().getSheetByName(name);
+  }
+  return sh;
 }
 
 function authEmail() {
@@ -78,7 +212,8 @@ function getSheetCached(sheetName, ttl = 60) {
   if (cached) {
     return JSON.parse(cached);
   }
-  const data = sheet(sheetName).getDataRange().getValues();
+  const targetSheet = sheet(sheetName);
+  const data = targetSheet ? targetSheet.getDataRange().getValues() : [];
   try { cache.put(key, JSON.stringify(data), ttl); } catch(e) { /* ignore quota errors */ }
   return data;
 }
@@ -109,7 +244,7 @@ function invalidateDashboardCache_() {
  */
 function logError_(context, err) {
   try {
-    var ss = getSpreadsheet_();
+    var ss = getCentralSpreadsheet_();
     var sh = ss.getSheetByName('_LOG_ERROR_');
     if (!sh) {
       sh = ss.insertSheet('_LOG_ERROR_');

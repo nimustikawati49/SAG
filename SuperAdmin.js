@@ -767,6 +767,7 @@ function getCentralRegistryOverview() {
       updates: updates
     },
     latestRelease: latestRelease,
+    storageMode: (typeof getStorageMode_ === 'function' ? getStorageMode_() : 'central'),
     sheets: {
       deployments: DEPLOYMENTS_HEADERS,
       resource_map: RESOURCE_MAP_HEADERS,
@@ -774,6 +775,119 @@ function getCentralRegistryOverview() {
       update_log: UPDATE_LOG_HEADERS
     }
   };
+}
+
+function getStorageModeConfig() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  return {
+    mode: (typeof getStorageMode_ === 'function' ? getStorageMode_() : 'central')
+  };
+}
+
+function setStorageModeConfig(mode) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var target = String(mode || '').toLowerCase().trim();
+  if (target !== 'central' && target !== 'per_guru') throw new Error('Mode storage tidak valid');
+  PropertiesService.getScriptProperties().setProperty('APP_STORAGE_MODE', target);
+  logAudit('SET_STORAGE_MODE', getLoginEmail(), target);
+  return { success: true, mode: target };
+}
+
+function _ensureResourceMapSheet_() {
+  _ensureCentralRegistrySchema_();
+  return getSpreadsheet_({ forceCentral: true }).getSheetByName(RESOURCE_MAP_SHEET);
+}
+
+function getResourceMapEntries(deploymentId) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var targetDeployment = String(deploymentId || '').trim();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var id = String(rows[i][idx.id] || '').trim();
+    if (!id) continue;
+    var depId = String(rows[i][idx.deployment_id] || '').trim();
+    if (targetDeployment && depId !== targetDeployment) continue;
+    result.push({
+      id: id,
+      deployment_id: depId,
+      email_guru: String(rows[i][idx.email_guru] || ''),
+      resource_type: String(rows[i][idx.resource_type] || ''),
+      resource_id: String(rows[i][idx.resource_id] || ''),
+      resource_name: String(rows[i][idx.resource_name] || ''),
+      owner_email: String(rows[i][idx.owner_email] || ''),
+      status: String(rows[i][idx.status] || 'active'),
+      created_at: String(rows[i][idx.created_at] || ''),
+      updated_at: String(rows[i][idx.updated_at] || ''),
+      catatan: String(rows[i][idx.catatan] || '')
+    });
+  }
+  return result;
+}
+
+function saveResourceMapEntry(obj) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  obj = obj || {};
+  if (!obj.deployment_id) throw new Error('Deployment wajib dipilih');
+  if (!obj.email_guru) throw new Error('Email guru wajib diisi');
+  if (!obj.resource_type) throw new Error('Tipe resource wajib diisi');
+  if (!obj.resource_id) throw new Error('Resource ID wajib diisi');
+
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var normalizedType = String(obj.resource_type).toLowerCase().trim();
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowId = String(rows[i][idx.id] || '').trim();
+    if (obj.id && rowId === String(obj.id).trim()) {
+      sh.getRange(i + 1, idx.deployment_id + 1).setValue(obj.deployment_id);
+      sh.getRange(i + 1, idx.email_guru + 1).setValue(String(obj.email_guru).toLowerCase().trim());
+      sh.getRange(i + 1, idx.resource_type + 1).setValue(normalizedType);
+      sh.getRange(i + 1, idx.resource_id + 1).setValue(obj.resource_id);
+      sh.getRange(i + 1, idx.resource_name + 1).setValue(obj.resource_name || '');
+      sh.getRange(i + 1, idx.owner_email + 1).setValue((obj.owner_email || obj.email_guru || '').toLowerCase().trim());
+      sh.getRange(i + 1, idx.status + 1).setValue(obj.status || 'active');
+      sh.getRange(i + 1, idx.updated_at + 1).setValue(now);
+      sh.getRange(i + 1, idx.catatan + 1).setValue(obj.catatan || '');
+      logAudit('UPDATE_RESOURCE_MAP', getLoginEmail(), obj.deployment_id + ' | ' + normalizedType + ' | ' + obj.email_guru);
+      return { success: true, action: 'updated', id: rowId };
+    }
+  }
+
+  var id = 'RES_' + new Date().getTime();
+  sh.appendRow([
+    id,
+    obj.deployment_id,
+    String(obj.email_guru).toLowerCase().trim(),
+    normalizedType,
+    obj.resource_id,
+    obj.resource_name || '',
+    (obj.owner_email || obj.email_guru || '').toLowerCase().trim(),
+    obj.status || 'active',
+    now,
+    now,
+    obj.catatan || ''
+  ]);
+  logAudit('ADD_RESOURCE_MAP', getLoginEmail(), obj.deployment_id + ' | ' + normalizedType + ' | ' + obj.email_guru);
+  return { success: true, action: 'created', id: id };
+}
+
+function deleteResourceMapEntry(id) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][idx.id] || '').trim() !== String(id || '').trim()) continue;
+    sh.deleteRow(i + 1);
+    logAudit('DELETE_RESOURCE_MAP', getLoginEmail(), String(id || ''));
+    return { success: true };
+  }
+  return { success: false };
 }
 
 /* =====================================================

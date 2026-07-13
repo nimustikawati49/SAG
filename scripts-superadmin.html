@@ -30,6 +30,8 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
     setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);
       setTimeout(loadCentralRegistryOverview, 2700);
+      setTimeout(loadStorageModeConfig, 2750);
+      setTimeout(loadResourceMapEntries, 2775);
       setTimeout(loadAcademicGlobalPanel, 2800);
     })
     .getSuperAdminDashboard();
@@ -71,6 +73,168 @@ function loadCentralRegistryOverview() {
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat registry hub') + '</div>';
     })
     .getCentralRegistryOverview();
+}
+
+function loadStorageModeConfig() {
+  var el = document.getElementById('storageModeSelect');
+  if (!el) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (el) el.value = (res && res.mode) || 'central';
+    })
+    .withFailureHandler(function() {})
+    .getStorageModeConfig();
+}
+
+function saveStorageModeConfig() {
+  var el = document.getElementById('storageModeSelect');
+  if (!el) return;
+  var mode = el.value || 'central';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (typeof showToast === 'function') showToast('✅ Mode storage: ' + (res.mode || mode), 'success');
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .setStorageModeConfig(mode);
+}
+
+function loadResourceMapEntries() {
+  var el = document.getElementById('resourceMapList');
+  var info = document.getElementById('resourceMapInfo');
+  if (el) el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px;margin-bottom:6px"></div>'.repeat(2);
+  if (info) info.textContent = '⏳ Memuat resource map...';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _renderResourceMapEntries_(rows || []);
+      if (info) info.textContent = 'Total resource map: ' + ((rows && rows.length) || 0);
+    })
+    .withFailureHandler(function(err) {
+      if (el) el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
+      if (info) info.textContent = '❌ Gagal memuat resource map';
+    })
+    .getResourceMapEntries('');
+}
+
+function _renderResourceMapEntries_(rows) {
+  var el = document.getElementById('resourceMapList');
+  if (!el) return;
+  if (!rows.length) {
+    el.innerHTML = '<div class="alert-banner info">Belum ada resource map guru.</div>';
+    window._resourceMapRows = [];
+    return;
+  }
+  window._resourceMapRows = rows;
+  var html = '<div class="table-wrap"><table><thead><tr><th>Email Guru</th><th>Deployment</th><th>Tipe</th><th>Resource ID</th><th>Owner</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+  rows.forEach(function(r) {
+    var active = String(r.status || '').toLowerCase() === 'active';
+    html += '<tr>' +
+      '<td style="font-size:12px">' + _escSA(r.email_guru) + '</td>' +
+      '<td style="font-size:11px">' + _escSA(r.deployment_id) + '</td>' +
+      '<td>' + _escSA(r.resource_type) + '</td>' +
+      '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + _escSA(r.resource_id) + '</td>' +
+      '<td style="font-size:12px">' + _escSA(r.owner_email || '-') + '</td>' +
+      '<td><span style="background:' + (active ? '#dcfce7' : '#fee2e2') + ';color:' + (active ? '#166534' : '#991b1b') + ';padding:2px 10px;border-radius:999px;font-size:12px">' + _escSA(r.status) + '</span></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button onclick="editResourceMap(\'' + _escSA(r.id) + '\')" style="background:#dbeafe;color:#1e40af;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;margin-right:4px">✏️</button>' +
+        '<button onclick="deleteResourceMapUI(\'' + _escSA(r.id) + '\')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">🗑</button>' +
+      '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function openResourceMapModal(row) {
+  var m = document.getElementById('resourceMapModal');
+  if (!m) return;
+  m.style.display = 'flex';
+  ['rmId','rmEmail','rmResourceId','rmResourceName','rmOwnerEmail','rmCatatan'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  var depEl = document.getElementById('rmDeployment');
+  var typeEl = document.getElementById('rmType');
+  var statusEl = document.getElementById('rmStatus');
+  if (typeEl) typeEl.value = 'data_spreadsheet';
+  if (statusEl) statusEl.value = 'active';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (depEl) {
+        depEl.innerHTML = (rows || []).map(function(d) {
+          return '<option value="' + _escSA(d.id) + '">' + _escSA(d.nama_sekolah || d.id) + ' [' + _escSA(d.id) + ']</option>';
+        }).join('');
+      }
+      if (row) {
+        var idEl = document.getElementById('rmId'); if (idEl) idEl.value = row.id || '';
+        if (depEl) depEl.value = row.deployment_id || '';
+        var emailEl = document.getElementById('rmEmail'); if (emailEl) emailEl.value = row.email_guru || '';
+        if (typeEl) typeEl.value = row.resource_type || 'data_spreadsheet';
+        var ridEl = document.getElementById('rmResourceId'); if (ridEl) ridEl.value = row.resource_id || '';
+        var rnmEl = document.getElementById('rmResourceName'); if (rnmEl) rnmEl.value = row.resource_name || '';
+        var ownEl = document.getElementById('rmOwnerEmail'); if (ownEl) ownEl.value = row.owner_email || '';
+        if (statusEl) statusEl.value = row.status || 'active';
+        var catEl = document.getElementById('rmCatatan'); if (catEl) catEl.value = row.catatan || '';
+      }
+    })
+    .getDeployments();
+}
+
+function editResourceMap(id) {
+  var row = (window._resourceMapRows || []).find(function(r) { return r.id === id; });
+  openResourceMapModal(row || null);
+}
+
+function closeResourceMapModal() {
+  var m = document.getElementById('resourceMapModal');
+  if (m) m.style.display = 'none';
+}
+
+function submitResourceMap() {
+  var btn = document.getElementById('rmSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+  var payload = {
+    id: (document.getElementById('rmId') || {}).value || '',
+    deployment_id: (document.getElementById('rmDeployment') || {}).value || '',
+    email_guru: (document.getElementById('rmEmail') || {}).value || '',
+    resource_type: (document.getElementById('rmType') || {}).value || 'data_spreadsheet',
+    resource_id: (document.getElementById('rmResourceId') || {}).value || '',
+    resource_name: (document.getElementById('rmResourceName') || {}).value || '',
+    owner_email: (document.getElementById('rmOwnerEmail') || {}).value || '',
+    status: (document.getElementById('rmStatus') || {}).value || 'active',
+    catatan: (document.getElementById('rmCatatan') || {}).value || ''
+  };
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Resource map disimpan', 'success');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      closeResourceMapModal();
+      loadResourceMapEntries();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+    })
+    .saveResourceMapEntry(payload);
+}
+
+function deleteResourceMapUI(id) {
+  if (!confirm('Hapus resource map ini?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Resource map dihapus', 'success');
+      loadResourceMapEntries();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .deleteResourceMapEntry(id);
 }
 
 let _saGuruPeriodRows = [];
