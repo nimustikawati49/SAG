@@ -921,6 +921,47 @@ function getArsipDriveUsage() {
   if (!isSuperAdmin()) throw new Error('Akses ditolak');
   const result = [];
   try {
+    if (typeof getStorageMode_ === 'function' && getStorageMode_() === 'per_guru') {
+      const entries = getResourceMapEntries('').filter(function(r) {
+        return String(r.resource_type || '').toLowerCase() === 'arsip_folder' &&
+          String(r.status || '').toLowerCase() === 'active' &&
+          String(r.resource_id || '').trim();
+      });
+      let totalBytesPerGuru = 0;
+      entries.forEach(function(entry) {
+        try {
+          const folder = DriveApp.getFolderById(entry.resource_id);
+          let guruBytes = 0;
+          const files = [];
+
+          const directFiles = folder.getFiles();
+          while (directFiles.hasNext()) {
+            const f = directFiles.next();
+            const sz = f.getSize();
+            guruBytes += sz;
+            files.push({ id: f.getId(), nama: f.getName(), tahun: '-', size_mb: (sz / 1048576).toFixed(2), url: f.getDownloadUrl() });
+          }
+
+          const subIt = folder.getFolders();
+          while (subIt.hasNext()) {
+            const tahunFolder = subIt.next();
+            const tahunName = tahunFolder.getName();
+            const tahunFiles = tahunFolder.getFiles();
+            while (tahunFiles.hasNext()) {
+              const f = tahunFiles.next();
+              const sz = f.getSize();
+              guruBytes += sz;
+              files.push({ id: f.getId(), nama: f.getName(), tahun: tahunName, size_mb: (sz / 1048576).toFixed(2), url: f.getDownloadUrl() });
+            }
+          }
+
+          totalBytesPerGuru += guruBytes;
+          result.push({ guru: entry.email_guru || entry.owner_email || folder.getName(), size_mb: (guruBytes / 1048576).toFixed(2), files });
+        } catch (e) {}
+      });
+      return { total_mb: (totalBytesPerGuru / 1048576).toFixed(2), entries: result };
+    }
+
     const root = _getArsipRootFolder_();
     let totalBytes = 0;
 

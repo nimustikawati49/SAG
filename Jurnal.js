@@ -184,21 +184,8 @@ function getGuruFolder_(email){
   const setting = getSetting();
   const tahun = setting.tahun_pelajaran || 'Tanpa_Tahun';
 
-  const root = DriveApp.getFoldersByName(FOLDER_DOKUMENTASI).hasNext()
-    ? DriveApp.getFoldersByName(FOLDER_DOKUMENTASI).next()
-    : DriveApp.createFolder(FOLDER_DOKUMENTASI);
-
   const safeEmail = email.replace(/[@.]/g,'_');
-
-  const guruFolder = root.getFoldersByName(safeEmail).hasNext()
-    ? root.getFoldersByName(safeEmail).next()
-    : root.createFolder(safeEmail);
-
-  const tahunFolder = guruFolder.getFoldersByName(tahun).hasNext()
-    ? guruFolder.getFoldersByName(tahun).next()
-    : guruFolder.createFolder(tahun);
-
-  return tahunFolder;
+  return getUserNestedFolder_(email, 'dokumentasi_folder', FOLDER_DOKUMENTASI, [safeEmail, tahun]);
 }
 
 function compressImage_(base64, type){

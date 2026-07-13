@@ -99,15 +99,18 @@ function runDailyBackup_() {
   const tz     = Session.getScriptTimeZone();
   const stamp  = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmm');
   const name   = 'Backup_' + stamp + '_' + ss.getName();
-  const folder = getOrCreateFolder_('BACKUP_JURNAL');
+  let backupEmail = '';
+  try { backupEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim(); } catch (e) {}
+  const folder = getUserResourceFolder_(backupEmail, 'backup_folder', 'BACKUP_JURNAL');
   const copy   = ss.copy(name);
   DriveApp.getFileById(copy.getId()).moveTo(folder);
   logAudit('DAILY_BACKUP', 'SYSTEM', name);
 }
 
 function getOrCreateFolder_(name) {
-  const folders = DriveApp.getFoldersByName(name);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
+  let backupEmail = '';
+  try { backupEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim(); } catch (e) {}
+  return getUserResourceFolder_(backupEmail, 'backup_folder', name);
 }
 
 /* =========================================================

@@ -149,17 +149,8 @@ function _uploadFotoWali_(email, id, fotos){
   const setting = getSetting();
   const tahun   = setting.tahun_pelajaran || 'Tanpa_Tahun';
 
-  const root = DriveApp.getFoldersByName('WALI_DOKUMENTASI').hasNext()
-    ? DriveApp.getFoldersByName('WALI_DOKUMENTASI').next()
-    : DriveApp.createFolder('WALI_DOKUMENTASI');
-
   const safeEmail = email.replace(/[@.]/g,'_');
-  const guruFolder = root.getFoldersByName(safeEmail).hasNext()
-    ? root.getFoldersByName(safeEmail).next()
-    : root.createFolder(safeEmail);
-  const tahunFolder = guruFolder.getFoldersByName(tahun).hasNext()
-    ? guruFolder.getFoldersByName(tahun).next()
-    : guruFolder.createFolder(tahun);
+  const tahunFolder = getUserNestedFolder_(email, 'wali_dokumentasi_folder', 'WALI_DOKUMENTASI', [safeEmail, tahun]);
 
   const urls = [];
   fotos.slice(0, 2).forEach(function(f, idx){

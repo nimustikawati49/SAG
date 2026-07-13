@@ -177,6 +177,55 @@ function resolveSpreadsheetIdForUser_(email) {
   return '';
 }
 
+function resolveFolderIdForUser_(email, resourceType) {
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const targetType = String(resourceType || '').toLowerCase().trim();
+  if (!targetEmail || !targetType) return '';
+
+  const fromResource = _getResourceMapEntryForUser_(targetEmail, targetType);
+  if (fromResource && fromResource.resource_id) return fromResource.resource_id;
+
+  const deployment = _getDeploymentEntryForUser_(targetEmail);
+  if (!deployment) return '';
+
+  if ((targetType === 'arsip_folder' || targetType === 'dokumentasi_folder' || targetType === 'wali_dokumentasi_folder' || targetType === 'logo_folder') && deployment.folder_data_id) {
+    return deployment.folder_data_id;
+  }
+  if ((targetType === 'export_folder' || targetType === 'backup_folder') && deployment.folder_export_id) {
+    return deployment.folder_export_id;
+  }
+  return '';
+}
+
+function _getOrCreateFolderByName_(name, parentFolder) {
+  const targetName = String(name || '').trim();
+  if (!targetName) return parentFolder || null;
+  let iter = parentFolder ? parentFolder.getFoldersByName(targetName) : DriveApp.getFoldersByName(targetName);
+  if (iter.hasNext()) return iter.next();
+  return parentFolder ? parentFolder.createFolder(targetName) : DriveApp.createFolder(targetName);
+}
+
+function getUserResourceFolder_(email, resourceType, fallbackName) {
+  const mode = getStorageMode_();
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const mappedId = mode === 'per_guru' ? resolveFolderIdForUser_(targetEmail, resourceType) : '';
+  if (mappedId) {
+    try { return DriveApp.getFolderById(mappedId); } catch (e) {}
+  }
+  return _getOrCreateFolderByName_(fallbackName || 'APP_DATA');
+}
+
+function getUserNestedFolder_(email, resourceType, fallbackRootName, segments) {
+  let folder = getUserResourceFolder_(email, resourceType, fallbackRootName);
+  const parts = Array.isArray(segments) ? segments : [];
+  parts.forEach(function(segment) {
+    const part = String(segment || '').trim();
+    if (!part) return;
+    folder = _getOrCreateFolderByName_(part, folder);
+  });
+  return folder;
+}
+
 function getSpreadsheet_(options) {
   const opts = options || {};
   if (opts.forceCentral) return getCentralSpreadsheet_();

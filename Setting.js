@@ -238,11 +238,7 @@ function uploadLogoSekolah(payload){
   const auth = getAuth();
   const email = auth.email;
 
-  const folderName = 'LOGO_JURNAL';
-  const folders = DriveApp.getFoldersByName(folderName);
-  const folder = folders.hasNext()
-    ? folders.next()
-    : DriveApp.createFolder(folderName);
+  const folder = getUserResourceFolder_(email, 'logo_folder', 'LOGO_JURNAL');
 
   const setting = getSetting();
 
