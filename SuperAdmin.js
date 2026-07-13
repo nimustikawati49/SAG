@@ -558,6 +558,7 @@ var DEPLOYMENTS_SHEET  = 'DEPLOYMENTS';
 var RESOURCE_MAP_SHEET = 'RESOURCE_MAP';
 var APP_RELEASES_SHEET = 'APP_RELEASES';
 var UPDATE_LOG_SHEET   = 'UPDATE_LOG';
+var SUMMARY_SYNC_SHEET = 'SUMMARY_SYNC';
 
 var DEPLOYMENTS_HEADERS = [
   'id', 'nama_sekolah', 'email_sa', 'script_id', 'spreadsheet_id', 'owner_email',
@@ -579,6 +580,12 @@ var APP_RELEASES_HEADERS = [
 var UPDATE_LOG_HEADERS = [
   'id', 'deployment_id', 'target_email', 'from_version', 'to_version', 'from_schema',
   'to_schema', 'action', 'status', 'approved_by', 'executed_by', 'executed_at', 'catatan'
+];
+
+var SUMMARY_SYNC_HEADERS = [
+  'id', 'deployment_id', 'email_guru', 'nama_guru', 'sekolah', 'tahun_pelajaran', 'semester',
+  'total_jurnal', 'total_kelas', 'total_siswa', 'rata_hadir', 'kelas_favorit',
+  'ketuntasan_terbaik', 'license_status', 'app_version', 'schema_version', 'last_sync', 'catatan'
 ];
 
 function _ensureRegistrySheet_(sheetName, headers) {
@@ -618,6 +625,7 @@ function _ensureCentralRegistrySchema_() {
   _ensureRegistrySheet_(RESOURCE_MAP_SHEET, RESOURCE_MAP_HEADERS);
   _ensureRegistrySheet_(APP_RELEASES_SHEET, APP_RELEASES_HEADERS);
   _ensureRegistrySheet_(UPDATE_LOG_SHEET, UPDATE_LOG_HEADERS);
+  _ensureRegistrySheet_(SUMMARY_SYNC_SHEET, SUMMARY_SYNC_HEADERS);
 }
 
 function _getHeaderIndexMap_(sheetObj) {
@@ -764,7 +772,8 @@ function getCentralRegistryOverview() {
       allow_update: deployments.filter(function(d) { return String(d.allow_update).toLowerCase() === 'true'; }).length,
       resources: resources,
       releases: releases,
-      updates: updates
+      updates: updates,
+      summary_sync: Math.max(((getCentralSpreadsheet_().getSheetByName(SUMMARY_SYNC_SHEET) || {}).getLastRow || function(){ return 1; })() - 1, 0)
     },
     latestRelease: latestRelease,
     storageMode: (typeof getStorageMode_ === 'function' ? getStorageMode_() : 'central'),
@@ -772,9 +781,146 @@ function getCentralRegistryOverview() {
       deployments: DEPLOYMENTS_HEADERS,
       resource_map: RESOURCE_MAP_HEADERS,
       app_releases: APP_RELEASES_HEADERS,
-      update_log: UPDATE_LOG_HEADERS
+      update_log: UPDATE_LOG_HEADERS,
+      summary_sync: SUMMARY_SYNC_HEADERS
     }
   };
+}
+
+function _ensureSummarySyncSheet_() {
+  _ensureCentralRegistrySchema_();
+  return getCentralSpreadsheet_().getSheetByName(SUMMARY_SYNC_SHEET);
+}
+
+function buildGuruSummarySync_(email) {
+  if (!email) throw new Error('Email guru wajib diisi');
+  email = String(email).toLowerCase().trim();
+
+  var setting = getSetting();
+  var dash = getDashboardAllData();
+  var license = getSchoolLicenseInfo() || {};
+  var deployment = _getDeploymentEntryForUser_(email) || {};
+  var favClass = '-';
+  var mastery = '-';
+
+  try {
+    var recap = getRekapSekolah();
+    favClass = (recap.kelasFavorit && recap.kelasFavorit[0] && recap.kelasFavorit[0].kelas) || '-';
+    mastery = (recap.kelasKetuntasan && recap.kelasKetuntasan[0])
+      ? (recap.kelasKetuntasan[0].kelas + ' (' + recap.kelasKetuntasan[0].persenTuntas + '%)')
+      : '-';
+  } catch (e) {}
+
+  return {
+    deployment_id: deployment.id || '',
+    email_guru: email,
+    nama_guru: setting.nama_guru || '-',
+    sekolah: setting.sekolah || '-',
+    tahun_pelajaran: setting.tahun_pelajaran || '-',
+    semester: setting.semester || '-',
+    total_jurnal: Number(dash.totalJurnal || 0),
+    total_kelas: Number(dash.totalKelas || 0),
+    total_siswa: Number(dash.totalSiswa || 0),
+    rata_hadir: Number(dash.rata2 || 0),
+    kelas_favorit: favClass,
+    ketuntasan_terbaik: mastery,
+    license_status: license.isLifetime ? 'lifetime' : (license.isTrial ? 'trial' : (license.isActive ? 'active' : 'inactive')),
+    app_version: deployment.app_version || '',
+    schema_version: deployment.schema_version || '',
+    catatan: ''
+  };
+}
+
+function syncGuruSummaryToCentral() {
+  const auth = getAuth();
+  if (!auth.email || (auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek')) {
+    throw new Error('AKSES_DITOLAK');
+  }
+
+  const sh = _ensureSummarySyncSheet_();
+  const rows = sh.getDataRange().getValues();
+  const idx = _getHeaderIndexMap_(sh);
+  const summary = buildGuruSummarySync_(auth.email);
+  const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][idx.email_guru] || '').toLowerCase().trim() !== auth.email) continue;
+    sh.getRange(i + 1, idx.deployment_id + 1).setValue(summary.deployment_id);
+    sh.getRange(i + 1, idx.nama_guru + 1).setValue(summary.nama_guru);
+    sh.getRange(i + 1, idx.sekolah + 1).setValue(summary.sekolah);
+    sh.getRange(i + 1, idx.tahun_pelajaran + 1).setValue(summary.tahun_pelajaran);
+    sh.getRange(i + 1, idx.semester + 1).setValue(summary.semester);
+    sh.getRange(i + 1, idx.total_jurnal + 1).setValue(summary.total_jurnal);
+    sh.getRange(i + 1, idx.total_kelas + 1).setValue(summary.total_kelas);
+    sh.getRange(i + 1, idx.total_siswa + 1).setValue(summary.total_siswa);
+    sh.getRange(i + 1, idx.rata_hadir + 1).setValue(summary.rata_hadir);
+    sh.getRange(i + 1, idx.kelas_favorit + 1).setValue(summary.kelas_favorit);
+    sh.getRange(i + 1, idx.ketuntasan_terbaik + 1).setValue(summary.ketuntasan_terbaik);
+    sh.getRange(i + 1, idx.license_status + 1).setValue(summary.license_status);
+    sh.getRange(i + 1, idx.app_version + 1).setValue(summary.app_version);
+    sh.getRange(i + 1, idx.schema_version + 1).setValue(summary.schema_version);
+    sh.getRange(i + 1, idx.last_sync + 1).setValue(now);
+    sh.getRange(i + 1, idx.catatan + 1).setValue(summary.catatan || '');
+    logAudit('SYNC_GURU_SUMMARY', auth.email, summary.sekolah + ' | ' + now);
+    return { success: true, action: 'updated', last_sync: now };
+  }
+
+  sh.appendRow([
+    'SUM_' + new Date().getTime(),
+    summary.deployment_id,
+    summary.email_guru,
+    summary.nama_guru,
+    summary.sekolah,
+    summary.tahun_pelajaran,
+    summary.semester,
+    summary.total_jurnal,
+    summary.total_kelas,
+    summary.total_siswa,
+    summary.rata_hadir,
+    summary.kelas_favorit,
+    summary.ketuntasan_terbaik,
+    summary.license_status,
+    summary.app_version,
+    summary.schema_version,
+    now,
+    summary.catatan || ''
+  ]);
+  logAudit('SYNC_GURU_SUMMARY', auth.email, summary.sekolah + ' | ' + now);
+  return { success: true, action: 'created', last_sync: now };
+}
+
+function getCentralSummarySyncRows() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const sh = _ensureSummarySyncSheet_();
+  const rows = sh.getDataRange().getValues();
+  const idx = _getHeaderIndexMap_(sh);
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const id = String(rows[i][idx.id] || '').trim();
+    if (!id) continue;
+    result.push({
+      id: id,
+      deployment_id: String(rows[i][idx.deployment_id] || ''),
+      email_guru: String(rows[i][idx.email_guru] || ''),
+      nama_guru: String(rows[i][idx.nama_guru] || ''),
+      sekolah: String(rows[i][idx.sekolah] || ''),
+      tahun_pelajaran: String(rows[i][idx.tahun_pelajaran] || ''),
+      semester: String(rows[i][idx.semester] || ''),
+      total_jurnal: Number(rows[i][idx.total_jurnal] || 0),
+      total_kelas: Number(rows[i][idx.total_kelas] || 0),
+      total_siswa: Number(rows[i][idx.total_siswa] || 0),
+      rata_hadir: Number(rows[i][idx.rata_hadir] || 0),
+      kelas_favorit: String(rows[i][idx.kelas_favorit] || '-'),
+      ketuntasan_terbaik: String(rows[i][idx.ketuntasan_terbaik] || '-'),
+      license_status: String(rows[i][idx.license_status] || '-'),
+      app_version: String(rows[i][idx.app_version] || ''),
+      schema_version: String(rows[i][idx.schema_version] || ''),
+      last_sync: String(rows[i][idx.last_sync] || ''),
+      catatan: String(rows[i][idx.catatan] || '')
+    });
+  }
+  result.sort(function(a, b) { return String(b.last_sync || '').localeCompare(String(a.last_sync || '')); });
+  return result;
 }
 
 function getStorageModeConfig() {

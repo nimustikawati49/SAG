@@ -32,6 +32,7 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadCentralRegistryOverview, 2700);
       setTimeout(loadStorageModeConfig, 2750);
       setTimeout(loadResourceMapEntries, 2775);
+      setTimeout(loadCentralSummarySync, 2790);
       setTimeout(loadAcademicGlobalPanel, 2800);
     })
     .getSuperAdminDashboard();
@@ -235,6 +236,41 @@ function deleteResourceMapUI(id) {
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .deleteResourceMapEntry(id);
+}
+
+function loadCentralSummarySync() {
+  var el = document.getElementById('centralSummarySyncBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:80px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada summary sync guru.</div>';
+        return;
+      }
+      var html = '<div class="table-wrap"><table><thead><tr><th>Guru</th><th>Sekolah</th><th>Jurnal</th><th>Kelas</th><th>Siswa</th><th>Rata Hadir</th><th>Kelas Favorit</th><th>Ketuntasan</th><th>Lisensi</th><th>Last Sync</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        html += '<tr>' +
+          '<td><b>' + _escSA(r.nama_guru || '-') + '</b><br><span style="font-size:11px;color:#6b7280">' + _escSA(r.email_guru || '-') + '</span></td>' +
+          '<td style="font-size:12px">' + _escSA(r.sekolah || '-') + '<br><span style="font-size:11px;color:#6b7280">' + _escSA((r.tahun_pelajaran || '-') + ' | ' + (r.semester || '-')) + '</span></td>' +
+          '<td style="text-align:center">' + r.total_jurnal + '</td>' +
+          '<td style="text-align:center">' + r.total_kelas + '</td>' +
+          '<td style="text-align:center">' + r.total_siswa + '</td>' +
+          '<td style="text-align:center">' + r.rata_hadir + '%</td>' +
+          '<td style="font-size:12px">' + _escSA(r.kelas_favorit || '-') + '</td>' +
+          '<td style="font-size:12px">' + _escSA(r.ketuntasan_terbaik || '-') + '</td>' +
+          '<td><span class="badge">' + _escSA(r.license_status || '-') + '</span></td>' +
+          '<td style="font-size:11px">' + _escSA(r.last_sync || '-') + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat summary sync') + '</div>';
+    })
+    .getCentralSummarySyncRows();
 }
 
 let _saGuruPeriodRows = [];
