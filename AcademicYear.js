@@ -466,6 +466,187 @@ function saveGuruMengajarSetting(payload) {
   return { success: true, inserted: combos.length };
 }
 
+/**
+ * getGuruMengajarForPeriod_(email, tahun, semester)
+ * Ambil kombinasi kelas+mapel milik SATU guru untuk SATU periode spesifik.
+ */
+function getGuruMengajarForPeriod_(email, tahun, semester) {
+  ensureAcademicSchema_();
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const targetTahun = String(tahun || '').trim();
+  const targetSem = String(semester || '').toLowerCase().trim();
+
+  const sh = sheet('GuruMengajar');
+  const rows = sh.getDataRange().getValues();
+  const combos = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '').toLowerCase().trim() !== targetEmail) continue;
+    if (String(rows[i][2] || '') !== targetTahun) continue;
+    if (String(rows[i][3] || '').toLowerCase().trim() !== targetSem) continue;
+    combos.push({ kelas: String(rows[i][4] || '').trim(), mapel: String(rows[i][5] || '').trim() });
+  }
+  return combos;
+}
+
+/**
+ * findLatestGuruMengajarPeriod_(email, excludeTahun, excludeSemester)
+ * Cari periode (tahun+semester) TERAKHIR milik guru ini yang punya jadwal
+ * mengajar tercatat, selain periode yang dikecualikan (biasanya periode
+ * yang baru saja dipilih). Dipakai untuk menawarkan "lanjutkan jadwal
+ * sebelumnya" saat guru pindah tahun/semester.
+ */
+function findLatestGuruMengajarPeriod_(email, excludeTahun, excludeSemester) {
+  ensureAcademicSchema_();
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const exTahun = String(excludeTahun || '').trim();
+  const exSem = String(excludeSemester || '').toLowerCase().trim();
+
+  const sh = sheet('GuruMengajar');
+  const rows = sh.getDataRange().getValues();
+  const seen = {};
+  let latest = null;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '').toLowerCase().trim() !== targetEmail) continue;
+    const tahun = String(rows[i][2] || '').trim();
+    const semester = String(rows[i][3] || '').trim();
+    if (!tahun || !semester) continue;
+    if (tahun === exTahun && semester.toLowerCase() === exSem) continue;
+
+    const key = tahun + '|' + semester;
+    if (seen[key]) continue;
+    seen[key] = true;
+
+    const createdAt = rows[i][6] ? new Date(rows[i][6]) : null;
+    if (!latest || (createdAt && (!latest.created_at || createdAt > latest.created_at))) {
+      latest = { tahun_pelajaran: tahun, semester: semester, created_at: createdAt };
+    }
+  }
+  return latest;
+}
+
+/**
+ * checkGuruMengajarTransition(newTahun, newSemester)
+ * Dipanggil FE tepat setelah guru ganti tahun/semester aktif (setUserAcademicPeriod).
+ * Memberi tahu apakah periode baru sudah punya jadwal (kelas+mapel diampu)
+ * — kalau belum, apakah ada jadwal periode lain milik guru ini yang bisa
+ * "dilanjutkan" ke periode baru, supaya FE bisa menawarkan pilihan
+ * Lanjutkan vs Mulai Baru (reset).
+ */
+function checkGuruMengajarTransition(newTahun, newSemester) {
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  if (!auth.email || auth.role === 'guest') throw new Error('AKSES_DITOLAK');
+
+  const tahun = String(newTahun || '').trim();
+  const semester = String(newSemester || '').trim();
+  if (!tahun || !semester) throw new Error('Tahun & semester wajib diisi');
+
+  const current = getGuruMengajarForPeriod_(auth.email, tahun, semester);
+  if (current.length) {
+    return {
+      hasCurrent: true,
+      hasPrevious: false,
+      kelas: Array.from(new Set(current.map(function(c) { return c.kelas; }).filter(Boolean))),
+      mapel: Array.from(new Set(current.map(function(c) { return c.mapel; }).filter(Boolean)))
+    };
+  }
+
+  const prev = findLatestGuruMengajarPeriod_(auth.email, tahun, semester);
+  if (!prev) return { hasCurrent: false, hasPrevious: false };
+
+  const prevCombos = getGuruMengajarForPeriod_(auth.email, prev.tahun_pelajaran, prev.semester);
+  return {
+    hasCurrent: false,
+    hasPrevious: true,
+    previous_period: { tahun_pelajaran: prev.tahun_pelajaran, semester: prev.semester },
+    kelas: Array.from(new Set(prevCombos.map(function(c) { return c.kelas; }).filter(Boolean))),
+    mapel: Array.from(new Set(prevCombos.map(function(c) { return c.mapel; }).filter(Boolean))),
+    total_kombinasi: prevCombos.length
+  };
+}
+
+/**
+ * continueGuruMengajarToPeriod(payload)
+ * "Lanjutkan jadwal mengajar" — salin kombinasi kelas+mapel milik guru
+ * yang login dari periode sumber ke periode tujuan. Hanya menyentuh baris
+ * milik guru yang login sendiri (beda dari cloneAcademicYearWizard yang
+ * bersifat school-wide & superadmin-only).
+ */
+function continueGuruMengajarToPeriod(payload) {
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  if (!auth.email || auth.role === 'guest') throw new Error('AKSES_DITOLAK');
+
+  payload = payload || {};
+  const fromTahun = String(payload.from_tahun || '').trim();
+  const fromSemester = String(payload.from_semester || '').trim();
+  const toTahun = String(payload.to_tahun || '').trim();
+  const toSemester = String(payload.to_semester || '').trim();
+  if (!fromTahun || !fromSemester || !toTahun || !toSemester) {
+    throw new Error('Periode sumber dan tujuan wajib diisi');
+  }
+
+  const sourceCombos = getGuruMengajarForPeriod_(auth.email, fromTahun, fromSemester);
+  if (!sourceCombos.length) return { success: true, copied: 0 };
+
+  const sh = sheet('GuruMengajar');
+  const rows = sh.getDataRange().getValues();
+
+  // Hapus dulu baris milik guru ini di periode tujuan (idempoten, hindari duplikat
+  // kalau tombol "Lanjutkan" ini sampai terpencet dua kali).
+  for (let i = rows.length; i >= 2; i--) {
+    const r = rows[i - 1];
+    if (String(r[1] || '').toLowerCase().trim() !== auth.email) continue;
+    if (String(r[2] || '') !== toTahun) continue;
+    if (String(r[3] || '').toLowerCase().trim() !== toSemester.toLowerCase()) continue;
+    sh.deleteRow(i);
+  }
+
+  const now = new Date();
+  sourceCombos.forEach(function(c) {
+    sh.appendRow(['GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(), auth.email, toTahun, toSemester, c.kelas, c.mapel, now]);
+  });
+
+  logAudit('CONTINUE_GURU_MENGAJAR', auth.email, fromTahun + '/' + fromSemester + ' -> ' + toTahun + '/' + toSemester + ' | ' + sourceCombos.length);
+  invalidateDashboardCache_();
+  trySyncGuruSummaryAfterMutation_(auth.email, 'CONTINUE_GURU_MENGAJAR');
+  return { success: true, copied: sourceCombos.length };
+}
+
+/**
+ * resetGuruMengajarForPeriod(tahun, semester)
+ * "Reset jadwal mengajar" milik guru yang login untuk SATU periode —
+ * hapus semua kombinasi kelas+mapel diampu miliknya di periode itu,
+ * supaya guru bisa mulai isi ulang dari kosong. Tidak menyentuh guru lain.
+ */
+function resetGuruMengajarForPeriod(tahun, semester) {
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  if (!auth.email || auth.role === 'guest') throw new Error('AKSES_DITOLAK');
+
+  const targetTahun = String(tahun || '').trim();
+  const targetSem = String(semester || '').trim();
+  if (!targetTahun || !targetSem) throw new Error('Tahun & semester wajib diisi');
+
+  const sh = sheet('GuruMengajar');
+  const rows = sh.getDataRange().getValues();
+  let deleted = 0;
+  for (let i = rows.length; i >= 2; i--) {
+    const r = rows[i - 1];
+    if (String(r[1] || '').toLowerCase().trim() !== auth.email) continue;
+    if (String(r[2] || '') !== targetTahun) continue;
+    if (String(r[3] || '').toLowerCase().trim() !== targetSem.toLowerCase()) continue;
+    sh.deleteRow(i);
+    deleted++;
+  }
+
+  logAudit('RESET_GURU_MENGAJAR', auth.email, targetTahun + '/' + targetSem + ' | dihapus=' + deleted);
+  invalidateDashboardCache_();
+  trySyncGuruSummaryAfterMutation_(auth.email, 'RESET_GURU_MENGAJAR');
+  return { success: true, deleted: deleted };
+}
+
 function getAcademicConfig() {
   ensureAcademicSchema_();
   const auth = getAuth();
@@ -647,7 +828,11 @@ function getNamaSiswaByNis_(nis) {
 function cloneAcademicYearWizard(sourceTahun, destinationTahun) {
   ensureAcademicSchema_();
   const auth = getAuth();
-  if (auth.role !== 'admin' && auth.role !== 'superadmin') throw new Error('AKSES_DITOLAK');
+  // School-wide: menyalin GuruMengajar SEMUA guru sekaligus (bukan hanya
+  // guru yang login), jadi wajib superadmin. Untuk guru biasa yang cuma
+  // mau melanjutkan jadwal mengajarnya sendiri, pakai
+  // continueGuruMengajarToPeriod() (scoped ke email sendiri).
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
 
   sourceTahun = String(sourceTahun || '').trim();
   destinationTahun = String(destinationTahun || '').trim();
