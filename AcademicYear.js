@@ -16,7 +16,21 @@ function ensureAcademicSchema_() {
   if (hit) return;
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  let gotLock = false;
+  try {
+    gotLock = lock.tryLock(10000);
+  } catch (e) {
+    gotLock = false;
+  }
+  if (!gotLock) {
+    // Skenario multi-guru: proses lain sedang memegang lock (mis. sedang
+    // ensure schema juga). Jangan lempar error ke pengguna — schema ini
+    // idempoten dan sudah pernah berhasil dibuat sebelumnya di 99% kasus,
+    // jadi lebih aman lanjut tanpa re-check daripada memblokir aksi guru
+    // (simpan setting, upload logo, dll) dengan "Lock timeout".
+    try { logError_('ENSURE_ACADEMIC_SCHEMA_LOCK_BUSY', new Error('Lock sedang dipakai proses lain, schema check dilewati')); } catch (e2) {}
+    return;
+  }
   try {
     const hit2 = cache.get(cacheKey);
     if (hit2) return;
