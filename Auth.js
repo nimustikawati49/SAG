@@ -207,12 +207,25 @@ try {
     for(let i=1;i<data.length;i++){
       if(String(data[i][0]).toLowerCase().trim() === email){
         var role = String(data[i][1] || 'admin').toLowerCase();
+        var status = String(data[i][2] || 'inactive').toLowerCase();
         // Tier: SA & kepsek selalu SCHOOL, admin tergantung license
         var tier = (role === 'superadmin' || role === 'kepsek') ? 'SCHOOL' : getTier_();
+
+        // Database mandiri per guru: kalau storage mode = per_guru dan akun
+        // ini aktif, pastikan guru punya spreadsheet pribadi sendiri
+        // (auto-provision sekali, cache-gated, tidak pernah melempar error).
+        if (status === 'active' && (role === 'admin' || role === 'kepsek')) {
+          try {
+            if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
+              _autoProvisionUserSpreadsheet_(email);
+            }
+          } catch (provErr) { /* fail-soft, jangan ganggu login */ }
+        }
+
         return {
           email,
           role,
-          status: String(data[i][2] || 'inactive').toLowerCase(),
+          status,
           tier
         };
       }

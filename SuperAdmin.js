@@ -1233,6 +1233,55 @@ function getResourceMapEntries(deploymentId) {
   return result;
 }
 
+/**
+ * _upsertResourceMapEntry_(obj)
+ * Inti tulis-baris RESOURCE_MAP, tanpa gate otorisasi — dipakai baik oleh
+ * saveResourceMapEntry() (SuperAdmin, manual) maupun oleh auto-provisioning
+ * (_autoProvisionUserSpreadsheet_) yang dipicu dari sesi guru biasa.
+ */
+function _upsertResourceMapEntry_(obj) {
+  obj = obj || {};
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var normalizedType = String(obj.resource_type || '').toLowerCase().trim();
+  var emailGuru = String(obj.email_guru || '').toLowerCase().trim();
+  var ownerEmail = String(obj.owner_email || emailGuru || '').toLowerCase().trim();
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowId = String(rows[i][idx.id] || '').trim();
+    if (obj.id && rowId === String(obj.id).trim()) {
+      sh.getRange(i + 1, idx.deployment_id + 1).setValue(obj.deployment_id || '');
+      sh.getRange(i + 1, idx.email_guru + 1).setValue(emailGuru);
+      sh.getRange(i + 1, idx.resource_type + 1).setValue(normalizedType);
+      sh.getRange(i + 1, idx.resource_id + 1).setValue(obj.resource_id || '');
+      sh.getRange(i + 1, idx.resource_name + 1).setValue(obj.resource_name || '');
+      sh.getRange(i + 1, idx.owner_email + 1).setValue(ownerEmail);
+      sh.getRange(i + 1, idx.status + 1).setValue(obj.status || 'active');
+      sh.getRange(i + 1, idx.updated_at + 1).setValue(now);
+      sh.getRange(i + 1, idx.catatan + 1).setValue(obj.catatan || '');
+      return { success: true, action: 'updated', id: rowId };
+    }
+  }
+
+  var id = 'RES_' + new Date().getTime();
+  sh.appendRow([
+    id,
+    obj.deployment_id || '',
+    emailGuru,
+    normalizedType,
+    obj.resource_id || '',
+    obj.resource_name || '',
+    ownerEmail,
+    obj.status || 'active',
+    now,
+    now,
+    obj.catatan || ''
+  ]);
+  return { success: true, action: 'created', id: id };
+}
+
 function saveResourceMapEntry(obj) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
   obj = obj || {};
@@ -1241,45 +1290,91 @@ function saveResourceMapEntry(obj) {
   if (!obj.resource_type) throw new Error('Tipe resource wajib diisi');
   if (!obj.resource_id) throw new Error('Resource ID wajib diisi');
 
-  var sh = _ensureResourceMapSheet_();
-  var rows = sh.getDataRange().getValues();
-  var idx = _getHeaderIndexMap_(sh);
-  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var result = _upsertResourceMapEntry_(obj);
   var normalizedType = String(obj.resource_type).toLowerCase().trim();
+  logAudit(
+    result.action === 'updated' ? 'UPDATE_RESOURCE_MAP' : 'ADD_RESOURCE_MAP',
+    getLoginEmail(),
+    obj.deployment_id + ' | ' + normalizedType + ' | ' + obj.email_guru
+  );
+  return result;
+}
 
-  for (var i = 1; i < rows.length; i++) {
-    var rowId = String(rows[i][idx.id] || '').trim();
-    if (obj.id && rowId === String(obj.id).trim()) {
-      sh.getRange(i + 1, idx.deployment_id + 1).setValue(obj.deployment_id);
-      sh.getRange(i + 1, idx.email_guru + 1).setValue(String(obj.email_guru).toLowerCase().trim());
-      sh.getRange(i + 1, idx.resource_type + 1).setValue(normalizedType);
-      sh.getRange(i + 1, idx.resource_id + 1).setValue(obj.resource_id);
-      sh.getRange(i + 1, idx.resource_name + 1).setValue(obj.resource_name || '');
-      sh.getRange(i + 1, idx.owner_email + 1).setValue((obj.owner_email || obj.email_guru || '').toLowerCase().trim());
-      sh.getRange(i + 1, idx.status + 1).setValue(obj.status || 'active');
-      sh.getRange(i + 1, idx.updated_at + 1).setValue(now);
-      sh.getRange(i + 1, idx.catatan + 1).setValue(obj.catatan || '');
-      logAudit('UPDATE_RESOURCE_MAP', getLoginEmail(), obj.deployment_id + ' | ' + normalizedType + ' | ' + obj.email_guru);
-      return { success: true, action: 'updated', id: rowId };
-    }
+/**
+ * _autoProvisionUserSpreadsheet_(email)
+ * Sekali per guru: kalau storage mode = per_guru dan guru ini belum
+ * punya spreadsheet pribadi terdaftar di RESOURCE_MAP, buatkan satu
+ * Google Spreadsheet baru langsung di Drive milik guru tsb (skrip
+ * berjalan sebagai USER_ACCESSING, jadi file ini otomatis dimiliki
+ * oleh akun guru yang login, bukan akun developer/superadmin).
+ *
+ * Dipanggil dari getAuth() — fail-soft total: setiap kegagalan hanya
+ * dicatat ke logError_ dan sesi guru tetap lanjut memakai spreadsheet
+ * central sebagai fallback (lihat getSpreadsheet_ di Code.js).
+ */
+function _autoProvisionUserSpreadsheet_(email) {
+  if (typeof getStorageMode_ !== 'function' || getStorageMode_() !== 'per_guru') return null;
+  var targetEmail = String(email || '').toLowerCase().trim();
+  if (!targetEmail) return null;
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'USER_PROVISIONED_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
+  if (cache.get(cacheKey)) return null;
+
+  if (resolveSpreadsheetIdForUser_(targetEmail)) {
+    try { cache.put(cacheKey, '1', 21600); } catch (e) {}
+    return null;
   }
 
-  var id = 'RES_' + new Date().getTime();
-  sh.appendRow([
-    id,
-    obj.deployment_id,
-    String(obj.email_guru).toLowerCase().trim(),
-    normalizedType,
-    obj.resource_id,
-    obj.resource_name || '',
-    (obj.owner_email || obj.email_guru || '').toLowerCase().trim(),
-    obj.status || 'active',
-    now,
-    now,
-    obj.catatan || ''
-  ]);
-  logAudit('ADD_RESOURCE_MAP', getLoginEmail(), obj.deployment_id + ' | ' + normalizedType + ' | ' + obj.email_guru);
-  return { success: true, action: 'created', id: id };
+  try {
+    if (!_readSchoolLicense_().isActive) return null;
+  } catch (e) {
+    return null;
+  }
+
+  var lock = LockService.getScriptLock();
+  var gotLock = false;
+  try { gotLock = lock.tryLock(5000); } catch (e) { gotLock = false; }
+  if (!gotLock) return null; // sedang direbut proses lain — lanjut tanpa memblokir sesi ini
+
+  try {
+    // Cek ulang setelah dapat lock, siapa tahu sudah diselesaikan proses lain.
+    if (resolveSpreadsheetIdForUser_(targetEmail)) {
+      try { cache.put(cacheKey, '1', 21600); } catch (e) {}
+      return null;
+    }
+
+    _ensureCentralRegistrySchema_();
+
+    var rootFolder = _getOrCreateFolderByName_('SAG_Data_' + targetEmail, null);
+    var ss = SpreadsheetApp.create('Data Akademik - ' + targetEmail);
+    try {
+      var ssFile = DriveApp.getFileById(ss.getId());
+      rootFolder.addFile(ssFile);
+      DriveApp.getRootFolder().removeFile(ssFile);
+    } catch (e) {}
+
+    var deployment = _getDeploymentEntryForUser_(targetEmail);
+    _upsertResourceMapEntry_({
+      deployment_id: deployment ? deployment.id : '',
+      email_guru: targetEmail,
+      resource_type: 'data_spreadsheet',
+      resource_id: ss.getId(),
+      resource_name: ss.getName(),
+      owner_email: targetEmail,
+      status: 'active',
+      catatan: 'auto-provisioned saat login'
+    });
+
+    cache.put(cacheKey, '1', 21600);
+    logAudit('AUTO_PROVISION_USER_SPREADSHEET', targetEmail, ss.getId());
+    return { spreadsheetId: ss.getId() };
+  } catch (e) {
+    try { logError_('AUTO_PROVISION_USER_SPREADSHEET', e); } catch (e2) {}
+    return null;
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
 }
 
 function deleteResourceMapEntry(id) {
