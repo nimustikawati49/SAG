@@ -792,6 +792,90 @@ function _ensureSummarySyncSheet_() {
   return getCentralSpreadsheet_().getSheetByName(SUMMARY_SYNC_SHEET);
 }
 
+function _buildLocalFavoriteAndMasterySummary_(email, tahunPelajaran, semesterAktif) {
+  var result = { kelas_favorit: '-', ketuntasan_terbaik: '-' };
+  try {
+    var jurnalSh = sheet('JURNAL', { email: email });
+    if (jurnalSh && jurnalSh.getLastRow() > 1) {
+      var rows = jurnalSh.getDataRange().getValues();
+      var kelasCount = {};
+      for (var i = 1; i < rows.length; i++) {
+        var owner = String(rows[i][12] || '').toLowerCase().trim();
+        if (owner !== email) continue;
+        if (tahunPelajaran && rows[i][18] && String(rows[i][18]) !== String(tahunPelajaran)) continue;
+        if (semesterAktif && rows[i][13] && String(rows[i][13]).toLowerCase().trim() !== String(semesterAktif).toLowerCase().trim()) continue;
+        var kelas = String(rows[i][2] || '').trim();
+        if (!kelas) continue;
+        kelasCount[kelas] = (kelasCount[kelas] || 0) + 1;
+      }
+      var rankedClasses = Object.keys(kelasCount).sort(function(a, b) { return kelasCount[b] - kelasCount[a]; });
+      if (rankedClasses.length) result.kelas_favorit = rankedClasses[0];
+    }
+  } catch (e) {}
+
+  try {
+    var nilaiSh = sheet('NILAI_SISWA', { email: email });
+    var setNilaiSh = sheet('SETTING_NILAI', { email: email });
+    if (nilaiSh && nilaiSh.getLastRow() > 1) {
+      var nilaiRows = nilaiSh.getDataRange().getValues();
+      var nh = nilaiRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+      var ni = {};
+      nh.forEach(function(h, idx) { ni[h] = idx; });
+
+      var kkmMap = {};
+      if (setNilaiSh && setNilaiSh.getLastRow() > 1) {
+        var sr = setNilaiSh.getDataRange().getValues();
+        var sh = sr[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+        var si = {};
+        sh.forEach(function(h, idx) { si[h] = idx; });
+        for (var s = 1; s < sr.length; s++) {
+          if (String(sr[s][si.owner_email] || '').toLowerCase().trim() !== email) continue;
+          if (tahunPelajaran && String(sr[s][si.tahun] || '').trim() !== String(tahunPelajaran)) continue;
+          if (semesterAktif && String(sr[s][si.semester] || '').toLowerCase().trim() !== String(semesterAktif).toLowerCase().trim()) continue;
+          var kelasKkm = String(sr[s][si.kelas] || '').trim();
+          var kkmVal = Number(sr[s][si.kkm]);
+          if (!kelasKkm || isNaN(kkmVal)) continue;
+          if (!kkmMap[kelasKkm]) kkmMap[kelasKkm] = [];
+          kkmMap[kelasKkm].push(kkmVal);
+        }
+      }
+
+      var classStudents = {};
+      for (var n = 1; n < nilaiRows.length; n++) {
+        if (String(nilaiRows[n][ni.owner_email] || '').toLowerCase().trim() !== email) continue;
+        if (tahunPelajaran && String(nilaiRows[n][ni.tahun] || '').trim() !== String(tahunPelajaran)) continue;
+        if (semesterAktif && String(nilaiRows[n][ni.semester] || '').toLowerCase().trim() !== String(semesterAktif).toLowerCase().trim()) continue;
+        var kelasNilai = String(nilaiRows[n][ni.kelas] || '').trim();
+        var nis = String(nilaiRows[n][ni.nis] || '').trim();
+        var akhirRaw = nilaiRows[n][ni.nilai_akhir];
+        var akhir = akhirRaw === '' || akhirRaw === null || akhirRaw === undefined ? null : Number(akhirRaw);
+        if (!kelasNilai || !nis || isNaN(akhir)) continue;
+        if (!classStudents[kelasNilai]) classStudents[kelasNilai] = {};
+        if (!classStudents[kelasNilai][nis]) classStudents[kelasNilai][nis] = [];
+        classStudents[kelasNilai][nis].push(akhir);
+      }
+
+      var best = null;
+      Object.keys(classStudents).forEach(function(kelas) {
+        var nisList = Object.keys(classStudents[kelas]);
+        if (!nisList.length) return;
+        var kkmVals = kkmMap[kelas] || [70];
+        var kkm = kkmVals.reduce(function(a, b) { return a + b; }, 0) / kkmVals.length;
+        var tuntas = 0;
+        nisList.forEach(function(nis) {
+          var avg = classStudents[kelas][nis].reduce(function(a, b) { return a + b; }, 0) / classStudents[kelas][nis].length;
+          if (avg >= kkm) tuntas++;
+        });
+        var persen = Math.round((tuntas / nisList.length) * 100);
+        if (!best || persen > best.persen) best = { kelas: kelas, persen: persen };
+      });
+      if (best) result.ketuntasan_terbaik = best.kelas + ' (' + best.persen + '%)';
+    }
+  } catch (e) {}
+
+  return result;
+}
+
 function buildGuruSummarySync_(email) {
   if (!email) throw new Error('Email guru wajib diisi');
   email = String(email).toLowerCase().trim();
@@ -800,16 +884,7 @@ function buildGuruSummarySync_(email) {
   var dash = getDashboardAllData();
   var license = getSchoolLicenseInfo() || {};
   var deployment = _getDeploymentEntryForUser_(email) || {};
-  var favClass = '-';
-  var mastery = '-';
-
-  try {
-    var recap = getRekapSekolah();
-    favClass = (recap.kelasFavorit && recap.kelasFavorit[0] && recap.kelasFavorit[0].kelas) || '-';
-    mastery = (recap.kelasKetuntasan && recap.kelasKetuntasan[0])
-      ? (recap.kelasKetuntasan[0].kelas + ' (' + recap.kelasKetuntasan[0].persenTuntas + '%)')
-      : '-';
-  } catch (e) {}
+  var localSummary = _buildLocalFavoriteAndMasterySummary_(email, setting.tahun_pelajaran || '', setting.semester || '');
 
   return {
     deployment_id: deployment.id || '',
@@ -822,13 +897,23 @@ function buildGuruSummarySync_(email) {
     total_kelas: Number(dash.totalKelas || 0),
     total_siswa: Number(dash.totalSiswa || 0),
     rata_hadir: Number(dash.rata2 || 0),
-    kelas_favorit: favClass,
-    ketuntasan_terbaik: mastery,
+    kelas_favorit: localSummary.kelas_favorit || '-',
+    ketuntasan_terbaik: localSummary.ketuntasan_terbaik || '-',
     license_status: license.isLifetime ? 'lifetime' : (license.isTrial ? 'trial' : (license.isActive ? 'active' : 'inactive')),
     app_version: deployment.app_version || '',
     schema_version: deployment.schema_version || '',
     catatan: ''
   };
+}
+
+function trySyncGuruSummaryAfterMutation_(email, sourceAction) {
+  try {
+    syncGuruSummaryToCentral();
+    return { synced: true, source: sourceAction || '', email: email || '' };
+  } catch (e) {
+    try { logError_('SYNC_GURU_SUMMARY_AFTER:' + String(sourceAction || ''), e); } catch(inner) {}
+    return { synced: false, source: sourceAction || '', email: email || '', error: String(e && e.message ? e.message : e) };
+  }
 }
 
 function syncGuruSummaryToCentral() {
@@ -921,6 +1006,181 @@ function getCentralSummarySyncRows() {
   }
   result.sort(function(a, b) { return String(b.last_sync || '').localeCompare(String(a.last_sync || '')); });
   return result;
+}
+
+function _ensureAppReleasesSheet_() {
+  _ensureCentralRegistrySchema_();
+  return getCentralSpreadsheet_().getSheetByName(APP_RELEASES_SHEET);
+}
+
+function _ensureUpdateLogSheet_() {
+  _ensureCentralRegistrySchema_();
+  return getCentralSpreadsheet_().getSheetByName(UPDATE_LOG_SHEET);
+}
+
+function getAppReleases() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureAppReleasesSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var id = String(rows[i][idx.id] || '').trim();
+    if (!id) continue;
+    result.push({
+      id: id,
+      version: String(rows[i][idx.version] || ''),
+      schema_version: String(rows[i][idx.schema_version] || ''),
+      channel: String(rows[i][idx.channel] || 'stable'),
+      status: String(rows[i][idx.status] || 'draft'),
+      allow_migration: String(rows[i][idx.allow_migration] || 'true'),
+      manifest_json: String(rows[i][idx.manifest_json] || ''),
+      created_at: String(rows[i][idx.created_at] || ''),
+      created_by: String(rows[i][idx.created_by] || ''),
+      catatan: String(rows[i][idx.catatan] || '')
+    });
+  }
+  result.sort(function(a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+  return result;
+}
+
+function saveAppRelease(obj) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  obj = obj || {};
+  if (!obj.version) throw new Error('Versi release wajib diisi');
+  if (!obj.schema_version) throw new Error('Schema version wajib diisi');
+
+  var sh = _ensureAppReleasesSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var actor = getLoginEmail();
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowId = String(rows[i][idx.id] || '').trim();
+    if (obj.id && rowId === String(obj.id).trim()) {
+      sh.getRange(i + 1, idx.version + 1).setValue(obj.version);
+      sh.getRange(i + 1, idx.schema_version + 1).setValue(obj.schema_version);
+      sh.getRange(i + 1, idx.channel + 1).setValue(obj.channel || 'stable');
+      sh.getRange(i + 1, idx.status + 1).setValue(obj.status || 'draft');
+      sh.getRange(i + 1, idx.allow_migration + 1).setValue(String(obj.allow_migration !== false));
+      sh.getRange(i + 1, idx.manifest_json + 1).setValue(obj.manifest_json || '');
+      sh.getRange(i + 1, idx.catatan + 1).setValue(obj.catatan || '');
+      logAudit('UPDATE_APP_RELEASE', actor, obj.version + ' | ' + obj.schema_version);
+      return { success: true, action: 'updated', id: rowId };
+    }
+  }
+
+  var id = 'REL_' + new Date().getTime();
+  sh.appendRow([
+    id,
+    obj.version,
+    obj.schema_version,
+    obj.channel || 'stable',
+    obj.status || 'draft',
+    String(obj.allow_migration !== false),
+    obj.manifest_json || '',
+    now,
+    actor,
+    obj.catatan || ''
+  ]);
+  logAudit('ADD_APP_RELEASE', actor, obj.version + ' | ' + obj.schema_version);
+  return { success: true, action: 'created', id: id };
+}
+
+function getUpdateLogRows(deploymentId) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureUpdateLogSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var depId = String(deploymentId || '').trim();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var id = String(rows[i][idx.id] || '').trim();
+    if (!id) continue;
+    if (depId && String(rows[i][idx.deployment_id] || '').trim() !== depId) continue;
+    result.push({
+      id: id,
+      deployment_id: String(rows[i][idx.deployment_id] || ''),
+      target_email: String(rows[i][idx.target_email] || ''),
+      from_version: String(rows[i][idx.from_version] || ''),
+      to_version: String(rows[i][idx.to_version] || ''),
+      from_schema: String(rows[i][idx.from_schema] || ''),
+      to_schema: String(rows[i][idx.to_schema] || ''),
+      action: String(rows[i][idx.action] || ''),
+      status: String(rows[i][idx.status] || ''),
+      approved_by: String(rows[i][idx.approved_by] || ''),
+      executed_by: String(rows[i][idx.executed_by] || ''),
+      executed_at: String(rows[i][idx.executed_at] || ''),
+      catatan: String(rows[i][idx.catatan] || '')
+    });
+  }
+  result.sort(function(a, b) { return String(b.executed_at || '').localeCompare(String(a.executed_at || '')); });
+  return result;
+}
+
+function approveDeploymentUpdate(obj) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  obj = obj || {};
+  if (!obj.deployment_id) throw new Error('Deployment wajib dipilih');
+  if (!obj.release_id && !obj.to_version) throw new Error('Release target wajib dipilih');
+
+  var deployments = getDeployments();
+  var dep = deployments.find(function(d) { return String(d.id) === String(obj.deployment_id); });
+  if (!dep) throw new Error('Deployment tidak ditemukan');
+  if (String(dep.allow_update).toLowerCase() !== 'true') throw new Error('Deployment ini belum diizinkan menerima update');
+
+  var releases = getAppReleases();
+  var rel = obj.release_id
+    ? releases.find(function(r) { return String(r.id) === String(obj.release_id); })
+    : releases.find(function(r) { return String(r.version) === String(obj.to_version); });
+  if (!rel) throw new Error('Release tidak ditemukan');
+
+  var sh = _ensureUpdateLogSheet_();
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var actor = getLoginEmail();
+  var id = 'UPD_' + new Date().getTime();
+  sh.appendRow([
+    id,
+    dep.id,
+    dep.owner_email || dep.email_sa || '',
+    dep.app_version || '',
+    rel.version || '',
+    dep.schema_version || '',
+    rel.schema_version || '',
+    'APPROVE_UPDATE',
+    'approved',
+    actor,
+    '',
+    now,
+    obj.catatan || ''
+  ]);
+  logAudit('APPROVE_DEPLOYMENT_UPDATE', actor, dep.nama_sekolah + ' | ' + (rel.version || ''));
+  return { success: true, id: id };
+}
+
+function setUpdateLogStatus(logId, status, note) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var targetStatus = String(status || '').toLowerCase().trim();
+  if (['approved','notified','applied','failed','rejected'].indexOf(targetStatus) === -1) {
+    throw new Error('Status update tidak valid');
+  }
+  var sh = _ensureUpdateLogSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var actor = getLoginEmail();
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][idx.id] || '').trim() !== String(logId || '').trim()) continue;
+    sh.getRange(i + 1, idx.status + 1).setValue(targetStatus);
+    sh.getRange(i + 1, idx.executed_by + 1).setValue(actor);
+    sh.getRange(i + 1, idx.executed_at + 1).setValue(now);
+    sh.getRange(i + 1, idx.catatan + 1).setValue(note || rows[i][idx.catatan] || '');
+    logAudit('SET_UPDATE_LOG_STATUS', actor, logId + ' | ' + targetStatus);
+    return { success: true, status: targetStatus };
+  }
+  throw new Error('Update log tidak ditemukan');
 }
 
 function getStorageModeConfig() {

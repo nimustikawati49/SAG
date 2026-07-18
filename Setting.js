@@ -95,6 +95,7 @@ function saveSetting(data){
   logAudit('SAVE_SETTING', email, 'Setting disimpan & dikunci');
   invalidateCache_('SETTING');
   invalidateDashboardCache_();
+  trySyncGuruSummaryAfterMutation_(email, 'SAVE_SETTING');
 
   return {
     success:true,
@@ -220,6 +221,7 @@ function updateSemesterAktif(semester){
       sh.getRange(i+1, semIndex+1).setValue(semester);
       if (semAktifIndex > -1) sh.getRange(i+1, semAktifIndex+1).setValue(semester);
       logAudit('UPDATE_SEMESTER', email, semester);
+      trySyncGuruSummaryAfterMutation_(email, 'UPDATE_SEMESTER');
       return true;
     }
   }

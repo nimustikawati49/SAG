@@ -369,6 +369,7 @@ function simpanNilaiSiswa(payload) {
 
   // 7. Audit trail
   appendAuditNilai_(auth.email, 'SAVE', payload.kelas, payload.mapel, payload.tahun, semester, newRows.length);
+  trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_NILAI');
 
   return { success: true, jumlah: newRows.length, version: ts };
 }
@@ -430,6 +431,8 @@ function simpanSettingNilai(obj) {
     Number(obj.kkm ?? 70),
     auth.email
   ]);
+
+  trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_SETTING_NILAI');
 
   return { success: true };
 }

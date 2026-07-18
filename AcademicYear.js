@@ -356,6 +356,7 @@ function setUserAcademicPeriod(tahun, semester) {
     invalidateCache_('SETTING');
     invalidateDashboardCache_();
     logAudit('SET_USER_TAHUN', auth.email, tahun + ' | ' + semester);
+    trySyncGuruSummaryAfterMutation_(auth.email, 'SET_USER_TAHUN');
     return { success: true, tahun_pelajaran: tahun, semester: semester };
   }
 
@@ -447,6 +448,7 @@ function saveGuruMengajarSetting(payload) {
 
   logAudit('SAVE_GURU_MENGAJAR', auth.email, tahun + ' | ' + semester + ' | ' + combos.length + ' baris');
   invalidateDashboardCache_();
+  trySyncGuruSummaryAfterMutation_(auth.email, 'SAVE_GURU_MENGAJAR');
   return { success: true, inserted: combos.length };
 }
 

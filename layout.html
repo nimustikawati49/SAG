@@ -1848,6 +1848,22 @@
   <div id="centralSummarySyncBox"><div class="muted">⏳ Memuat summary sync…</div></div>
 </div>
 
+<div class="card" style="margin-top:16px;border:1.5px solid #ddd6fe;background:linear-gradient(180deg,#f5f3ff,#ffffff)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h3 style="margin:0">🚀 Release & Update Pipeline</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Kelola release versi dan approval update per deployment tanpa mengubah database guru secara paksa.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="openAppReleaseModal()" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600">+ Release</button>
+      <button onclick="openUpdateApprovalModal()" style="background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600">+ Approval Update</button>
+      <button onclick="loadUpdatePipeline()" class="ghost" style="font-size:13px">🔄</button>
+    </div>
+  </div>
+  <div id="appReleaseBox"><div class="muted">⏳ Memuat release…</div></div>
+  <div id="updateLogBox" style="margin-top:14px"><div class="muted">⏳ Memuat update log…</div></div>
+</div>
+
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div>
@@ -1861,6 +1877,35 @@
     </div>
   </div>
   <div id="deploymentList"><div class="muted">⏳ Memuat…</div></div>
+</div>
+
+<div id="appReleaseModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:92%;max-width:560px;border-radius:18px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="margin:0">🚀 Release Aplikasi</h3><button onclick="closeAppReleaseModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button></div>
+    <input id="relId" type="hidden">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div><label style="font-size:12px;color:#6b7280">Versi</label><input id="relVersion" type="text" placeholder="v4.0.0" style="width:100%"></div>
+      <div><label style="font-size:12px;color:#6b7280">Schema Version</label><input id="relSchema" type="text" placeholder="4" style="width:100%"></div>
+      <div><label style="font-size:12px;color:#6b7280">Channel</label><select id="relChannel" style="width:100%"><option value="stable">stable</option><option value="beta">beta</option><option value="pilot">pilot</option></select></div>
+      <div><label style="font-size:12px;color:#6b7280">Status</label><select id="relStatus" style="width:100%"><option value="draft">draft</option><option value="published">published</option><option value="deprecated">deprecated</option></select></div>
+      <div><label style="font-size:12px;color:#6b7280">Allow Migration</label><select id="relMigration" style="width:100%"><option value="true">true</option><option value="false">false</option></select></div>
+      <div style="grid-column:1/-1"><label style="font-size:12px;color:#6b7280">Manifest JSON</label><textarea id="relManifest" style="width:100%;min-height:72px"></textarea></div>
+      <div style="grid-column:1/-1"><label style="font-size:12px;color:#6b7280">Catatan</label><textarea id="relCatatan" style="width:100%;min-height:72px"></textarea></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px"><button onclick="closeAppReleaseModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button><button id="relSubmitBtn" onclick="submitAppRelease()" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;font-weight:600">💾 Simpan</button></div>
+  </div>
+</div>
+
+<div id="updateApprovalModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;width:92%;max-width:560px;border-radius:18px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="margin:0">🛡 Approval Update Deployment</h3><button onclick="closeUpdateApprovalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div><label style="font-size:12px;color:#6b7280">Deployment</label><select id="updDeployment" style="width:100%"></select></div>
+      <div><label style="font-size:12px;color:#6b7280">Release Target</label><select id="updRelease" style="width:100%"></select></div>
+      <div style="grid-column:1/-1"><label style="font-size:12px;color:#6b7280">Catatan Approval</label><textarea id="updCatatan" style="width:100%;min-height:72px"></textarea></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px"><button onclick="closeUpdateApprovalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button><button id="updSubmitBtn" onclick="submitUpdateApproval()" style="background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;font-weight:600">✅ Approve</button></div>
+  </div>
 </div>
 
 <div id="resourceMapModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">

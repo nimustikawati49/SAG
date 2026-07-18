@@ -135,6 +135,7 @@ function simpanJurnalGuruWali(data){
   ]);
 
   logAudit('SIMPAN_JURNAL_WALI', auth.email, data.topik_pendampingan);
+  trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_JURNAL_WALI');
 
   return { status: true, id };
 }

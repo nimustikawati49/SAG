@@ -33,6 +33,7 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadStorageModeConfig, 2750);
       setTimeout(loadResourceMapEntries, 2775);
       setTimeout(loadCentralSummarySync, 2790);
+      setTimeout(loadUpdatePipeline, 2795);
       setTimeout(loadAcademicGlobalPanel, 2800);
     })
     .getSuperAdminDashboard();
@@ -271,6 +272,262 @@ function loadCentralSummarySync() {
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat summary sync') + '</div>';
     })
     .getCentralSummarySyncRows();
+}
+
+function loadUpdatePipeline() {
+  loadAppReleases();
+  loadUpdateLogRows();
+}
+
+function loadAppReleases() {
+  var el = document.getElementById('appReleaseBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      window._appReleaseRows = rows || [];
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada release tercatat.</div>';
+        return;
+      }
+      var html = '<div style="font-size:12px;font-weight:700;color:#6d28d9;margin-bottom:6px">DAFTAR RELEASE</div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Versi</th><th>Schema</th><th>Channel</th><th>Status</th><th>Migrasi</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        var statusBg = r.status === 'published' ? '#dcfce7' : (r.status === 'deprecated' ? '#fee2e2' : '#fef3c7');
+        var statusFg = r.status === 'published' ? '#166534' : (r.status === 'deprecated' ? '#991b1b' : '#92400e');
+        html += '<tr>' +
+          '<td><b>' + _escSA(r.version) + '</b></td>' +
+          '<td>' + _escSA(r.schema_version) + '</td>' +
+          '<td>' + _escSA(r.channel) + '</td>' +
+          '<td><span style="background:' + statusBg + ';color:' + statusFg + ';padding:2px 10px;border-radius:999px;font-size:12px">' + _escSA(r.status) + '</span></td>' +
+          '<td style="text-align:center">' + (String(r.allow_migration) === 'true' ? '✅' : '⛔') + '</td>' +
+          '<td style="font-size:11px">' + _escSA(r.created_at || '-') + '<br><span class="muted">' + _escSA(r.created_by || '-') + '</span></td>' +
+          '<td><button onclick="editAppRelease(\'' + _escSA(r.id) + '\')" style="background:#ede9fe;color:#5b21b6;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">✏️</button></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat release') + '</div>';
+    })
+    .getAppReleases();
+}
+
+function openAppReleaseModal(row) {
+  var m = document.getElementById('appReleaseModal');
+  if (!m) return;
+  m.style.display = 'flex';
+  var fields = { relId: '', relVersion: '', relSchema: '', relManifest: '', relCatatan: '' };
+  Object.keys(fields).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = fields[id];
+  });
+  var chEl = document.getElementById('relChannel');
+  var stEl = document.getElementById('relStatus');
+  var miEl = document.getElementById('relMigration');
+  if (chEl) chEl.value = 'stable';
+  if (stEl) stEl.value = 'draft';
+  if (miEl) miEl.value = 'true';
+
+  if (row) {
+    var idEl = document.getElementById('relId'); if (idEl) idEl.value = row.id || '';
+    var vEl = document.getElementById('relVersion'); if (vEl) vEl.value = row.version || '';
+    var sEl = document.getElementById('relSchema'); if (sEl) sEl.value = row.schema_version || '';
+    if (chEl) chEl.value = row.channel || 'stable';
+    if (stEl) stEl.value = row.status || 'draft';
+    if (miEl) miEl.value = String(row.allow_migration) === 'false' ? 'false' : 'true';
+    var mEl = document.getElementById('relManifest'); if (mEl) mEl.value = row.manifest_json || '';
+    var cEl = document.getElementById('relCatatan'); if (cEl) cEl.value = row.catatan || '';
+  }
+}
+
+function editAppRelease(id) {
+  var row = (window._appReleaseRows || []).find(function(r) { return r.id === id; });
+  openAppReleaseModal(row || null);
+}
+
+function closeAppReleaseModal() {
+  var m = document.getElementById('appReleaseModal');
+  if (m) m.style.display = 'none';
+}
+
+function submitAppRelease() {
+  var version = ((document.getElementById('relVersion') || {}).value || '').trim();
+  var schema = ((document.getElementById('relSchema') || {}).value || '').trim();
+  if (!version || !schema) {
+    if (typeof showToast === 'function') showToast('❌ Versi & schema wajib diisi', 'error');
+    return;
+  }
+  var btn = document.getElementById('relSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+  var payload = {
+    id: (document.getElementById('relId') || {}).value || '',
+    version: version,
+    schema_version: schema,
+    channel: (document.getElementById('relChannel') || {}).value || 'stable',
+    status: (document.getElementById('relStatus') || {}).value || 'draft',
+    allow_migration: (document.getElementById('relMigration') || {}).value !== 'false',
+    manifest_json: (document.getElementById('relManifest') || {}).value || '',
+    catatan: (document.getElementById('relCatatan') || {}).value || ''
+  };
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Release disimpan', 'success');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      closeAppReleaseModal();
+      loadAppReleases();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+    })
+    .saveAppRelease(payload);
+}
+
+function loadUpdateLogRows() {
+  var el = document.getElementById('updateLogBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada histori update/approval.</div>';
+        return;
+      }
+      var html = '<div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px">UPDATE LOG & APPROVAL</div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Deployment</th><th>Target</th><th>Versi</th><th>Status</th><th>Approved By</th><th>Waktu</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        var badgeMap = { approved: ['#dbeafe','#1e40af'], notified: ['#fef3c7','#92400e'], applied: ['#dcfce7','#166534'], failed: ['#fee2e2','#991b1b'], rejected: ['#fee2e2','#991b1b'] };
+        var colors = badgeMap[r.status] || ['#f3f4f6','#374151'];
+        html += '<tr>' +
+          '<td style="font-size:11px">' + _escSA(r.deployment_id) + '</td>' +
+          '<td style="font-size:12px">' + _escSA(r.target_email || '-') + '</td>' +
+          '<td style="font-size:12px">' + _escSA(r.from_version || '-') + ' → ' + _escSA(r.to_version || '-') + '</td>' +
+          '<td><span style="background:' + colors[0] + ';color:' + colors[1] + ';padding:2px 10px;border-radius:999px;font-size:12px">' + _escSA(r.status) + '</span></td>' +
+          '<td style="font-size:11px">' + _escSA(r.approved_by || '-') + '</td>' +
+          '<td style="font-size:11px">' + _escSA(r.executed_at || '-') + '</td>' +
+          '<td style="white-space:nowrap">' + _renderUpdateLogActions_(r) + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat update log') + '</div>';
+    })
+    .getUpdateLogRows('');
+}
+
+function _updateLogActionBtn_(id, status, label, bg, fg) {
+  return '<button onclick="setUpdateLogStatusUI(\'' + _escSA(id) + '\',\'' + status + '\')" style="background:' + bg + ';color:' + fg + ';border:none;border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;margin-right:4px">' + label + '</button>';
+}
+
+function _renderUpdateLogActions_(r) {
+  if (r.status === 'approved') {
+    return _updateLogActionBtn_(r.id, 'notified', '➡ Notified', '#dbeafe', '#1e40af') +
+      _updateLogActionBtn_(r.id, 'rejected', '✖ Reject', '#fee2e2', '#991b1b');
+  }
+  if (r.status === 'notified') {
+    return _updateLogActionBtn_(r.id, 'applied', '✅ Applied', '#dcfce7', '#166534') +
+      _updateLogActionBtn_(r.id, 'failed', '✖ Gagal', '#fee2e2', '#991b1b');
+  }
+  return '<span class="muted" style="font-size:11px">-</span>';
+}
+
+function setUpdateLogStatusUI(id, status) {
+  var note = '';
+  if (status === 'failed' || status === 'rejected') {
+    note = prompt('Catatan (opsional):') || '';
+  }
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Status diperbarui: ' + status, 'success');
+      loadUpdateLogRows();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .setUpdateLogStatus(id, status, note);
+}
+
+function openUpdateApprovalModal() {
+  var m = document.getElementById('updateApprovalModal');
+  if (!m) return;
+  m.style.display = 'flex';
+  var catEl = document.getElementById('updCatatan');
+  if (catEl) catEl.value = '';
+  var depSel = document.getElementById('updDeployment');
+  var relSel = document.getElementById('updRelease');
+  if (depSel) depSel.innerHTML = '<option value="">⏳ Memuat...</option>';
+  if (relSel) relSel.innerHTML = '<option value="">⏳ Memuat...</option>';
+
+  google.script.run
+    .withSuccessHandler(function(deployments) {
+      if (!depSel) return;
+      var eligible = (deployments || []).filter(function(d) { return String(d.allow_update).toLowerCase() === 'true'; });
+      depSel.innerHTML = eligible.length
+        ? eligible.map(function(d) { return '<option value="' + _escSA(d.id) + '">' + _escSA(d.nama_sekolah || d.id) + ' (v' + _escSA(d.app_version || '-') + ')</option>'; }).join('')
+        : '<option value="">Tidak ada deployment yang mengizinkan update</option>';
+    })
+    .withFailureHandler(function() {
+      if (depSel) depSel.innerHTML = '<option value="">❌ Gagal memuat deployment</option>';
+    })
+    .getDeployments();
+
+  google.script.run
+    .withSuccessHandler(function(releases) {
+      if (!relSel) return;
+      var published = (releases || []).filter(function(r) { return r.status === 'published'; });
+      relSel.innerHTML = published.length
+        ? published.map(function(r) { return '<option value="' + _escSA(r.id) + '">' + _escSA(r.version) + ' (schema ' + _escSA(r.schema_version) + ', ' + _escSA(r.channel) + ')</option>'; }).join('')
+        : '<option value="">Belum ada release berstatus published</option>';
+    })
+    .withFailureHandler(function() {
+      if (relSel) relSel.innerHTML = '<option value="">❌ Gagal memuat release</option>';
+    })
+    .getAppReleases();
+}
+
+function closeUpdateApprovalModal() {
+  var m = document.getElementById('updateApprovalModal');
+  if (m) m.style.display = 'none';
+}
+
+function submitUpdateApproval() {
+  var deploymentId = (document.getElementById('updDeployment') || {}).value || '';
+  var releaseId = (document.getElementById('updRelease') || {}).value || '';
+  if (!deploymentId) {
+    if (typeof showToast === 'function') showToast('❌ Pilih deployment', 'error');
+    return;
+  }
+  if (!releaseId) {
+    if (typeof showToast === 'function') showToast('❌ Pilih release target', 'error');
+    return;
+  }
+  var btn = document.getElementById('updSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memproses...'; }
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Update disetujui', 'success');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Approve'; }
+      closeUpdateApprovalModal();
+      loadUpdateLogRows();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Approve'; }
+    })
+    .approveDeploymentUpdate({
+      deployment_id: deploymentId,
+      release_id: releaseId,
+      catatan: (document.getElementById('updCatatan') || {}).value || ''
+    });
 }
 
 let _saGuruPeriodRows = [];

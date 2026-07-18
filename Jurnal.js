@@ -150,6 +150,7 @@ function importSiswa(rows){
   }
 
   invalidateCache_('SISWA');
+  trySyncGuruSummaryAfterMutation_(auth.email, 'IMPORT_SISWA');
   return true;
 }
 
@@ -310,6 +311,8 @@ function simpanJurnal(data){
       ]);
     });
   }
+
+  trySyncGuruSummaryAfterMutation_(email, 'SIMPAN_JURNAL');
 
   return { status:true };
 }
