@@ -501,27 +501,36 @@ function findLatestGuruMengajarPeriod_(email, excludeTahun, excludeSemester) {
   const exTahun = String(excludeTahun || '').trim();
   const exSem = String(excludeSemester || '').toLowerCase().trim();
 
+  const candidates = [];
+
   const sh = sheet('GuruMengajar');
   const rows = sh.getDataRange().getValues();
-  const seen = {};
-  let latest = null;
-
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][1] || '').toLowerCase().trim() !== targetEmail) continue;
     const tahun = String(rows[i][2] || '').trim();
     const semester = String(rows[i][3] || '').trim();
     if (!tahun || !semester) continue;
-    if (tahun === exTahun && semester.toLowerCase() === exSem) continue;
-
-    const key = tahun + '|' + semester;
-    if (seen[key]) continue;
-    seen[key] = true;
-
-    const createdAt = rows[i][6] ? new Date(rows[i][6]) : null;
-    if (!latest || (createdAt && (!latest.created_at || createdAt > latest.created_at))) {
-      latest = { tahun_pelajaran: tahun, semester: semester, created_at: createdAt };
-    }
+    candidates.push({ tahun_pelajaran: tahun, semester: semester, created_at: rows[i][6] ? new Date(rows[i][6]) : null });
   }
+
+  // Ikut sertakan periode yang punya jadwal hari/jam (JADWAL_SEMESTER) walau
+  // guru itu belum sempat mengisi Kelas/Mapel Diampu — supaya "lanjutkan
+  // jadwal" tetap terdeteksi dari kedua sumber data.
+  if (typeof getJadwalSemesterCandidatePeriods_ === 'function') {
+    getJadwalSemesterCandidatePeriods_(targetEmail).forEach(function(c) { candidates.push(c); });
+  }
+
+  const seen = {};
+  let latest = null;
+  candidates.forEach(function(c) {
+    if (c.tahun_pelajaran === exTahun && c.semester.toLowerCase() === exSem) return;
+    const key = c.tahun_pelajaran + '|' + c.semester;
+    if (seen[key]) return;
+    seen[key] = true;
+    if (!latest || (c.created_at && (!latest.created_at || c.created_at > latest.created_at))) {
+      latest = c;
+    }
+  });
   return latest;
 }
 
@@ -543,12 +552,14 @@ function checkGuruMengajarTransition(newTahun, newSemester) {
   if (!tahun || !semester) throw new Error('Tahun & semester wajib diisi');
 
   const current = getGuruMengajarForPeriod_(auth.email, tahun, semester);
-  if (current.length) {
+  const currentJadwal = (typeof getJadwalSemesterForPeriod_ === 'function') ? getJadwalSemesterForPeriod_(auth.email, tahun, semester) : [];
+  if (current.length || currentJadwal.length) {
     return {
       hasCurrent: true,
       hasPrevious: false,
       kelas: Array.from(new Set(current.map(function(c) { return c.kelas; }).filter(Boolean))),
-      mapel: Array.from(new Set(current.map(function(c) { return c.mapel; }).filter(Boolean)))
+      mapel: Array.from(new Set(current.map(function(c) { return c.mapel; }).filter(Boolean))),
+      jadwal_count: currentJadwal.length
     };
   }
 
@@ -556,13 +567,15 @@ function checkGuruMengajarTransition(newTahun, newSemester) {
   if (!prev) return { hasCurrent: false, hasPrevious: false };
 
   const prevCombos = getGuruMengajarForPeriod_(auth.email, prev.tahun_pelajaran, prev.semester);
+  const prevJadwal = (typeof getJadwalSemesterForPeriod_ === 'function') ? getJadwalSemesterForPeriod_(auth.email, prev.tahun_pelajaran, prev.semester) : [];
   return {
     hasCurrent: false,
     hasPrevious: true,
     previous_period: { tahun_pelajaran: prev.tahun_pelajaran, semester: prev.semester },
     kelas: Array.from(new Set(prevCombos.map(function(c) { return c.kelas; }).filter(Boolean))),
     mapel: Array.from(new Set(prevCombos.map(function(c) { return c.mapel; }).filter(Boolean))),
-    total_kombinasi: prevCombos.length
+    total_kombinasi: prevCombos.length,
+    jadwal_count: prevJadwal.length
   };
 }
 
@@ -588,30 +601,38 @@ function continueGuruMengajarToPeriod(payload) {
   }
 
   const sourceCombos = getGuruMengajarForPeriod_(auth.email, fromTahun, fromSemester);
-  if (!sourceCombos.length) return { success: true, copied: 0 };
+  let copiedGM = 0;
+  if (sourceCombos.length) {
+    const sh = sheet('GuruMengajar');
+    const rows = sh.getDataRange().getValues();
 
-  const sh = sheet('GuruMengajar');
-  const rows = sh.getDataRange().getValues();
+    // Hapus dulu baris milik guru ini di periode tujuan (idempoten, hindari
+    // duplikat kalau tombol "Lanjutkan" ini sampai terpencet dua kali).
+    for (let i = rows.length; i >= 2; i--) {
+      const r = rows[i - 1];
+      if (String(r[1] || '').toLowerCase().trim() !== auth.email) continue;
+      if (String(r[2] || '') !== toTahun) continue;
+      if (String(r[3] || '').toLowerCase().trim() !== toSemester.toLowerCase()) continue;
+      sh.deleteRow(i);
+    }
 
-  // Hapus dulu baris milik guru ini di periode tujuan (idempoten, hindari duplikat
-  // kalau tombol "Lanjutkan" ini sampai terpencet dua kali).
-  for (let i = rows.length; i >= 2; i--) {
-    const r = rows[i - 1];
-    if (String(r[1] || '').toLowerCase().trim() !== auth.email) continue;
-    if (String(r[2] || '') !== toTahun) continue;
-    if (String(r[3] || '').toLowerCase().trim() !== toSemester.toLowerCase()) continue;
-    sh.deleteRow(i);
+    const now = new Date();
+    sourceCombos.forEach(function(c) {
+      sh.appendRow(['GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(), auth.email, toTahun, toSemester, c.kelas, c.mapel, now]);
+    });
+    copiedGM = sourceCombos.length;
   }
 
-  const now = new Date();
-  sourceCombos.forEach(function(c) {
-    sh.appendRow(['GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(), auth.email, toTahun, toSemester, c.kelas, c.mapel, now]);
-  });
+  let copiedJadwal = 0;
+  if (typeof continueJadwalSemesterToPeriod_ === 'function') {
+    copiedJadwal = continueJadwalSemesterToPeriod_(auth.email, fromTahun, fromSemester, toTahun, toSemester);
+  }
 
-  logAudit('CONTINUE_GURU_MENGAJAR', auth.email, fromTahun + '/' + fromSemester + ' -> ' + toTahun + '/' + toSemester + ' | ' + sourceCombos.length);
+  logAudit('CONTINUE_GURU_MENGAJAR', auth.email, fromTahun + '/' + fromSemester + ' -> ' + toTahun + '/' + toSemester + ' | GM=' + copiedGM + ' | Jadwal=' + copiedJadwal);
   invalidateDashboardCache_();
+  invalidateCache_('JADWAL_SEMESTER');
   trySyncGuruSummaryAfterMutation_(auth.email, 'CONTINUE_GURU_MENGAJAR');
-  return { success: true, copied: sourceCombos.length };
+  return { success: true, copied: copiedGM, copied_jadwal: copiedJadwal };
 }
 
 /**
@@ -641,10 +662,16 @@ function resetGuruMengajarForPeriod(tahun, semester) {
     deleted++;
   }
 
-  logAudit('RESET_GURU_MENGAJAR', auth.email, targetTahun + '/' + targetSem + ' | dihapus=' + deleted);
+  let deletedJadwal = 0;
+  if (typeof resetJadwalSemesterForPeriod_ === 'function') {
+    deletedJadwal = resetJadwalSemesterForPeriod_(auth.email, targetTahun, targetSem);
+  }
+
+  logAudit('RESET_GURU_MENGAJAR', auth.email, targetTahun + '/' + targetSem + ' | GM=' + deleted + ' | Jadwal=' + deletedJadwal);
   invalidateDashboardCache_();
+  invalidateCache_('JADWAL_SEMESTER');
   trySyncGuruSummaryAfterMutation_(auth.email, 'RESET_GURU_MENGAJAR');
-  return { success: true, deleted: deleted };
+  return { success: true, deleted: deleted, deleted_jadwal: deletedJadwal };
 }
 
 function getAcademicConfig() {

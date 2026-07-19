@@ -106,6 +106,149 @@ function toMinutes_(val){
   return (Number(parts[0]) * 60) + Number(parts[1]);
 }
 
+/**
+ * ensureJadwalSchemaAcademic_()
+ * JADWAL_SEMESTER awalnya hanya dikunci per (email, semester) — TANPA
+ * tahun_pelajaran. Akibatnya jadwal hari/jam semester "Ganjil" tahun lalu
+ * bisa nyangkut/campur dengan "Ganjil" tahun ajaran baru. Tambahkan kolom
+ * tahun_pelajaran di akhir (index tetap, tidak mengubah kolom lama yang
+ * sudah dipakai dengan index tetap di seluruh file ini), lalu backfill
+ * baris lama dengan tahun default supaya tidak silang sama sekali.
+ * Return: index kolom (0-based) tahun_pelajaran.
+ */
+function ensureJadwalSchemaAcademic_(){
+  const sh = ensureJadwalSheet_();
+  const lastCol = sh.getLastColumn();
+  const header = lastCol > 0
+    ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
+    : [];
+  let idx = header.indexOf('tahun_pelajaran');
+  if (idx === -1) {
+    idx = lastCol; // 0-based index kolom baru
+    sh.getRange(1, lastCol + 1).setValue('tahun_pelajaran');
+    const lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      const defaultTahun = (typeof getLegacyDefaultYear_ === 'function') ? getLegacyDefaultYear_() : '';
+      if (defaultTahun) {
+        const fillRange = sh.getRange(2, idx + 1, lastRow - 1, 1);
+        const vals = [];
+        for (let r = 0; r < lastRow - 1; r++) vals.push([defaultTahun]);
+        fillRange.setValues(vals);
+      }
+    }
+  }
+  return idx;
+}
+
+/**
+ * getJadwalSemesterForPeriod_(email, tahun, semester)
+ * Ambil entri jadwal (hari/kelas/mapel/jam) milik satu guru untuk satu
+ * periode (tahun_pelajaran + semester) spesifik. Baris lama tanpa
+ * tahun_pelajaran (legacy, sebelum migrasi) dianggap cocok ke periode manapun.
+ */
+function getJadwalSemesterForPeriod_(email, tahun, semester){
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const targetTahun = String(tahun || '').trim();
+  const targetSem = String(semester || '').trim();
+
+  const sh = getJadwalSheet_();
+  if (!sh) return [];
+  const tIdx = ensureJadwalSchemaAcademic_();
+  const values = sh.getDataRange().getValues();
+  const result = [];
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0] || '').toLowerCase().trim() !== targetEmail) continue;
+    if (String(values[i][1] || '').trim() !== targetSem) continue;
+    const rowTahun = String(values[i][tIdx] || '').trim();
+    if (rowTahun && rowTahun !== targetTahun) continue;
+    result.push({
+      hari: values[i][2],
+      kelas: values[i][3],
+      mapel: values[i][4],
+      jam_mulai: normalizeJam_(values[i][5]),
+      jam_selesai: normalizeJam_(values[i][6])
+    });
+  }
+  return result;
+}
+
+/**
+ * getJadwalSemesterCandidatePeriods_(email)
+ * Daftar periode (tahun+semester) unik yang punya entri jadwal milik guru
+ * ini — dipakai untuk mendeteksi "periode terakhir yang punya jadwal"
+ * saat guru pindah tahun/semester.
+ */
+function getJadwalSemesterCandidatePeriods_(email){
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const sh = getJadwalSheet_();
+  if (!sh) return [];
+  const tIdx = ensureJadwalSchemaAcademic_();
+  const values = sh.getDataRange().getValues();
+  const result = [];
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0] || '').toLowerCase().trim() !== targetEmail) continue;
+    const semester = String(values[i][1] || '').trim();
+    const tahun = String(values[i][tIdx] || '').trim();
+    if (!semester || !tahun) continue;
+    result.push({
+      tahun_pelajaran: tahun,
+      semester: semester,
+      created_at: values[i][7] ? new Date(values[i][7]) : null
+    });
+  }
+  return result;
+}
+
+/**
+ * continueJadwalSemesterToPeriod_(email, fromTahun, fromSemester, toTahun, toSemester)
+ * Salin entri jadwal (hari/jam) milik satu guru dari periode sumber ke tujuan.
+ * Return: jumlah baris yang disalin.
+ */
+function continueJadwalSemesterToPeriod_(email, fromTahun, fromSemester, toTahun, toSemester){
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const source = getJadwalSemesterForPeriod_(targetEmail, fromTahun, fromSemester);
+  if (!source.length) return 0;
+
+  // Hapus dulu entri guru ini di periode tujuan supaya idempoten (hindari duplikat).
+  resetJadwalSemesterForPeriod_(targetEmail, toTahun, toSemester);
+
+  const sh = ensureJadwalSheet_();
+  const tIdx = ensureJadwalSchemaAcademic_();
+  const now = new Date();
+  source.forEach(function(j){
+    sh.appendRow([targetEmail, toSemester, j.hari, j.kelas, j.mapel, j.jam_mulai, j.jam_selesai, now]);
+    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(toTahun);
+  });
+  return source.length;
+}
+
+/**
+ * resetJadwalSemesterForPeriod_(email, tahun, semester)
+ * Hapus semua entri jadwal (hari/jam) milik satu guru untuk satu periode.
+ * Return: jumlah baris yang dihapus.
+ */
+function resetJadwalSemesterForPeriod_(email, tahun, semester){
+  const targetEmail = String(email || '').toLowerCase().trim();
+  const targetTahun = String(tahun || '').trim();
+  const targetSem = String(semester || '').trim();
+
+  const sh = getJadwalSheet_();
+  if (!sh) return 0;
+  const tIdx = ensureJadwalSchemaAcademic_();
+  const values = sh.getDataRange().getValues();
+  let deleted = 0;
+  for (let i = values.length; i >= 2; i--) {
+    const r = values[i - 1];
+    if (String(r[0] || '').toLowerCase().trim() !== targetEmail) continue;
+    if (String(r[1] || '').trim() !== targetSem) continue;
+    const rowTahun = String(r[tIdx] || '').trim();
+    if (rowTahun && rowTahun !== targetTahun) continue;
+    sh.deleteRow(i);
+    deleted++;
+  }
+  return deleted;
+}
+
 function isJamBentrok_(data, existing){
 
   const startNew = toMinutes_(data.jam_mulai);
@@ -152,10 +295,12 @@ function saveJadwalSemester(data){
   }
 
   const sh = ensureJadwalSheet_();
+  const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
 
   const setting = getSetting();
   const semesterAktif = setting.semester || '';
+  const tahunAktif = setting.tahun_pelajaran || '';
   const email = auth.email;
 
   if(!data.hari || !data.kelas || !data.jam_mulai || !data.jam_selesai){
@@ -171,9 +316,11 @@ function saveJadwalSemester(data){
     const rowEmail = String(values[i][0]).toLowerCase();
     const rowSemester = values[i][1];
     const rowHari = values[i][2];
+    const rowTahun = String(values[i][tIdx] || '').trim();
 
     if(rowEmail !== email) continue;
     if(rowSemester !== semesterAktif) continue;
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
     if(rowHari !== data.hari) continue;
 
     const existing = {
@@ -201,6 +348,7 @@ function saveJadwalSemester(data){
     data.jam_selesai,
     new Date()
   ]);
+  sh.getRange(sh.getLastRow(), tIdx + 1).setValue(tahunAktif);
 
   logAudit(
     'ADD_JADWAL',
@@ -253,8 +401,11 @@ function saveBulkJadwalSemester(list){
   });
 
   const sh = ensureJadwalSheet_();
+  const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
-  const semesterAktif = getSetting().semester || '';
+  const settingBulk = getSetting();
+  const semesterAktif = settingBulk.semester || '';
+  const tahunAktif = settingBulk.tahun_pelajaran || '';
   const email = auth.email;
 
   for(let i=0;i<list.length;i++){
@@ -277,6 +428,8 @@ function saveBulkJadwalSemester(list){
 
     if(String(values[i][0]).toLowerCase() !== email) continue;
     if(values[i][1] !== semesterAktif) continue;
+    const rowTahunBulk = String(values[i][tIdx] || '').trim();
+    if(rowTahunBulk && tahunAktif && rowTahunBulk !== tahunAktif) continue;
 
     for(let item of list){
 
@@ -299,11 +452,12 @@ function saveBulkJadwalSemester(list){
       semesterAktif,
       item.hari,
       item.kelas,
-      item.mapel || getSetting().mata_pelajaran || '',
+      item.mapel || settingBulk.mata_pelajaran || '',
       normalizeJam_(item.jam_mulai),
       normalizeJam_(item.jam_selesai),
       new Date()
     ]);
+    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(tahunAktif);
   });
 
   logAudit('ADD_BULK_JADWAL', email, 'Total: ' + list.length);
@@ -321,9 +475,11 @@ function getJadwalMengajar(){
 
   const setting = getSetting();
   const semesterAktif = String(setting.semester || '').trim();
+  const tahunAktif = String(setting.tahun_pelajaran || '').trim();
 
   const sh = getJadwalSheet_();
   if(!sh) return [];
+  const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
 
   let result = [];
@@ -332,18 +488,19 @@ function getJadwalMengajar(){
 
     const emailRow = String(values[i][0] || '').toLowerCase().trim();
     const semesterRow = String(values[i][1] || '').trim();
+    const tahunRow = String(values[i][tIdx] || '').trim();
 
-    if(emailRow === emailLogin && semesterRow === semesterAktif){
+    if(emailRow !== emailLogin) continue;
+    if(semesterRow !== semesterAktif) continue;
+    if(tahunRow && tahunAktif && tahunRow !== tahunAktif) continue;
 
-      result.push({
-        hari: values[i][2],
-        kelas: values[i][3],
-        mapel: values[i][4],
-        jam_mulai: formatJam(values[i][5]),
-        jam_selesai: formatJam(values[i][6])
-      });
-
-    }
+    result.push({
+      hari: values[i][2],
+      kelas: values[i][3],
+      mapel: values[i][4],
+      jam_mulai: formatJam(values[i][5]),
+      jam_selesai: formatJam(values[i][6])
+    });
   }
 
   return result;
@@ -398,17 +555,21 @@ function getDashboardJadwal(){
 
     if(!sh) return { _error: 'NO_SHEET' };
 
+    const tIdx = (typeof ensureJadwalSchemaAcademic_ === 'function') ? ensureJadwalSchemaAcademic_() : -1;
     const values = sh.getDataRange().getValues();
     if(values.length < 2) return {};
 
     const email = String(auth.email).toLowerCase().trim();
 
     var semesterAktif = '';
+    var tahunAktif = '';
     try {
       const setting = getSetting();
       semesterAktif = String(setting.semester || '').trim().toLowerCase();
+      tahunAktif = String(setting.tahun_pelajaran || '').trim();
     } catch(e) {
       semesterAktif = '';
+      tahunAktif = '';
     }
 
     let grouped = {};
@@ -422,6 +583,15 @@ function getDashboardJadwal(){
         if(rowSemester !== semesterAktif) continue;
       }
 
+      // Baris lama (sebelum migrasi tahun_pelajaran) tidak punya nilai di
+      // kolom ini — dianggap cocok ke periode manapun. Baris baru yang
+      // sudah punya tahun_pelajaran WAJIB cocok dengan periode aktif,
+      // supaya jadwal tahun ajaran lama tidak nyangkut ke tahun baru.
+      if(tIdx > -1 && tahunAktif){
+        const rowTahun = String(values[i][tIdx] || '').trim();
+        if(rowTahun && rowTahun !== tahunAktif) continue;
+      }
+
       const hari = String(values[i][2] || '').trim().toUpperCase();
       if(!hari) continue;
       if(!grouped[hari]) grouped[hari] = [];
@@ -432,25 +602,6 @@ function getDashboardJadwal(){
         jam_mulai:   normalizeJam_(values[i][5]) || '--:--',
         jam_selesai: normalizeJam_(values[i][6]) || '--:--'
       });
-    }
-
-    // Fallback: semester filter returned nothing — tampilkan semua jadwal user ini
-    if(Object.keys(grouped).length === 0){
-      for(let i = 1; i < values.length; i++){
-        const rowEmail = String(values[i][0] || '').toLowerCase().trim();
-        if(rowEmail !== email) continue;
-
-        const hari = String(values[i][2] || '').trim().toUpperCase();
-        if(!hari) continue;
-        if(!grouped[hari]) grouped[hari] = [];
-
-        grouped[hari].push({
-          kelas:       String(values[i][3] || ''),
-          mapel:       String(values[i][4] || ''),
-          jam_mulai:   normalizeJam_(values[i][5]) || '--:--',
-          jam_selesai: normalizeJam_(values[i][6]) || '--:--'
-        });
-      }
     }
 
     return grouped;
@@ -468,7 +619,10 @@ function previewBentrokJadwal(data){
   const sh = getJadwalSheet_();
   if(!sh) return { bentrok:false };
 
-  const semesterAktif = getSetting().semester || '';
+  const tIdxPreview = ensureJadwalSchemaAcademic_();
+  const settingPreview = getSetting();
+  const semesterAktif = settingPreview.semester || '';
+  const tahunAktifPreview = settingPreview.tahun_pelajaran || '';
   const values = sh.getDataRange().getValues();
 
   const startNew = toMinutes_(data.jam_mulai);
@@ -478,6 +632,8 @@ function previewBentrokJadwal(data){
 
     if(String(values[i][0]).toLowerCase().trim() !== auth.email) continue;
     if(values[i][1] !== semesterAktif) continue;
+    const rowTahunPreview = String(values[i][tIdxPreview] || '').trim();
+    if(rowTahunPreview && tahunAktifPreview && rowTahunPreview !== tahunAktifPreview) continue;
     if(values[i][2] !== data.hari) continue;
 
     const startOld = toMinutes_(values[i][5]);
@@ -504,10 +660,13 @@ function getJadwalForSetting(){
   if(!auth || !auth.email) return [];
 
   const emailLogin = String(auth.email).toLowerCase().trim();
-  const semesterAktif = String(getSetting().semester || '').trim();
+  const settingForList = getSetting();
+  const semesterAktif = String(settingForList.semester || '').trim();
+  const tahunAktif = String(settingForList.tahun_pelajaran || '').trim();
 
   const sh = getJadwalSheet_();
   if(!sh) return [];
+  const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
 
   let result = [];
@@ -516,19 +675,20 @@ function getJadwalForSetting(){
 
     const emailRow = String(values[i][0] || '').toLowerCase().trim();
     const semesterRow = String(values[i][1] || '').trim();
+    const tahunRow = String(values[i][tIdx] || '').trim();
 
-    if(emailRow === emailLogin && semesterRow === semesterAktif){
+    if(emailRow !== emailLogin) continue;
+    if(semesterRow !== semesterAktif) continue;
+    if(tahunRow && tahunAktif && tahunRow !== tahunAktif) continue;
 
-      result.push({
-        row: i+1,
-        hari: values[i][2],
-        kelas: values[i][3],
-        mapel: values[i][4],
-        jam_mulai: formatJam(values[i][5]),
-        jam_selesai: formatJam(values[i][6])
-      });
-
-    }
+    result.push({
+      row: i+1,
+      hari: values[i][2],
+      kelas: values[i][3],
+      mapel: values[i][4],
+      jam_mulai: formatJam(values[i][5]),
+      jam_selesai: formatJam(values[i][6])
+    });
   }
 
   return result;
@@ -561,7 +721,10 @@ function updateJadwalSemester(row,data){
 
   const auth = getAuth();
   const sh = ensureJadwalSheet_();
-  const semesterAktif = getSetting().semester || '';
+  const tIdxUpd = ensureJadwalSchemaAcademic_();
+  const settingUpd = getSetting();
+  const semesterAktif = settingUpd.semester || '';
+  const tahunAktifUpd = settingUpd.tahun_pelajaran || '';
 
   if(sh.getRange(row,1).getValue() !== auth.email){
     throw new Error('AKSES_DITOLAK');
@@ -577,6 +740,8 @@ function updateJadwalSemester(row,data){
     if(i+1 === row) continue;
     if(String(values[i][0]).toLowerCase() !== auth.email) continue;
     if(values[i][1] !== semesterAktif) continue;
+    const rowTahunUpd = String(values[i][tIdxUpd] || '').trim();
+    if(rowTahunUpd && tahunAktifUpd && rowTahunUpd !== tahunAktifUpd) continue;
     if(values[i][2] !== data.hari) continue;
 
     const startOld = toMinutes_(values[i][5]);

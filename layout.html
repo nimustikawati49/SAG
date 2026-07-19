@@ -1039,7 +1039,6 @@
       <button class="ghost" onclick="openAcademicModal('semester')">Semester</button>
       <button class="ghost" onclick="openAcademicModal('mapel')">Mata Pelajaran Diampu</button>
       <button class="ghost" onclick="openAcademicModal('kelas')">Kelas Diampu</button>
-      <button class="ghost" onclick="resetJadwalMengajarUI()" title="Hapus kelas & mapel diampu di periode aktif, mulai isi ulang dari kosong">🔄 Reset Jadwal</button>
       <button class="ghost superadmin-only" style="display:none" onclick="openAcademicModal('clone')" title="Salin jadwal mengajar SEMUA guru dari satu tahun ke tahun lain (khusus SuperAdmin)">Clone Tahun Pelajaran (Semua Guru)</button>
       <button class="ghost" onclick="openAcademicModal('promosi')">Promosi Siswa</button>
       <button class="ghost" onclick="openAcademicModal('alumni')">Alumni</button>
@@ -1249,6 +1248,7 @@
 
 <div class="action-row">
   <button class="btn btn-primary" onclick="saveJadwalUI()">💾 Simpan Jadwal</button>
+  <button class="ghost" onclick="resetJadwalMengajarUI()" title="Hapus jadwal (hari/jam) dan kelas & mapel diampu di periode aktif, mulai isi ulang dari kosong">🔄 Reset Jadwal</button>
 </div>
 
 <div id="jadwalList"></div>

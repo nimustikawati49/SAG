@@ -846,17 +846,19 @@ function openJadwalTransitionModal_(tahun, semester, info){
 
   const kelasTxt = (info.kelas || []).join(', ') || '-';
   const mapelTxt = (info.mapel || []).join(', ') || '-';
+  const jadwalCount = info.jadwal_count || 0;
   const prev = info.previous_period || {};
 
   t.textContent = 'Jadwal Mengajar Periode Baru';
   p.style.width = '90%';
   b.innerHTML =
-    '<p style="margin:0 0 10px">Anda pindah ke <b>' + _escSetting_(tahun) + ' | ' + _escSetting_(semester) + '</b> dan belum punya jadwal mengajar (kelas &amp; mapel diampu) di periode ini.</p>' +
+    '<p style="margin:0 0 10px">Anda pindah ke <b>' + _escSetting_(tahun) + ' | ' + _escSetting_(semester) + '</b> dan belum punya jadwal mengajar (kelas &amp; mapel diampu, maupun jadwal hari/jam) di periode ini.</p>' +
     '<p style="margin:0 0 6px">Jadwal terakhir Anda di <b>' + _escSetting_(prev.tahun_pelajaran || '-') + ' | ' + _escSetting_(prev.semester || '-') + '</b>:</p>' +
     '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:13px;margin-bottom:10px">' +
       '<b>Kelas:</b> ' + _escSetting_(kelasTxt) + '<br><b>Mapel:</b> ' + _escSetting_(mapelTxt) +
+      '<br><b>Jadwal Hari/Jam:</b> ' + jadwalCount + ' entri' +
     '</div>' +
-    '<p class="muted" style="font-size:12px">Pilih salah satu: lanjutkan jadwal ini ke periode baru, atau mulai baru dari kosong.</p>';
+    '<p class="muted" style="font-size:12px">Pilih salah satu: lanjutkan jadwal ini (kelas, mapel, & hari/jam) ke periode baru, atau mulai baru dari kosong.</p>';
   a.innerHTML =
     '<button class="ghost" onclick="_resetJadwalTransition_()">🆕 Mulai Baru</button>' +
     '<button onclick="_continueJadwalTransition_(\'' + _escSetting_(tahun) + '\',\'' + _escSetting_(semester) + '\',\'' + _escSetting_(prev.tahun_pelajaran || '') + '\',\'' + _escSetting_(prev.semester || '') + '\')">🔁 Lanjutkan Jadwal Sebelumnya</button>';
@@ -872,7 +874,7 @@ function _continueJadwalTransition_(toTahun, toSemester, fromTahun, fromSemester
       endProgress();
       closeAcademicModal();
       refreshAcademicQuickInfo();
-      showAcademicToast('✅ Jadwal mengajar dilanjutkan (' + (res.copied || 0) + ' kombinasi kelas/mapel)', 'success');
+      showAcademicToast('✅ Jadwal mengajar dilanjutkan (' + (res.copied || 0) + ' kombinasi kelas/mapel, ' + (res.copied_jadwal || 0) + ' entri hari/jam)', 'success');
     })
     .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal melanjutkan jadwal: ' + err.message, 'error'); })
     .continueGuruMengajarToPeriod({ from_tahun: fromTahun, from_semester: fromSemester, to_tahun: toTahun, to_semester: toSemester });
@@ -887,14 +889,15 @@ function resetJadwalMengajarUI(){
   const tahun = (window._settingCache && window._settingCache.tahun_pelajaran) || (document.getElementById('set_tahun') || {}).value || '';
   const semester = (window._settingCache && window._settingCache.semester) || (document.getElementById('set_semester') || {}).value || '';
   if(!tahun || !semester) return showAcademicToast('Tahun/semester aktif belum diketahui', 'warning');
-  if(!confirm('Reset jadwal mengajar (kelas & mata pelajaran diampu) untuk periode ' + tahun + ' | ' + semester + '?\nJurnal/absensi yang sudah tersimpan TIDAK terhapus.')) return;
+  if(!confirm('Reset jadwal mengajar (Kelas & Mapel Diampu + jadwal hari/jam) untuk periode ' + tahun + ' | ' + semester + '?\nJurnal/absensi yang sudah tersimpan TIDAK terhapus.')) return;
 
   startProgress();
   google.script.run
     .withSuccessHandler(function(res){
       endProgress();
       refreshAcademicQuickInfo();
-      showAcademicToast('✅ Jadwal mengajar direset (' + (res.deleted || 0) + ' baris dihapus)', 'success');
+      if(typeof loadJadwalSetting === 'function') loadJadwalSetting();
+      showAcademicToast('✅ Jadwal direset (' + (res.deleted || 0) + ' kombinasi kelas/mapel, ' + (res.deleted_jadwal || 0) + ' entri hari/jam)', 'success');
     })
     .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal reset jadwal: ' + err.message, 'error'); })
     .resetGuruMengajarForPeriod(tahun, semester);
