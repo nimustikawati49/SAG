@@ -328,6 +328,7 @@ function getDashboardAllData() {
             jam_selesai: normalizeJam_(_jv[i][_cSelesai]) || '--:--'
           });
         }
+        if (typeof _sortJadwalGrouped_ === 'function') jadwal = _sortJadwalGrouped_(jadwal);
       }
     }
   } catch(e) {

@@ -270,14 +270,14 @@ function saveJadwalUI(){
     return;
   }
 
-  // 🔒 disable tombol + animasi loading
+  // 🔒 disable tombol + animasi loading — tahap 1: cek bentrok
   if(btn){
     btn.disabled = true;
     btn.classList.add("btn-saving");
-    btn.innerText = "⏳ Menyimpan...";
+    btn.innerText = "⏳ Memeriksa jadwal...";
   }
 
-  startProgress(); // ✅ aktifkan progress bar
+  startProgress(); // ✅ aktifkan progress bar (top bar + widget pojok kanan bawah)
 
   google.script.run
     .withFailureHandler(err=>{
@@ -302,6 +302,9 @@ function saveJadwalUI(){
         showToast('⚠️ Jadwal bentrok dengan: ' + res.konflik.kelas + ' (' + res.konflik.jam + ')', 'warning', 6000);
         return;
       }
+
+      // 🔒 tahap 2: simpan ke sheet
+      if(btn) btn.innerText = "⏳ Menyimpan...";
 
       google.script.run
         .withFailureHandler(err=>{

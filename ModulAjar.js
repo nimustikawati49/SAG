@@ -407,5 +407,5 @@ function getJadwalWithId() {
     });
   }
 
-  return result;
+  return (typeof _sortJadwalFlat_ === 'function') ? _sortJadwalFlat_(result) : result;
 }

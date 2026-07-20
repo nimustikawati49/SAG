@@ -106,6 +106,39 @@ function toMinutes_(val){
   return (Number(parts[0]) * 60) + Number(parts[1]);
 }
 
+var HARI_ORDER_ = { SENIN: 0, SELASA: 1, RABU: 2, KAMIS: 3, JUMAT: 4, SABTU: 5 };
+
+/**
+ * _sortJadwalFlat_(list)
+ * Urutkan daftar jadwal (array flat, tiap item punya .hari & .jam_mulai)
+ * berdasarkan urutan hari (SENIN..SABTU) lalu jam mulai — supaya jadwal
+ * yang baru diinput langsung tampil di posisi yang benar, bukan cuma
+ * menempel di akhir sesuai urutan input.
+ */
+function _sortJadwalFlat_(list){
+  return (list || []).slice().sort(function(a, b){
+    var ha = HARI_ORDER_[String(a.hari || '').toUpperCase()];
+    var hb = HARI_ORDER_[String(b.hari || '').toUpperCase()];
+    if (ha === undefined) ha = 99;
+    if (hb === undefined) hb = 99;
+    if (ha !== hb) return ha - hb;
+    return toMinutes_(a.jam_mulai) - toMinutes_(b.jam_mulai);
+  });
+}
+
+/**
+ * _sortJadwalGrouped_(grouped)
+ * Urutkan tiap array jadwal per-hari (object {HARI: [...]}) berdasarkan
+ * jam mulai — dipakai oleh hasil yang sudah dikelompokkan per hari
+ * (mis. getDashboardJadwal, getDashboardAllData).
+ */
+function _sortJadwalGrouped_(grouped){
+  Object.keys(grouped || {}).forEach(function(h){
+    grouped[h].sort(function(a, b){ return toMinutes_(a.jam_mulai) - toMinutes_(b.jam_mulai); });
+  });
+  return grouped;
+}
+
 /**
  * ensureJadwalSchemaAcademic_()
  * JADWAL_SEMESTER awalnya hanya dikunci per (email, semester) — TANPA
@@ -503,7 +536,7 @@ function getJadwalMengajar(){
     });
   }
 
-  return result;
+  return _sortJadwalFlat_(result);
 }
 
 function deleteJadwalSemester(id){
@@ -604,7 +637,7 @@ function getDashboardJadwal(){
       });
     }
 
-    return grouped;
+    return _sortJadwalGrouped_(grouped);
 
   } catch(e) {
     return { _error: e.message || 'UNKNOWN_ERROR' };
@@ -691,7 +724,7 @@ function getJadwalForSetting(){
     });
   }
 
-  return result;
+  return _sortJadwalFlat_(result);
 }
 
 function formatJam(value){
