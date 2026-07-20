@@ -255,7 +255,7 @@ function loadJadwalDashboard_(){
 
 function saveJadwalUI(){
 
-  const btn = document.querySelector('#setting button.btn.btn-primary');
+  const btn = document.getElementById('btnSimpanJadwal');
 
   const data = {
     hari: jadwal_hari.value,
@@ -317,30 +317,38 @@ function saveJadwalUI(){
 
           endProgress(); // ✅ progress selesai
 
-          // 🎉 ANIMASI SUKSES
-          const list = document.getElementById("jadwalList");
-          if(list){
-            list.classList.add("save-success");
-            setTimeout(()=>{
-              list.classList.remove("save-success");
-            },600);
-          }
+          // ✅ Notifikasi sukses eksplisit — sebelumnya TIDAK ADA toast sama
+          // sekali di sini, cuma animasi CSS halus yang gampang terlewat.
+          showToast('✅ Jadwal berhasil disimpan', 'success');
 
-          // 🔄 reset form
-          jadwal_kelas.value = '';
-          jadwal_mapel.value = '';
-          jadwal_mulai.value = '';
-          jadwal_selesai.value = '';
-
-          // 🔄 reload data
-          loadJadwalSetting();
-          loadJadwalMengajar();
-
-          // 🔓 aktifkan tombol kembali
+          // 🔓 aktifkan tombol kembali (selalu jalan meski render di bawah error)
           if(btn){
             btn.disabled = false;
             btn.classList.remove("btn-saving");
             btn.innerText = "💾 Simpan Jadwal";
+          }
+
+          try {
+            // 🎉 ANIMASI SUKSES
+            const list = document.getElementById("jadwalList");
+            if(list){
+              list.classList.add("save-success");
+              setTimeout(()=>{
+                list.classList.remove("save-success");
+              },600);
+            }
+
+            // 🔄 reset form
+            jadwal_kelas.value = '';
+            jadwal_mapel.value = '';
+            jadwal_mulai.value = '';
+            jadwal_selesai.value = '';
+
+            // 🔄 reload data
+            loadJadwalSetting();
+            loadJadwalMengajar();
+          } catch(renderErr){
+            console.error('[JADWAL] post-save refresh gagal:', renderErr);
           }
 
         })
