@@ -300,31 +300,33 @@ function getDashboardAllData() {
         var _cMapel    = _colMap['mapel']       !== undefined ? _colMap['mapel']       : 4;
         var _cMulai    = _colMap['jam_mulai']   !== undefined ? _colMap['jam_mulai']   : 5;
         var _cSelesai  = _colMap['jam_selesai'] !== undefined ? _colMap['jam_selesai'] : 6;
+        var _cTahun    = _colMap['tahun_pelajaran'] !== undefined ? _colMap['tahun_pelajaran'] : -1;
 
         var _semAktif = String(setting.semester || '').trim().toLowerCase();
+        var _tahunAktif = String(setting.tahun_pelajaran || '').trim();
 
-        function _buildJadwal_(rows, filterSem) {
-          var result = {};
-          for (var i = 1; i < rows.length; i++) {
-            if (String(rows[i][_cEmail] || '').toLowerCase().trim() !== _email) continue;
-            if (filterSem && String(rows[i][_cSem] || '').trim().toLowerCase() !== _semAktif) continue;
-            var hari = String(rows[i][_cHari] || '').trim().toUpperCase();
-            if (!hari) continue;
-            if (!result[hari]) result[hari] = [];
-            result[hari].push({
-              kelas      : String(rows[i][_cKelas]   || ''),
-              mapel      : String(rows[i][_cMapel]   || ''),
-              jam_mulai  : normalizeJam_(rows[i][_cMulai])   || '--:--',
-              jam_selesai: normalizeJam_(rows[i][_cSelesai]) || '--:--'
-            });
+        // TIDAK ADA fallback "tampilkan semua kalau kosong" — sengaja dihapus.
+        // Fallback itu dulu bikin jadwal PERIODE LAMA nyangkut tampil lagi
+        // setiap kali periode aktif memang benar-benar kosong (mis. baru
+        // saja di-reset), padahal dashboard harus menunjukkan kosong.
+        for (var i = 1; i < _jv.length; i++) {
+          if (String(_jv[i][_cEmail] || '').toLowerCase().trim() !== _email) continue;
+          if (_semAktif && String(_jv[i][_cSem] || '').trim().toLowerCase() !== _semAktif) continue;
+          if (_cTahun !== -1 && _tahunAktif) {
+            var _rowTahun = String(_jv[i][_cTahun] || '').trim();
+            // Baris lama sebelum migrasi tahun_pelajaran (kosong) dianggap
+            // cocok ke periode manapun — baris baru WAJIB cocok tahunnya.
+            if (_rowTahun && _rowTahun !== _tahunAktif) continue;
           }
-          return result;
-        }
-
-        jadwal = _buildJadwal_(_jv, !!_semAktif);
-        // Fallback: jika semester filter tidak menghasilkan data, tampilkan semua
-        if (Object.keys(jadwal).length === 0) {
-          jadwal = _buildJadwal_(_jv, false);
+          var hari = String(_jv[i][_cHari] || '').trim().toUpperCase();
+          if (!hari) continue;
+          if (!jadwal[hari]) jadwal[hari] = [];
+          jadwal[hari].push({
+            kelas      : String(_jv[i][_cKelas]   || ''),
+            mapel      : String(_jv[i][_cMapel]   || ''),
+            jam_mulai  : normalizeJam_(_jv[i][_cMulai])   || '--:--',
+            jam_selesai: normalizeJam_(_jv[i][_cSelesai]) || '--:--'
+          });
         }
       }
     }

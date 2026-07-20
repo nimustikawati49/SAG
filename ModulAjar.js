@@ -376,17 +376,27 @@ function getJadwalWithId() {
   const emailLogin    = String(auth.email).toLowerCase().trim();
   const setting       = getSetting();
   const semesterAktif = String(setting.semester || '').trim().toLowerCase();
+  const tahunAktif     = String(setting.tahun_pelajaran || '').trim();
   const sh            = getJadwalSheet_();
   if (!sh) return [];
 
+  const tIdx = (typeof ensureJadwalSchemaAcademic_ === 'function') ? ensureJadwalSchemaAcademic_() : -1;
   const values = sh.getDataRange().getValues();
   const result = [];
 
+  // TIDAK ADA fallback "tampilkan semua kalau kosong" — sengaja dihapus,
+  // sama seperti getDashboardAllData()/getJadwalMengajar(): fallback itu
+  // bikin jadwal periode LAMA nyangkut tampil lagi tiap kali periode aktif
+  // memang benar-benar kosong (mis. baru saja di-reset).
   for (let i = 1; i < values.length; i++) {
     const emailRow    = String(values[i][0] || '').toLowerCase().trim();
     const semesterRow = String(values[i][1] || '').trim().toLowerCase();
     if (emailRow !== emailLogin) continue;
     if (semesterAktif && semesterRow !== semesterAktif) continue;
+    if (tIdx > -1 && tahunAktif) {
+      const rowTahun = String(values[i][tIdx] || '').trim();
+      if (rowTahun && rowTahun !== tahunAktif) continue;
+    }
     result.push({
       id:          i + 1,
       hari:        String(values[i][2] || '').trim().toUpperCase(),
@@ -395,22 +405,6 @@ function getJadwalWithId() {
       jam_mulai:   formatJam(values[i][5]),
       jam_selesai: formatJam(values[i][6])
     });
-  }
-
-  // Fallback: semester filter returned nothing, show all jadwal for this user
-  if (semesterAktif && result.length === 0) {
-    for (let i = 1; i < values.length; i++) {
-      const emailRow = String(values[i][0] || '').toLowerCase().trim();
-      if (emailRow !== emailLogin) continue;
-      result.push({
-        id:          i + 1,
-        hari:        String(values[i][2] || '').trim().toUpperCase(),
-        kelas:       values[i][3],
-        mapel:       values[i][4],
-        jam_mulai:   formatJam(values[i][5]),
-        jam_selesai: formatJam(values[i][6])
-      });
-    }
   }
 
   return result;
