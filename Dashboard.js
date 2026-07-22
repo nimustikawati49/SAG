@@ -3,16 +3,13 @@
  * Dipecah dari Code.js untuk kemudahan pemeliharaan.
  */
 
-function getDashboardV4Data(dari, sampai){
-
-  ensureAcademicSchema_();
-
-  const auth = getAuth();
-  const email = auth.email;
-  const period = getUserAcademicPeriod(email);
-
-  const jurnal = sheet('JURNAL').getDataRange().getValues();
-  const absen  = sheet('ABSENSI').getDataRange().getValues();
+/**
+ * _computeV4FromRows_(jurnal, absen, email, period, dari, sampai)
+ * Inti perhitungan V4 (rekap jurnal+absensi per kelas), dipisah dari
+ * getDashboardV4Data() supaya baris JURNAL/ABSENSI yang SUDAH dibaca oleh
+ * getDashboardAllData() bisa dipakai ulang di sini tanpa fetch sheet lagi.
+ */
+function _computeV4FromRows_(jurnal, absen, email, period, dari, sampai){
 
   if(jurnal.length < 2){
     return emptyDashboard();
@@ -117,6 +114,16 @@ function getDashboardV4Data(dari, sampai){
   };
 }
 
+function getDashboardV4Data(dari, sampai){
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  const email = auth.email;
+  const period = getUserAcademicPeriod(email);
+  const jurnal = sheet('JURNAL').getDataRange().getValues();
+  const absen  = sheet('ABSENSI').getDataRange().getValues();
+  return _computeV4FromRows_(jurnal, absen, email, period, dari, sampai);
+}
+
 function emptyDashboard(){
   return {
     totalJurnal:0,
@@ -152,25 +159,45 @@ function buildInsightV4(ranking, risiko){
   return arr;
 }
 
-function getDashboardMetaData(){
+/**
+ * _countSiswaPerKelasBatch_(tahun, semester, kelasList)
+ * Hitung jumlah siswa aktif per kelas dalam SATU pembacaan RiwayatKelas,
+ * bukan satu pembacaan per kelas (dulu dipanggil lewat
+ * getSiswaAktifByKelasForUser_ di dalam loop — untuk guru dengan 6 kelas
+ * itu = 6 x 3 pembacaan sheet penuh, jadi bottleneck utama dashboard).
+ */
+function _countSiswaPerKelasBatch_(tahun, semester, kelasList){
+  const counts = {};
+  kelasList.forEach(function(k){ counts[k] = 0; });
+  if (!kelasList.length) return counts;
 
-  ensureAcademicSchema_();
+  const targetTahun = String(tahun || '');
+  const targetSem = String(semester || '').toLowerCase().trim();
+  const kelasSet = {};
+  kelasList.forEach(function(k){ kelasSet[String(k).trim()] = true; });
 
-  const auth = getAuth();
-  if(!auth || !auth.email){
-    return {
-      totalKelas:0,
-      totalSiswa:0,
-      jadwal:'-',
-      firstDate:'',
-      lastDate:''
-    };
+  const rows = sheet('RiwayatKelas').getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[1] || '') !== targetTahun) continue;
+    if (String(r[2] || '').toLowerCase().trim() !== targetSem) continue;
+    const kelas = String(r[4] || '').trim();
+    if (!kelasSet[kelas]) continue;
+    const status = String(r[5] || '').toUpperCase();
+    if (status === 'ALUMNI' || status === 'MUTASI_KELUAR') continue;
+    counts[kelas] = (counts[kelas] || 0) + 1;
   }
+  return counts;
+}
 
-  const email = String(auth.email).toLowerCase().trim();
-  const period = getUserAcademicPeriod(email);
-  const shJurnal = sheet('JURNAL');
-  const shSiswa  = sheet('SISWA');
+/**
+ * _computeDashboardMeta_(email, period, jurnalRows)
+ * Inti getDashboardMetaData(), menerima baris JURNAL yang sudah dibaca
+ * supaya getDashboardAllData() tidak perlu fetch sheet JURNAL dua kali
+ * (dulu: sekali di sini, sekali lagi di getDashboardV4Data).
+ */
+function _computeDashboardMeta_(email, period, jurnalRows){
+  const shSiswa = sheet('SISWA');
 
   let totalKelas = 0;
   let totalSiswa = 0;
@@ -202,25 +229,23 @@ function getDashboardMetaData(){
     const kelasAktif = getKelasDiampuAktifForUser_(email);
     if (kelasAktif.length) {
       totalKelas = kelasAktif.length;
+      const counts = _countSiswaPerKelasBatch_(period.tahun_pelajaran, period.semester, kelasAktif);
       let sum = 0;
-      kelasAktif.forEach(function(k) {
-        sum += getSiswaAktifByKelasForUser_(k, email).length;
-      });
+      kelasAktif.forEach(function(k) { sum += (counts[k] || 0); });
       totalSiswa = sum;
     }
   } catch(e) {}
 
-  if(shJurnal){
-    const data = shJurnal.getDataRange().getValues();
+  if(jurnalRows && jurnalRows.length){
     const tanggalList = [];
 
-    for(let i=1;i<data.length;i++){
-      const owner = String(data[i][12] || '').toLowerCase().trim();
+    for(let i=1;i<jurnalRows.length;i++){
+      const owner = String(jurnalRows[i][12] || '').toLowerCase().trim();
       if(owner !== email) continue;
-      if(period.tahun_pelajaran && data[i][18] && String(data[i][18]) !== String(period.tahun_pelajaran)) continue;
-      if(period.semester && data[i][13] && String(data[i][13]).toLowerCase().trim() !== String(period.semester).toLowerCase().trim()) continue;
+      if(period.tahun_pelajaran && jurnalRows[i][18] && String(jurnalRows[i][18]) !== String(period.tahun_pelajaran)) continue;
+      if(period.semester && jurnalRows[i][13] && String(jurnalRows[i][13]).toLowerCase().trim() !== String(period.semester).toLowerCase().trim()) continue;
 
-      const tgl = data[i][1];
+      const tgl = jurnalRows[i][1];
       if(tgl){
         tanggalList.push(new Date(tgl));
       }
@@ -254,6 +279,28 @@ function getDashboardMetaData(){
   };
 }
 
+function getDashboardMetaData(){
+  ensureAcademicSchema_();
+
+  const auth = getAuth();
+  if(!auth || !auth.email){
+    return {
+      totalKelas:0,
+      totalSiswa:0,
+      jadwal:'-',
+      firstDate:'',
+      lastDate:''
+    };
+  }
+
+  const email = String(auth.email).toLowerCase().trim();
+  const period = getUserAcademicPeriod(email);
+  const shJurnal = sheet('JURNAL');
+  const jurnalRows = shJurnal ? shJurnal.getDataRange().getValues() : [];
+
+  return _computeDashboardMeta_(email, period, jurnalRows);
+}
+
 /**
  * getDashboardAllData()
  * Menggabungkan getDashboardMetaData() + getDashboardV4Data() dalam SATU
@@ -273,14 +320,16 @@ function getDashboardAllData() {
     try { return JSON.parse(_hit); } catch(e) { /* parse failed — fall through */ }
   }
 
+  var _auth = getAuth();
+  var _email = String(_auth.email || '').toLowerCase().trim();
+  var _period = getUserAcademicPeriod(_email);
+
   var setting = {};
   try { setting = getSetting(); } catch(e) { logError_('getDashboardAllData/getSetting', e); }
 
   // Baca jadwal LANGSUNG — dengan column-header mapping agar tahan perubahan urutan kolom
   var jadwal = {};
   try {
-    var _auth = getAuth();
-    var _email = String(_auth.email || '').toLowerCase().trim();
     if (_email) {
       var _ss = getSpreadsheet_();
       var _shJ = _ss.getSheetByName('JADWAL_SEMESTER')
@@ -336,10 +385,25 @@ function getDashboardAllData() {
     jadwal = {};
   }
 
-  var meta   = getDashboardMetaData();
+  // Baca JURNAL & ABSENSI SEKALI di sini, dipakai ulang untuk meta + v4 —
+  // dulu masing-masing dibaca sendiri-sendiri lewat getDashboardMetaData()
+  // dan getDashboardV4Data(), jadi JURNAL kebaca 2x per load dashboard.
+  var _shJurnal = _email ? sheet('JURNAL') : null;
+  var _shAbsen  = _email ? sheet('ABSENSI') : null;
+  var jurnalRows = _shJurnal ? _shJurnal.getDataRange().getValues() : [];
+  var absenRows  = _shAbsen ? _shAbsen.getDataRange().getValues() : [];
+
+  var meta = { totalKelas: 0, totalSiswa: 0, jadwal: '-', firstDate: '', lastDate: '' };
+  try {
+    if (_email) meta = _computeDashboardMeta_(_email, _period, jurnalRows);
+  } catch(e) { logError_('getDashboardAllData/meta', e); }
+
   var dari   = meta.firstDate || '';
   var sampai = meta.lastDate  || '';
-  var v4     = getDashboardV4Data(dari, sampai);
+  var v4 = emptyDashboard();
+  try {
+    v4 = _computeV4FromRows_(jurnalRows, absenRows, _email, _period, dari, sampai);
+  } catch(e) { logError_('getDashboardAllData/v4', e); }
 
   var result = {
     setting     : setting,
