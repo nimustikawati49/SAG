@@ -92,6 +92,24 @@ function saveStorageModeConfig() {
   var el = document.getElementById('storageModeSelect');
   if (!el) return;
   var mode = el.value || 'central';
+
+  if (mode === 'per_guru') {
+    var ok = confirm(
+      '⚠️ PERINGATAN: Mode "per_guru" akan membuat SPREADSHEET PRIBADI BARU (kosong) ' +
+      'untuk setiap guru aktif saat mereka login berikutnya, dan SEMUA data operasional ' +
+      'mereka (Setting, Jurnal, Nilai, Jadwal, dst.) akan dialihkan ke spreadsheet baru itu ' +
+      '— BUKAN ke data lama di spreadsheet pusat.\n\n' +
+      'Data lama TIDAK hilang/terhapus, tapi guru tidak akan melihatnya lagi selama mode ini aktif ' +
+      '(seolah akun mereka kosong total).\n\n' +
+      'Jangan aktifkan mode ini kecuali kamu benar-benar siap memigrasikan setiap guru satu per satu. ' +
+      'Lanjutkan aktifkan "per_guru"?'
+    );
+    if (!ok) {
+      loadStorageModeConfig(); // kembalikan dropdown ke nilai tersimpan saat ini
+      return;
+    }
+  }
+
   google.script.run
     .withSuccessHandler(function(res) {
       if (typeof showToast === 'function') showToast('✅ Mode storage: ' + (res.mode || mode), 'success');

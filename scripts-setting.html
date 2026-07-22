@@ -980,7 +980,14 @@ function initDashboardAcademicFilter(){
   const semEl = document.getElementById('dashSemesterFilter');
   if(!tahunEl || !semEl) return;
 
-  google.script.run.withSuccessHandler(function(cfg){
+  google.script.run
+    .withFailureHandler(function(err){
+      console.error('[initDashboardAcademicFilter] getAcademicConfig gagal:', err && err.message);
+      tahunEl.innerHTML = '<option>-</option>';
+      semEl.innerHTML = '<option>Ganjil</option><option>Genap</option>';
+      if (typeof showToast === 'function') showToast('❌ Gagal memuat data akademik: ' + (err && err.message || 'error'), 'error', 6000);
+    })
+    .withSuccessHandler(function(cfg){
     const years = (cfg.years || []).map(function(y){ return y.tahun_pelajaran; })
       .filter(function(v,i,arr){ return v && arr.indexOf(v) === i; });
     const user = cfg.user || {};
