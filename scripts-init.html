@@ -1,4 +1,50 @@
 <script>
+/* =================================================================
+   SAFETY NET — modal overlay yang "nyangkut" terbuka
+   Beberapa modal full-screen (academicWizardModal, dll.) bisa saja
+   gagal tertutup di jalur error tertentu, atau tersisa terbuka dari
+   state DOM lama (mis. Chrome back-forward cache). Kalau itu terjadi,
+   overlay-nya menutupi SELURUH halaman dan menelan semua klik tanpa
+   error apa pun di console — termasuk klik tombol Simpan Jadwal.
+   Jaring pengaman ini memberi jalan keluar: tutup paksa semua modal
+   saat halaman dimuat, lalu izinkan Escape / klik area gelap di luar
+   kotak modal untuk menutupnya kapan saja.
+   ================================================================= */
+(function(){
+  var MODAL_IDS = [
+    'academicWizardModal','forwardArsipModal','appReleaseModal','updateApprovalModal',
+    'resourceMapModal','modalCetakNilai','editModulModal','assignModulModal',
+    'onboardingModal','broadcastModal','deploymentModal','catatanModal',
+    'modalRppJurnal','modalRppModul','modalRppResult','modalTahunBaru'
+  ];
+
+  function closeModal_(el){
+    if (el) el.style.display = 'none';
+  }
+
+  // Paksa semua modal tertutup saat script ini pertama kali jalan
+  // (page load / restore dari bfcache) — jaga-jaga ada yang nyangkut.
+  MODAL_IDS.forEach(function(id){ closeModal_(document.getElementById(id)); });
+
+  // Klik pada backdrop gelap (bukan kartu putih di dalamnya) menutup modal.
+  MODAL_IDS.forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', function(e){
+      if (e.target === el) closeModal_(el);
+    });
+  });
+
+  // Escape menutup modal manapun yang sedang terbuka.
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    MODAL_IDS.forEach(function(id){
+      var el = document.getElementById(id);
+      if (el && el.style.display && el.style.display !== 'none') closeModal_(el);
+    });
+  });
+})();
+
 function isMobile(){
   return window.innerWidth <= 768;
 }

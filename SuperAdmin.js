@@ -1312,6 +1312,24 @@ function saveResourceMapEntry(obj) {
  * dicatat ke logError_ dan sesi guru tetap lanjut memakai spreadsheet
  * central sebagai fallback (lihat getSpreadsheet_ di Code.js).
  */
+function _hasExistingCentralTeacherData_(email) {
+  var targetEmail = String(email || '').toLowerCase().trim();
+  if (!targetEmail) return false;
+  try {
+    var central = getCentralSpreadsheet_();
+    var sh = central.getSheetByName('SETTING');
+    if (!sh || sh.getLastRow() < 2) return false;
+    var values = sh.getDataRange().getValues();
+    var header = values[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+    var idxEmail = header.indexOf('email');
+    if (idxEmail === -1) idxEmail = 0;
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][idxEmail] || '').toLowerCase().trim() === targetEmail) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 function _autoProvisionUserSpreadsheet_(email) {
   if (typeof getStorageMode_ !== 'function' || getStorageMode_() !== 'per_guru') return null;
   var targetEmail = String(email || '').toLowerCase().trim();
@@ -1331,6 +1349,20 @@ function _autoProvisionUserSpreadsheet_(email) {
   } catch (e) {
     return null;
   }
+
+  // Jangan provisioning kalau guru ini SUDAH punya riwayat data di
+  // spreadsheet central (SETTING/JURNAL) — itu tandanya akun lama, bukan
+  // guru baru. Memindahkannya diam-diam ke spreadsheet pribadi yang
+  // kosong bikin seolah-olah semua datanya hilang (padahal masih ada di
+  // central, cuma tidak lagi dibaca dari sana). Auto-provision hanya
+  // untuk akun yang BENAR-BENAR belum pernah punya data central.
+  try {
+    if (_hasExistingCentralTeacherData_(targetEmail)) {
+      try { cache.put(cacheKey, '1', 21600); } catch (e2) {}
+      try { logError_('AUTO_PROVISION_SKIPPED_EXISTING_DATA', new Error(targetEmail + ' sudah punya data central, provisioning dilewati')); } catch (e3) {}
+      return null;
+    }
+  } catch (e) { /* kalau cek gagal, lebih aman skip provisioning daripada salah pindah */ return null; }
 
   var lock = LockService.getScriptLock();
   var gotLock = false;
