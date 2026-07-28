@@ -15,20 +15,18 @@ function loadDashboardSuperAdmin(){
       // loadUserManagement();
       // loadArsipSemuaUser();
       // loadStatistikGlobal();
-      // loadAuditLog();
 
       // ✅ panggil bertahap (AMAN)
       setTimeout(loadUserManagement, 100);
       setTimeout(loadArsipSemuaUser, 300);
       setTimeout(loadStatistikGlobal, 500);
-      setTimeout(loadAuditLog, 700);
       setTimeout(loadBackupTriggerStatus, 900);
       setTimeout(loadReminderTriggerStatus, 1000);
       setTimeout(loadSuperAdminEmailUI, 1100);
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadSchoolLicenseUI, 1500);
       setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
-    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);    setTimeout(loadRppTemplateConfig, 2600);
+    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);
       setTimeout(loadCentralRegistryOverview, 2700);
       setTimeout(loadStorageModeConfig, 2750);
       setTimeout(loadResourceMapEntries, 2775);

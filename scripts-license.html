@@ -1,78 +1,4 @@
 <script>
-function loadAuditLog(){
-  const body = document.getElementById('auditLogBody');
-  if(!body) return;
-  body.innerHTML = '<tr><td colspan="5" class="muted">⏳ Memuat audit log...</td></tr>';
-
-  // Gabung filter teks bebas + filter dropdown aksi
-  const filterText   = (document.getElementById('auditFilterText')   || {}).value || '';
-  const filterAction = (document.getElementById('auditFilterAction') || {}).value || '';
-  const combined = [filterText.trim(), filterAction.trim()].filter(Boolean).join(' ');
-
-  google.script.run
-    .withFailureHandler(function(err){
-      body.innerHTML = '<tr><td colspan="5" class="muted">❌ ' + (err.message||'Gagal') + '</td></tr>';
-    })
-    .withSuccessHandler(function(rows){
-      if(!rows || rows.length === 0){
-        body.innerHTML = '<tr><td colspan="5" class="muted">📭 Tidak ada entri yang cocok.</td></tr>';
-        return;
-      }
-      body.innerHTML = rows.map(function(r){
-        return '<tr>' +
-          '<td style="white-space:nowrap">' + r.waktu + '</td>' +
-          '<td class="left" style="font-size:12px">' + _escLic_(r.actor) + '</td>' +
-          '<td><span class="badge">' + _escLic_(r.action) + '</span></td>' +
-          '<td class="left" style="font-size:12px">' + _escLic_(r.target) + '</td>' +
-          '<td class="left" style="font-size:12px">' + _escLic_(r.detail) + '</td>' +
-          '</tr>';
-      }).join('');
-    })
-    .getAuditLog(300, combined);
-}
-
-var _auditFilterTimer_ = null;
-function _auditFilterDebounce_(){
-  clearTimeout(_auditFilterTimer_);
-  _auditFilterTimer_ = setTimeout(loadAuditLog, 400);
-}
-
-function _escLic_(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function _exportAuditLogExcel_(){
-  if(typeof XLSX === 'undefined'){ if(typeof showToast==='function') showToast('⏳ Library belum siap','warning'); return; }
-  google.script.run
-    .withSuccessHandler(function(rows){
-      if(!rows || rows.length === 0){ if(typeof showToast==='function') showToast('📭 Tidak ada data untuk diekspor','info'); return; }
-      var wb  = XLSX.utils.book_new();
-      var dat = [['Waktu','Aktor','Aksi','Target','Detail']];
-      rows.forEach(function(r){ dat.push([r.waktu, r.actor, r.action, r.target, r.detail]); });
-      var ws = XLSX.utils.aoa_to_sheet(dat);
-      ws['!cols'] = [20, 30, 25, 30, 40].map(function(w){ return {wch:w}; });
-      XLSX.utils.book_append_sheet(wb, ws, 'Audit Log');
-      var tgl = new Date().toLocaleDateString('id-ID').replace(/\//g,'-');
-      XLSX.writeFile(wb, 'AuditLog_SuperAdmin_' + tgl + '.xlsx');
-      if(typeof showToast==='function') showToast('✅ Audit Log berhasil diekspor','success');
-    })
-    .withFailureHandler(function(err){
-      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
-    })
-    .getAuditLogAll();
-}
-
-function _confirmClearAuditLog_(){
-  if(!confirm('Kosongkan seluruh Audit Log?\nTindakan ini tidak bisa dibatalkan.')) return;
-  google.script.run
-    .withSuccessHandler(function(res){
-      if(typeof showToast==='function') showToast('✅ ' + (res.deleted||0) + ' baris log dihapus','success');
-      loadAuditLog();
-    })
-    .withFailureHandler(function(err){
-      if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
-    })
-    .clearAuditLog();
-}
-
 let booted = false;
 
 function bootApp(){
@@ -443,7 +369,7 @@ function _applyTierUI_(tier) {
   var isLite = (tier === 'LITE');
 
   // Fitur yang disembunyikan untuk LITE
-  var proOnlyNavTabs = ['modulAjar', 'rpp'];
+  var proOnlyNavTabs = ['modulAjar'];
   proOnlyNavTabs.forEach(function(tabId) {
     var el = document.querySelector('#sbNav .sb-item[data-tab="' + tabId + '"]');
     if (el) el.style.setProperty('display', isLite ? 'none' : '', 'important');
@@ -511,7 +437,7 @@ function _openUpgradeModal_() {
         _upgradeFeatureRow_('✅','Jurnal mengajar unlimited') +
         _upgradeFeatureRow_('✅','Absensi siswa unlimited') +
         _upgradeFeatureRow_('✅','Input nilai + katrol nilai') +
-        _upgradeFeatureRow_('✅','Modul Ajar & RPP Generator') +
+        _upgradeFeatureRow_('✅','Modul Ajar') +
         _upgradeFeatureRow_('✅','Export Excel semua laporan') +
         _upgradeFeatureRow_('✅','Dashboard lengkap') +
       '</div>' +

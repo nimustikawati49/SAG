@@ -170,51 +170,6 @@ function backupSemesterToSheet(){
   return { status: true, backed: filtered.length, semester, tahun };
 }
 
-function getAuditLog(limit, filterText){
-  if(!isSuperAdmin()) throw new Error('Akses ditolak');
-  const sh = sheet('AUDIT_LOG');
-  if(!sh) return [];
-  const data = sh.getDataRange().getValues();
-  if(data.length < 2) return [];
-  const max = Number(limit) || 200;
-  const q = filterText ? String(filterText).toLowerCase().trim() : '';
-  let rows = data.slice(1);
-  if(q){
-    rows = rows.filter(r =>
-      String(r[1]||'').toLowerCase().includes(q) ||
-      String(r[2]||'').toLowerCase().includes(q) ||
-      String(r[3]||'').toLowerCase().includes(q) ||
-      String(r[4]||'').toLowerCase().includes(q)
-    );
-  }
-  return rows.slice(-max).reverse().map(r => ({
-    waktu  : r[0] ? Utilities.formatDate(new Date(r[0]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss') : '-',
-    actor  : r[1] || '-',
-    action : r[2] || '-',
-    target : r[3] || '-',
-    detail : r[4] || '-'
-  }));
-}
-
-/**
- * getAuditLogAll() — Semua baris AUDIT_LOG untuk export (SuperAdmin only)
- */
-function getAuditLogAll(){
-  if(!isSuperAdmin()) throw new Error('Akses ditolak');
-  const sh = sheet('AUDIT_LOG');
-  if(!sh) return [];
-  const data = sh.getDataRange().getValues();
-  if(data.length < 2) return [];
-  const tz = Session.getScriptTimeZone();
-  return data.slice(1).map(r => ({
-    waktu  : r[0] ? Utilities.formatDate(new Date(r[0]), tz, 'yyyy-MM-dd HH:mm:ss') : '-',
-    actor  : String(r[1] || '-'),
-    action : String(r[2] || '-'),
-    target : String(r[3] || '-'),
-    detail : String(r[4] || '-')
-  }));
-}
-
 function getAuditByEmail(email) {
   if (!isSuperAdmin()) throw new Error('Akses ditolak');
   const sh = sheet('AUDIT_LOG');
@@ -1421,25 +1376,6 @@ function deleteResourceMapEntry(id) {
     return { success: true };
   }
   return { success: false };
-}
-
-/* =====================================================
-   AUDIT LOG — Kosongkan
-   ===================================================== */
-
-/**
- * clearAuditLog() — Hapus semua baris AUDIT_LOG kecuali header.
- * Hanya SuperAdmin.
- */
-function clearAuditLog() {
-  if (!isSuperAdmin()) throw new Error('Akses ditolak');
-  const sh = sheet('AUDIT_LOG');
-  if (!sh) return { success: true, deleted: 0 };
-  const total = sh.getLastRow();
-  if (total <= 1) return { success: true, deleted: 0 };
-  sh.deleteRows(2, total - 1);
-  logAudit('CLEAR_AUDIT_LOG', getLoginEmail(), (total - 1) + ' baris dihapus');
-  return { success: true, deleted: total - 1 };
 }
 
 /* =====================================================

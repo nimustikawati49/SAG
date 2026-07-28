@@ -320,9 +320,15 @@ function getDashboardAllData() {
     try { return JSON.parse(_hit); } catch(e) { /* parse failed — fall through */ }
   }
 
-  var _auth = getAuth();
-  var _email = String(_auth.email || '').toLowerCase().trim();
-  var _period = getUserAcademicPeriod(_email);
+  var _email = '';
+  var _period = { tahun_pelajaran: '', semester: '' };
+  try {
+    var _auth = getAuth();
+    _email = String(_auth.email || '').toLowerCase().trim();
+  } catch(e) { logError_('getDashboardAllData/getAuth', e); }
+  try {
+    if (_email) _period = getUserAcademicPeriod(_email);
+  } catch(e) { logError_('getDashboardAllData/getUserAcademicPeriod', e); }
 
   var setting = {};
   try { setting = getSetting(); } catch(e) { logError_('getDashboardAllData/getSetting', e); }
@@ -388,10 +394,16 @@ function getDashboardAllData() {
   // Baca JURNAL & ABSENSI SEKALI di sini, dipakai ulang untuk meta + v4 —
   // dulu masing-masing dibaca sendiri-sendiri lewat getDashboardMetaData()
   // dan getDashboardV4Data(), jadi JURNAL kebaca 2x per load dashboard.
-  var _shJurnal = _email ? sheet('JURNAL') : null;
-  var _shAbsen  = _email ? sheet('ABSENSI') : null;
-  var jurnalRows = _shJurnal ? _shJurnal.getDataRange().getValues() : [];
-  var absenRows  = _shAbsen ? _shAbsen.getDataRange().getValues() : [];
+  var jurnalRows = [];
+  var absenRows  = [];
+  try {
+    var _shJurnal = _email ? sheet('JURNAL') : null;
+    jurnalRows = _shJurnal ? _shJurnal.getDataRange().getValues() : [];
+  } catch(e) { logError_('getDashboardAllData/readJurnal', e); }
+  try {
+    var _shAbsen = _email ? sheet('ABSENSI') : null;
+    absenRows = _shAbsen ? _shAbsen.getDataRange().getValues() : [];
+  } catch(e) { logError_('getDashboardAllData/readAbsensi', e); }
 
   var meta = { totalKelas: 0, totalSiswa: 0, jadwal: '-', firstDate: '', lastDate: '' };
   try {

@@ -402,7 +402,6 @@
         <li><b>🔑 Lisensi Aplikasi</b><br>Set dan perpanjang lisensi dari dashboard SuperAdmin untuk akun guru aktif.</li>
         <li><b>📢 Broadcast Notif</b><br>Kirim pengumuman ke seluruh guru via in-app notification.</li>
         <li><b>🛰️ Deployment Tracker</b><br>Lacak semua deployment (sekolah) yang menggunakan sistem ini.</li>
-        <li><b>📝 Audit Log</b><br>Lihat riwayat aktivitas penting seluruh pengguna.</li>
       </ol>
     </div>
     <!-- TOMBOL NAVIGASI CEPAT -->
@@ -1315,11 +1314,11 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px">
     <div style="background:#f8fafc;border-radius:12px;padding:14px;border:2px solid #e5e7eb">
       <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">LITE — Gratis</div>
-      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Jurnal mengajar<br>✅ Absensi (maks 192 siswa)<br>✅ 6 kelas maksimal<br>✅ Input nilai (tanpa katrol)<br>❌ Modul Ajar / RPP<br>❌ Export Excel</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Jurnal mengajar<br>✅ Absensi (maks 192 siswa)<br>✅ 6 kelas maksimal<br>✅ Input nilai (tanpa katrol)<br>❌ Modul Ajar<br>❌ Export Excel</div>
     </div>
     <div style="background:#eff6ff;border-radius:12px;padding:14px;border:2px solid #6366f1">
       <div style="font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">PRO — 1 Guru</div>
-      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur LITE<br>✅ Unlimited kelas & siswa<br>✅ Katrol nilai<br>✅ Modul Ajar & RPP<br>✅ Export Excel semua laporan<br>❌ Rekap Sekolah</div>
+      <div style="font-size:12px;color:#374151;line-height:1.5">✅ Semua fitur LITE<br>✅ Unlimited kelas & siswa<br>✅ Katrol nilai<br>✅ Modul Ajar<br>✅ Export Excel semua laporan<br>❌ Rekap Sekolah</div>
     </div>
     <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:2px solid #22c55e">
       <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">ADMIN SEKOLAH</div>
@@ -1596,11 +1595,6 @@
   </div>
 </div>
 
-<div class="card">
-  <h3>Audit Log</h3>
-  <ul id="auditLog"></ul>
-</div>
-
 <hr style="margin:28px 0">
 <div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
   ⚠️ <b>Peringatan Storage:</b> Folder arsip telah menggunakan <b id="arsipWarnUsed">-</b> MB, melebihi batas <b id="arsipWarnThreshold">-</b> MB. Pertimbangkan untuk menghapus arsip lama.
@@ -1652,44 +1646,7 @@
     </table>
   </div>
   </div>
-  <!-- ================= AUDIT LOG SUPERADMIN ================= -->
-<!-- KONFIGURASI TEMPLATE RPP -->
-<div class="card">
-  <h3>📄 Konfigurasi Template RPP</h3>
-  <p class="muted" style="font-size:13px">Buat template RPP di Google Docs dengan placeholder seperti <code>{{mapel}}</code>, <code>{{kelas}}</code>, <code>{{materi}}</code>, dll. Lalu masukkan URL atau ID dokumennya di sini.</p>
-  <div id="rppTemplateInfo" style="margin-bottom:12px;font-size:13px;color:#374151;padding:8px 12px;background:#f8fafc;border-radius:8px">⏳ Memuat konfigurasi...</div>
-  <div style="display:grid;gap:10px;margin-bottom:14px">
-    <div>
-      <label style="font-size:12px;color:#6b7280">URL atau ID Google Docs Template RPP</label>
-      <input id="rppTemplateInput" type="text" placeholder="https://docs.google.com/document/d/... atau Doc ID" style="width:100%;box-sizing:border-box;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:12px;color:#6b7280">URL atau ID Folder Drive output hasil RPP</label>
-      <input id="rppFolderInput" type="text" placeholder="https://drive.google.com/drive/folders/... (kosong = RPP_HASIL default)" style="width:100%;box-sizing:border-box;margin-top:4px">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>
-        <label style="font-size:12px;color:#6b7280">Nama Kepala Sekolah</label>
-        <input id="rppKepsekNama" type="text" placeholder="Nama Kepala Sekolah" style="width:100%;box-sizing:border-box;margin-top:4px">
-      </div>
-      <div>
-        <label style="font-size:12px;color:#6b7280">NIP Kepala Sekolah</label>
-        <input id="rppKepsekNip" type="text" placeholder="NIP" style="width:100%;box-sizing:border-box;margin-top:4px">
-      </div>
-    </div>
-  </div>
-  <div style="margin-bottom:14px">
-    <b style="font-size:12px;color:#374151;display:block;margin-bottom:6px">Placeholder yang tersedia dalam template:</b>
-    <div style="font-size:11px;color:#6b7280;line-height:1.8;background:#f3f4f6;padding:8px 12px;border-radius:8px;font-family:monospace">
-      {{mapel}} {{kelas}} {{bab}} {{judul_modul}} {{materi}} {{tujuan_pembelajaran}}<br>
-      {{asesmen}} {{refleksi}} {{pertemuan}} {{jam_ke}} {{semester}} {{tahun_pelajaran}}<br>
-      {{tanggal}} {{nama_guru}} {{nip_guru}} {{sekolah}} {{kepala_sekolah}} {{nip_kepsek}} {{deskripsi_modul}}
-    </div>
-  </div>
-  <button id="rppConfigSaveBtn" onclick="saveRppTemplateConfig()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;font-size:13px;cursor:pointer">💾 Simpan</button>
-</div>
-
-<!-- KONFIGURASI FOLDER ARSIP -->
+  <!-- KONFIGURASI FOLDER ARSIP -->
 <div class="card">
   <h3>📁 Konfigurasi Folder Arsip</h3>
   <p class="muted" style="font-size:13px">Tentukan folder Google Drive tujuan penyimpanan arsip jurnal. Biarkan kosong untuk menggunakan folder default <b>JURNAL_ARSIP</b> di My Drive.</p>
@@ -1744,49 +1701,6 @@
     <button onclick="updateSuperAdminEmail()">💾 Simpan</button>
   </div>
   <p id="superAdminEmailInfo" class="muted" style="margin-top:6px"></p>
-</div>
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-    <div>
-      <h3 style="margin:0">📝 Audit Log SuperAdmin</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">
-        Riwayat aktivitas penting SuperAdmin (user, lisensi, role, status).
-      </p>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="_exportAuditLogExcel_()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">📊 Export Excel</button>
-      <button onclick="_confirmClearAuditLog_()" style="background:linear-gradient(135deg,#ef4444,#f87171);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🗑️ Kosongkan Log</button>
-    </div>
-  </div>
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <input id="auditFilterText" type="text" placeholder="🔍 Filter aktor / aksi / target / detail..." oninput="_auditFilterDebounce_()" style="flex:1;min-width:200px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
-    <select id="auditFilterAction" onchange="loadAuditLog()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
-      <option value="">— Semua Aksi —</option>
-      <option>CREATE_USER</option><option>UPDATE_ROLE</option><option>UPDATE_STATUS</option>
-      <option>DELETE_USER</option><option>CREATE_LICENSE</option><option>GENERATE_LICENSE</option>
-      <option>ARSIP_TAHUN</option><option>CLEAR_AUDIT_LOG</option><option>TRASH_ARSIP_DRIVE</option>
-      <option>FORWARD_ARSIP</option><option>ARSIP_FOLDER_SET</option><option>ARSIP_FOLDER_RESET</option>
-    </select>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Waktu</th>
-          <th>Aktor</th>
-          <th>Aksi</th>
-          <th>Target</th>
-          <th>Detail</th>
-        </tr>
-      </thead>
-      <tbody id="auditLogBody">
-        <tr>
-          <td colspan="5" class="muted">⏳ Memuat audit log...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
 </div>
 
 <!-- ===== BROADCAST NOTIF ===== -->
@@ -2435,15 +2349,6 @@
   <h2>📚 Modul Ajar</h2>
   <p class="muted" style="margin-bottom:12px">Kelola modul ajar Anda.</p>
 
-  <!-- ===== INFO GENERATE RPP ===== -->
-  <div style="background:linear-gradient(135deg,#ede9fe,#e0e7ff);border-left:4px solid #6366f1;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
-    <div style="font-size:20px;flex-shrink:0">📄</div>
-    <div>
-      <div style="font-weight:700;color:#3730a3;font-size:13px">Generate RPP dari Modul Ajar</div>
-      <div style="font-size:12px;color:#4338ca;margin-top:2px">Scroll ke bawah ke tabel <b>Semua Modul Ajar</b> → klik tombol <b>📄 RPP</b> di setiap baris → pilih format (Google Docs / DOCX) → Generate.<br>Untuk generate dari Jurnal: buka tab <b>Jurnal Mengajar</b> → tombol <b>📄</b> di setiap baris.</div>
-    </div>
-  </div>
-
   <!-- ===== FORM TAMBAH MODUL ===== -->
   <div class="card" style="margin-bottom:20px">
     <h3>➕ Tambah Modul Baru</h3>
@@ -2509,7 +2414,6 @@
             <th style="text-align:center">Bab</th>
             <th>Deskripsi</th>
             <th style="text-align:center">File</th>
-            <th style="text-align:center">RPP</th>
             <th style="text-align:center">Edit</th>
             <th style="text-align:center">Hapus</th>
           </tr>
@@ -2807,7 +2711,7 @@
         <div class="lp-card-enter" style="animation-delay:.4s">
           <div style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:14px 8px">
             <div style="font-size:24px;margin-bottom:6px">📄</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Modul Ajar<br>& RPP</div>
+            <div style="font-size:11px;font-weight:700;line-height:1.3">Modul<br>Ajar</div>
           </div>
         </div>
       </div>
@@ -2938,73 +2842,6 @@
       <button onclick="closeCatatanModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
       <button id="catatanSubmitBtn" onclick="submitCatatan()" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer">💾 Simpan</button>
     </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: GENERATE RPP DARI JURNAL ===== -->
-<div id="modalRppJurnal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center">
-  <div style="background:#fff;width:90%;max-width:460px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 style="margin:0;font-size:15px">📄 Generate RPP dari Jurnal</h3>
-      <button onclick="closeRppJurnalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
-    </div>
-    <div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
-      <div>Kelas: <b id="rppJurnalKelas">-</b></div>
-      <div>Materi: <b id="rppJurnalMateri">-</b></div>
-    </div>
-    <div id="rppJurnalModulBox" style="margin-bottom:14px">
-      <span class="muted">⏳ Memuat...</span>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:12px;color:#6b7280;font-weight:600">Format Output</label>
-      <select id="rppJurnalOutput" style="width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
-        <option value="gdocs">📄 Google Docs (buka di tab baru)</option>
-        <option value="docx">⬇️ DOCX (download + buka Google Docs)</option>
-      </select>
-    </div>
-    <p class="muted" style="font-size:11px;margin:0 0 14px">Hasil RPP akan disimpan di folder Drive yang dikonfigurasi Admin.</p>
-    <div style="display:flex;justify-content:flex-end;gap:10px">
-      <button onclick="closeRppJurnalModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
-      <button id="rppJurnalBtn" onclick="doGenerateRppFromJurnal()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;cursor:pointer">📄 Generate RPP</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: GENERATE RPP DARI MODUL AJAR ===== -->
-<div id="modalRppModul" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center">
-  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 style="margin:0;font-size:15px">📄 Generate RPP dari Modul Ajar</h3>
-      <button onclick="closeRppModulModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
-    </div>
-    <div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
-      <div>Mapel: <b id="rppModulMapel">-</b></div>
-      <div>Kelas: <b id="rppModulKelas">-</b></div>
-      <div>Judul: <b id="rppModulJudul">-</b></div>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:12px;color:#6b7280;font-weight:600">Format Output</label>
-      <select id="rppModulOutput" style="width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
-        <option value="gdocs">📄 Google Docs (buka di tab baru)</option>
-        <option value="docx">⬇️ DOCX (download + buka Google Docs)</option>
-      </select>
-    </div>
-    <p class="muted" style="font-size:11px;margin:0 0 14px">Hasil RPP akan disimpan di folder Drive yang dikonfigurasi Admin.</p>
-    <div style="display:flex;justify-content:flex-end;gap:10px">
-      <button onclick="closeRppModulModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
-      <button id="rppModulBtn" onclick="doGenerateRppFromModul()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 20px;font-weight:600;cursor:pointer">📄 Generate RPP</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: HASIL GENERATE RPP ===== -->
-<div id="modalRppResult" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
-  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35);text-align:center">
-    <div style="font-size:48px;margin-bottom:10px">✅</div>
-    <h3 style="margin:0 0 8px;font-size:16px">RPP Berhasil Dibuat!</h3>
-    <p id="rppResultName" style="font-size:13px;color:#374151;margin:0 0 20px;word-break:break-all"></p>
-    <div id="rppResultActions" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:16px"></div>
-    <button onclick="closeRppResultModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 20px;cursor:pointer;font-size:13px">Tutup</button>
   </div>
 </div>
 

@@ -7,7 +7,7 @@
  *
  * TIER SYSTEM:
  *   LITE  — default gratis, maks 6 kelas, 192 siswa, tanpa fitur premium
- *   PRO   — unlock semua fitur 1 guru (modul ajar, RPP, export, katrol nilai)
+ *   PRO   — unlock semua fitur 1 guru (modul ajar, export, katrol nilai)
  *   SCHOOL — PRO + multi-guru + rekap sekolah (dihandle via role kepsek)
  */
 
