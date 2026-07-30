@@ -432,6 +432,84 @@ function fillArsipAbsensiSheet_(sh, rows, semLabel, setting, tahun, tz, absMap){
   }
 }
 
+/**************** LAPORAN UKURAN DATA SHEET CENTRAL (READ-ONLY) ****************/
+/**
+ * _findOwnerColumnIndex_(headerRow)
+ * Cari kolom "pemilik baris" (email guru) dari header sebuah sheet,
+ * dicoba beberapa nama umum yang dipakai di berbagai sheet aplikasi ini.
+ */
+function _findOwnerColumnIndex_(headerRow) {
+  var header = (headerRow || []).map(function(h) { return String(h || '').toLowerCase().trim(); });
+  var candidates = ['owner_email', 'email_guru', 'email', 'guru'];
+  for (var i = 0; i < candidates.length; i++) {
+    var idx = header.indexOf(candidates[i]);
+    if (idx > -1) return idx;
+  }
+  return -1;
+}
+
+/**
+ * getCentralDataSizeReport()
+ * SuperAdmin only, READ-ONLY (tidak mengubah/menghapus apa pun). Laporan
+ * jumlah baris per sheet di spreadsheet central + top pemilik (email) baris
+ * terbanyak per sheet (kalau kolom pemilik ketemu) — dipakai untuk melihat
+ * sheet mana yang paling besar/menyumbang paling banyak baris sebelum
+ * memutuskan data mana yang aman dibersihkan.
+ */
+function getCentralDataSizeReport() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+
+  var ss = getCentralSpreadsheet_();
+  var sheetNames = [
+    'JURNAL', 'ABSENSI', 'SISWA', 'MasterSiswa', 'RiwayatKelas', 'GuruMengajar',
+    'MasterTahunPelajaran', 'JADWAL_SEMESTER', 'jadwal_semester', 'Jadwal_Semester',
+    'NILAI_SISWA', 'SETTING_NILAI', 'ModulAjar', 'Relasi_Modul_Jadwal',
+    'SETTING', 'USERS', 'LICENSES', 'AUDIT_LOG', '_LOG_ERROR_',
+    'RESOURCE_MAP', 'SUMMARY_SYNC', 'APP_RELEASES', 'UPDATE_LOG', 'DEPLOYMENTS'
+  ];
+
+  var seen = {};
+  var result = [];
+
+  sheetNames.forEach(function(name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) return;
+    var realName = sh.getName();
+    if (seen[realName]) return; // hindari duplikat (mis. beda kapitalisasi nama yang sama)
+    seen[realName] = true;
+
+    var totalRows = Math.max(sh.getLastRow() - 1, 0);
+    var entry = { sheet: realName, rows: totalRows, unique_owners: 0, top_owners: [] };
+
+    if (totalRows > 0) {
+      try {
+        var lastCol = sh.getLastColumn();
+        var header = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+        var ownerIdx = _findOwnerColumnIndex_(header);
+        if (ownerIdx > -1) {
+          var values = sh.getRange(2, ownerIdx + 1, totalRows, 1).getValues();
+          var counts = {};
+          values.forEach(function(r) {
+            var v = String(r[0] || '').toLowerCase().trim();
+            if (!v) return;
+            counts[v] = (counts[v] || 0) + 1;
+          });
+          var sorted = Object.keys(counts)
+            .map(function(k) { return { email: k, count: counts[k] }; })
+            .sort(function(a, b) { return b.count - a.count; });
+          entry.unique_owners = sorted.length;
+          entry.top_owners = sorted.slice(0, 6);
+        }
+      } catch (e) { /* kolom pemilik tidak ketemu / gagal baca — tetap tampilkan total baris saja */ }
+    }
+
+    result.push(entry);
+  });
+
+  result.sort(function(a, b) { return b.rows - a.rows; });
+  return result;
+}
+
 /**************** INFO STORAGE DRIVE (BARU) ****************/
 function getDriveStorageInfo() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');

@@ -608,6 +608,42 @@ function loadDriveStorageInfo(){
     .getDriveStorageInfo();
 }
 
+/* ─────────────────────────────────────────────────────────────
+   LAPORAN UKURAN DATA SHEET CENTRAL — read-only, buat lihat sheet
+   mana yang paling besar sebelum bersih-bersih data test.
+───────────────────────────────────────────────────────────── */
+function loadCentralDataSizeReport(){
+  var el = document.getElementById('dataSizeReportBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows){
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada sheet dengan data.</div>';
+        return;
+      }
+      var html = '<div class="table-wrap"><table><thead><tr><th>Sheet</th><th>Jumlah Baris</th><th>Jumlah Guru</th><th>Top Kontributor</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        var topStr = (r.top_owners || []).map(function(o){ return _escSA(o.email) + ' (' + o.count + ')'; }).join('<br>') || '<span class="muted">—</span>';
+        var rowsColor = r.rows > 2000 ? '#dc2626' : (r.rows > 500 ? '#d97706' : '#374151');
+        html += '<tr>' +
+          '<td><b>' + _escSA(r.sheet) + '</b></td>' +
+          '<td style="text-align:center;font-weight:700;color:' + rowsColor + '">' + r.rows + '</td>' +
+          '<td style="text-align:center">' + (r.unique_owners || '-') + '</td>' +
+          '<td style="font-size:12px">' + topStr + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>' +
+        '<p class="muted" style="font-size:12px;margin-top:8px">🔴 &gt;2000 baris · 🟠 &gt;500 baris — sheet ini yang paling memperlambat dashboard/jurnal, karena Google Sheets selalu membaca SELURUH baris lalu memfilter di kode.</p>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err){
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat laporan') + '</div>';
+    })
+    .getCentralDataSizeReport();
+}
+
 // LOAD USER DATA SUPERADMIN //
 function loadUserManagement(){
   const body = document.getElementById('userBody');
