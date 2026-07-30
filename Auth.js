@@ -51,12 +51,15 @@ function assertLicenseActive(){
   // Superadmin & kepsek bypass lisensi
   if(auth.role === 'superadmin' || auth.role === 'kepsek') return true;
 
-  // Status akun guru: trial (masih dalam 30 hari) atau sudah diaktifkan
-  // penuh oleh SuperAdmin. Akun 'inactive'/lainnya diblokir di sini.
-  if(auth.status === 'trial'){
-    if(auth.trial_expired) throw new Error('TRIAL_EXPIRED');
-  } else if(auth.status !== 'active'){
-    throw new Error('AKUN_TIDAK_AKTIF');
+  // HANYA akun trial baru (status === 'trial', dibuat otomatis oleh
+  // getAuth() saat email belum pernah terdaftar) yang dibatasi 30 hari.
+  // Akun lama dengan status apa pun selain 'trial' (mis. 'inactive', yang
+  // sebelum fitur trial ini ada BUKAN gerbang akses untuk fitur tulis)
+  // TIDAK boleh mendadak terblokir gara-gara kolom status yang tidak
+  // konsisten — gerbangnya tetap lisensi sekolah di bawah, sama seperti
+  // sebelum trial system ini ditambahkan.
+  if(auth.status === 'trial' && auth.trial_expired){
+    throw new Error('TRIAL_EXPIRED');
   }
 
   // Cek lisensi per sekolah (school-wide) — tetap berlaku sebagai gerbang tambahan.
@@ -341,10 +344,6 @@ function checkLicenseAccess(){
     };
   }
 
-  if(auth.status === 'active'){
-    return { allowed:true };
-  }
-
   if(auth.status === 'trial'){
     if(auth.trial_expired){
       return { allowed:false, reason:'TRIAL_EXPIRED', trial_days_left:0 };
@@ -352,5 +351,7 @@ function checkLicenseAccess(){
     return { allowed:true, reason:'TRIAL', trial_days_left: auth.trial_days_left };
   }
 
-  return { allowed:false, reason:'AKUN_TIDAK_AKTIF' };
+  // Status lain (active/inactive/dst) — perilaku lama: tidak diblokir di
+  // sini, gerbangnya tetap lisensi sekolah (assertLicenseActive di caller).
+  return { allowed:true };
 }

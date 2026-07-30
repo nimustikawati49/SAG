@@ -255,14 +255,43 @@ function loadJadwalDashboard_(){
 
 function saveJadwalUI(){
 
+  // Jaring pengaman: kalau ADA error sinkron apa pun di bawah (mis. field
+  // input tidak ketemu di DOM), tetap tampilkan sesuatu ke user alih-alih
+  // gagal total tanpa notifikasi/progress bar sama sekali.
+  try {
+    _saveJadwalUIInner_();
+  } catch (fatalErr) {
+    console.error('[JADWAL] saveJadwalUI fatal error:', fatalErr);
+    if (typeof endProgress === 'function') endProgress();
+    if (typeof showToast === 'function') {
+      showToast('❌ Gagal menyimpan jadwal (error tak terduga): ' + (fatalErr && fatalErr.message ? fatalErr.message : fatalErr), 'error', 8000);
+    } else {
+      alert('Gagal menyimpan jadwal: ' + (fatalErr && fatalErr.message ? fatalErr.message : fatalErr));
+    }
+  }
+}
+
+function _saveJadwalUIInner_(){
+
   const btn = document.getElementById('btnSimpanJadwal');
 
+  const elHari    = document.getElementById('jadwal_hari');
+  const elKelas   = document.getElementById('jadwal_kelas');
+  const elMapel   = document.getElementById('jadwal_mapel');
+  const elMulai   = document.getElementById('jadwal_mulai');
+  const elSelesai = document.getElementById('jadwal_selesai');
+
+  if(!elHari || !elKelas || !elMapel || !elMulai || !elSelesai){
+    showToast('❌ Form jadwal tidak ditemukan di halaman. Coba refresh halaman (Ctrl+Shift+R).', 'error', 8000);
+    return;
+  }
+
   const data = {
-    hari: jadwal_hari.value,
-    kelas: jadwal_kelas.value.trim(),
-    mapel: jadwal_mapel.value.trim(),
-    jam_mulai: jadwal_mulai.value,
-    jam_selesai: jadwal_selesai.value
+    hari: elHari.value,
+    kelas: elKelas.value.trim(),
+    mapel: elMapel.value.trim(),
+    jam_mulai: elMulai.value,
+    jam_selesai: elSelesai.value
   };
 
   if(!data.kelas || !data.mapel || !data.jam_mulai || !data.jam_selesai){
@@ -342,10 +371,10 @@ function saveJadwalUI(){
             }
 
             // 🔄 reset form
-            jadwal_kelas.value = '';
-            jadwal_mapel.value = '';
-            jadwal_mulai.value = '';
-            jadwal_selesai.value = '';
+            elKelas.value = '';
+            elMapel.value = '';
+            elMulai.value = '';
+            elSelesai.value = '';
 
             // 🔄 reload data
             loadJadwalSetting();
