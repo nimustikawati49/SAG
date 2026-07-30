@@ -25,14 +25,14 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadSuperAdminEmailUI, 1100);
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadSchoolLicenseUI, 1500);
+      setTimeout(loadTrialActivationPanel, 1600);
       setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
-    setTimeout(loadDeployments, 2100);    setTimeout(loadArsipFolderConfig, 2400);
+    setTimeout(loadArsipFolderConfig, 2400);
       setTimeout(loadCentralRegistryOverview, 2700);
       setTimeout(loadStorageModeConfig, 2750);
       setTimeout(loadResourceMapEntries, 2775);
       setTimeout(loadCentralSummarySync, 2790);
       setTimeout(loadUpdatePipeline, 2795);
-      setTimeout(loadAcademicGlobalPanel, 2800);
     })
     .getSuperAdminDashboard();
 }
@@ -546,45 +546,6 @@ function submitUpdateApproval() {
     });
 }
 
-let _saGuruPeriodRows = [];
-
-function loadAcademicGlobalPanel() {
-  const info = document.getElementById('saGlobalPeriodInfo');
-  const tahunSel = document.getElementById('saGlobalTahun');
-  const semSel = document.getElementById('saGlobalSemester');
-  const body = document.getElementById('saGuruPeriodBody');
-  if (info) info.textContent = '⏳ Memuat periode global...';
-  if (body) body.innerHTML = '<tr><td colspan="7" class="muted">⏳ Memuat data periode aktif...</td></tr>';
-
-  google.script.run
-    .withSuccessHandler(function(res) {
-      const years = ((res && res.years) || []).map(function(y){ return y.tahun_pelajaran; })
-        .filter(function(v, i, arr){ return v && arr.indexOf(v) === i; })
-        .sort();
-      const g = (res && res.global) || {};
-
-      if (tahunSel) {
-        tahunSel.innerHTML = years.map(function(y){
-          return '<option ' + (String(y) === String(g.tahun_pelajaran || '') ? 'selected' : '') + '>' + y + '</option>';
-        }).join('');
-      }
-      if (semSel && g.semester) {
-        semSel.value = g.semester;
-      }
-      if (info) {
-        info.innerHTML = 'Periode global aktif: <b>' + (g.tahun_pelajaran || '-') + '</b> | <b>' + (g.semester || '-') + '</b>';
-      }
-
-      _saGuruPeriodRows = (res && res.guru_periods) || [];
-      renderGuruPeriodTable_(_saGuruPeriodRows);
-    })
-    .withFailureHandler(function(err) {
-      if (info) info.textContent = '❌ ' + (err.message || err);
-      if (body) body.innerHTML = '<tr><td colspan="7" style="color:#dc2626">❌ ' + (err.message || err) + '</td></tr>';
-    })
-    .getAcademicGlobalManagementData();
-}
-
 function loadStatistikGlobal() {
   const box = document.getElementById('saStatistikGlobalBox');
   if (box) box.innerHTML = '<p class="muted">⏳ Memuat statistik guru...</p>';
@@ -624,115 +585,6 @@ function loadStatistikGlobal() {
     })
     .getStatistikGlobal();
 }
-
-function saveGlobalAcademicPeriodUI() {
-  const tahun = (document.getElementById('saGlobalTahun') || {}).value || '';
-  const semester = (document.getElementById('saGlobalSemester') || {}).value || '';
-  if (!tahun || !semester) {
-    if (typeof showToast === 'function') showToast('⚠️ Pilih tahun dan semester global', 'warning');
-    else alert('Pilih tahun dan semester global');
-    return;
-  }
-  if (!confirm('Set periode global ke ' + tahun + ' | ' + semester + ' ?')) return;
-
-  google.script.run
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('✅ Periode global diperbarui', 'success');
-      loadAcademicGlobalPanel();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + (err.message || err), 'error');
-      else alert('❌ ' + (err.message || err));
-    })
-    .setGlobalAcademicPeriodBySuperAdmin(tahun, semester);
-}
-
-function _confirmBulkSyncAcademic_(tahun, semester, activeOnly) {
-  const msg = 'Sinkronkan semua guru ke periode ' + tahun + ' | ' + semester + '?';
-  const detail = activeOnly
-    ? 'Hanya user status active yang akan diperbarui.'
-    : 'Semua user pada sheet SETTING akan diperbarui.';
-
-  if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
-    return Swal.fire({
-      title: 'Set Default Semua Guru?',
-      html: '<div style="font-size:13px">' + msg + '<br><span style="color:#6b7280">' + detail + '</span></div>',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Ya, Sinkronkan',
-      cancelButtonText: 'Batal'
-    }).then(function(res){ return !!res.isConfirmed; });
-  }
-  return Promise.resolve(confirm(msg + '\n' + detail));
-}
-
-function syncAllUsersAcademicPeriodUI() {
-  const tahun = (document.getElementById('saGlobalTahun') || {}).value || '';
-  const semester = (document.getElementById('saGlobalSemester') || {}).value || '';
-  const activeOnly = !!((document.getElementById('saSyncActiveOnly') || {}).checked);
-
-  if (!tahun || !semester) {
-    if (typeof showToast === 'function') showToast('⚠️ Pilih periode global terlebih dahulu', 'warning');
-    else alert('Pilih periode global terlebih dahulu');
-    return;
-  }
-
-  _confirmBulkSyncAcademic_(tahun, semester, activeOnly).then(function(ok){
-    if (!ok) return;
-    google.script.run
-      .withSuccessHandler(function(res){
-        const info = '✅ Sinkron selesai. Updated: ' + (res.updated || 0) +
-          ', Skip Inactive: ' + (res.skipped_inactive || 0) +
-          ', Skip No Email: ' + (res.skipped_no_email || 0);
-        if (typeof showToast === 'function') showToast(info, 'success', 7000);
-        else alert(info);
-        loadAcademicGlobalPanel();
-      })
-      .withFailureHandler(function(err){
-        if (typeof showToast === 'function') showToast('❌ ' + (err.message || err), 'error');
-        else alert('❌ ' + (err.message || err));
-      })
-      .syncAllUsersAcademicPeriodToDefault(tahun, semester, activeOnly);
-  });
-}
-
-function renderGuruPeriodTable_(rows) {
-  const body = document.getElementById('saGuruPeriodBody');
-  if (!body) return;
-  if (!rows || rows.length === 0) {
-    body.innerHTML = '<tr><td colspan="7" class="muted">📭 Tidak ada data user.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = rows.map(function(r, i){
-    const st = String(r.status || '').toLowerCase();
-    const statusBadge = st === 'active'
-      ? '<span class="badge badge-green">active</span>'
-      : '<span class="badge badge-red">inactive</span>';
-    return '<tr>' +
-      '<td>' + (i + 1) + '</td>' +
-      '<td class="left">' + (r.nama_guru || '-') + '</td>' +
-      '<td class="left">' + (r.email || '-') + '</td>' +
-      '<td>' + (r.role || '-') + '</td>' +
-      '<td>' + statusBadge + '</td>' +
-      '<td>' + (r.tahun_pelajaran_aktif || '-') + '</td>' +
-      '<td>' + (r.semester_aktif || '-') + '</td>' +
-      '</tr>';
-  }).join('');
-}
-
-function filterGuruPeriodTable_() {
-  const q = String((document.getElementById('saGuruPeriodFilter') || {}).value || '').toLowerCase().trim();
-  if (!q) return renderGuruPeriodTable_(_saGuruPeriodRows);
-  const filtered = (_saGuruPeriodRows || []).filter(function(r) {
-    const hay = [r.nama_guru, r.email, r.role, r.status, r.tahun_pelajaran_aktif, r.semester_aktif]
-      .join(' ')
-      .toLowerCase();
-    return hay.indexOf(q) !== -1;
-  });
-  renderGuruPeriodTable_(filtered);
-}
-
 
 // LOAD DRIVE STORAGE INFO //
 function loadDriveStorageInfo(){
@@ -1415,21 +1267,6 @@ function loadSchoolLicenseUI() {
   if (!el) return;
   el.innerHTML = '<p class="muted">⏳ Memuat...</p>';
 
-  // Load tier badge too
-  google.script.run
-    .withSuccessHandler(function(info) {
-      var badge = document.getElementById('currentTierBadge');
-      if (badge && info) {
-        var colors = { LITE: '#f3f4f6:#374151', PRO: '#eff6ff:#6366f1', SCHOOL: '#f0fdf4:#16a34a' };
-        var parts  = (colors[info.tier] || '#f3f4f6:#374151').split(':');
-        badge.style.background = parts[0];
-        badge.style.color      = parts[1];
-        badge.textContent = '⚡ ' + (info.tier || 'LITE');
-      }
-    })
-    .withFailureHandler(function() {})
-    .getSchoolTierInfo();
-
   google.script.run
     .withFailureHandler(function(err) {
       el.innerHTML = '<span style="color:#dc2626">❌ ' + err.message + '</span>';
@@ -1569,144 +1406,6 @@ function initSANotifSection() {
   loadSANotifHistory();
 }
 
-/* =====================================================================
-   DEPLOYMENT TRACKER — Vendor untuk kelola multi-deployment
-   ===================================================================== */
-function loadDeployments() {
-  var el = document.getElementById('deploymentList');
-  if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px;margin-bottom:6px"></div>'.repeat(3);
-
-  google.script.run
-    .withSuccessHandler(function(rows) {
-      _renderDeployments_(rows, el);
-    })
-    .withFailureHandler(function(err) {
-      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
-    })
-    .getDeployments();
-}
-
-function _renderDeployments_(rows, el) {
-  if (!rows || rows.length === 0) {
-    el.innerHTML = '<div class="alert-banner info">Belum ada deployment tercatat.</div>';
-    return;
-  }
-  var statusColors = { aktif: { bg:'#dcfce7', color:'#166534' }, nonaktif: { bg:'#fee2e2', color:'#991b1b' }, trial: { bg:'#fef9c3', color:'#854d0e' } };
-  var html = '<div class="table-wrap"><table><thead><tr><th>Sekolah</th><th>Email SA</th><th>Script ID</th><th>Tanggal</th><th>Status</th><th>Catatan</th><th>Aksi</th></tr></thead><tbody>';
-  rows.forEach(function(d) {
-    var sc = statusColors[d.status] || { bg:'#f3f4f6', color:'#374151' };
-    html += '<tr>' +
-      '<td><b>' + _escSA(d.nama_sekolah) + '</b></td>' +
-      '<td style="font-size:12px">' + _escSA(d.email_sa) + '</td>' +
-      '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + _escSA(d.script_id || '-') + '</td>' +
-      '<td style="font-size:12px">' + _escSA(d.tanggal) + '</td>' +
-      '<td><span style="background:' + sc.bg + ';color:' + sc.color + ';padding:2px 10px;border-radius:999px;font-size:12px">' + _escSA(d.status) + '</span></td>' +
-      '<td style="font-size:12px;max-width:200px">' + _escSA(d.catatan || '-') + '</td>' +
-      '<td style="white-space:nowrap">' +
-        '<button onclick="editDeployment(\'' + _escSA(d.id) + '\')" style="background:#dbeafe;color:#1e40af;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;margin-right:4px">✏️</button>' +
-        '<button onclick="deleteDeploymentSA(\'' + _escSA(d.id) + '\')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">🗑</button>' +
-      '</td>' +
-      '</tr>';
-  });
-  html += '</tbody></table></div>';
-  // Store data for edit
-  window._depRows = rows;
-  el.innerHTML = html;
-}
-
-function openDeploymentModal(dep) {
-  var m = document.getElementById('deploymentModal');
-  if (!m) return;
-  m.style.display = 'flex';
-
-  ['depId','depNama','depEmail','depScript','depStatus','depCatatan'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-
-  if (dep) {
-    var idEl = document.getElementById('depId');       if (idEl) idEl.value = dep.id || '';
-    var nmEl = document.getElementById('depNama');     if (nmEl) nmEl.value = dep.nama_sekolah || '';
-    var emEl = document.getElementById('depEmail');    if (emEl) emEl.value = dep.email_sa || '';
-    var scEl = document.getElementById('depScript');   if (scEl) scEl.value = dep.script_id || '';
-    var stEl = document.getElementById('depStatus');   if (stEl) stEl.value = dep.status || 'aktif';
-    var ctEl = document.getElementById('depCatatan');  if (ctEl) ctEl.value = dep.catatan || '';
-  }
-
-  var nmEl2 = document.getElementById('depNama');
-  if (nmEl2) nmEl2.focus();
-}
-
-function editDeployment(id) {
-  if (!window._depRows) return;
-  var dep = window._depRows.find(function(d){ return d.id === id; });
-  if (dep) openDeploymentModal(dep);
-}
-
-function closeDeploymentModal() {
-  var m = document.getElementById('deploymentModal');
-  if (m) m.style.display = 'none';
-}
-
-function submitDeployment() {
-  var id     = (document.getElementById('depId')      || {}).value || '';
-  var nama   = (document.getElementById('depNama')    || {}).value || '';
-  var email  = (document.getElementById('depEmail')   || {}).value || '';
-  var script = (document.getElementById('depScript')  || {}).value || '';
-  var status = (document.getElementById('depStatus')  || {}).value || 'aktif';
-  var catat  = (document.getElementById('depCatatan') || {}).value || '';
-
-  if (!nama.trim()) { if (typeof showToast === 'function') showToast('⚠️ Nama sekolah wajib diisi', 'warning'); return; }
-  if (!email.trim()) { if (typeof showToast === 'function') showToast('⚠️ Email SA wajib diisi', 'warning'); return; }
-
-  var btn = document.getElementById('depSubmitBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
-
-  google.script.run
-    .withSuccessHandler(function() {
-      closeDeploymentModal();
-      if (typeof showToast === 'function') showToast('✅ Deployment disimpan', 'success');
-      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
-      loadDeployments();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
-    })
-    .saveDeployment({ id: id || null, nama_sekolah: nama.trim(), email_sa: email.trim(), script_id: script.trim(), status: status, catatan: catat.trim() });
-}
-
-function deleteDeploymentSA(id) {
-  if (!confirm('Hapus data deployment ini?')) return;
-  google.script.run
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('✅ Deployment dihapus', 'success');
-      loadDeployments();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
-    })
-    .deleteDeployment(id);
-}
-
-function exportDeploymentsExcel() {
-  if (typeof XLSX === 'undefined') { if (typeof showToast === 'function') showToast('⏳ Library belum siap', 'warning'); return; }
-  google.script.run
-    .withSuccessHandler(function(rows) {
-      var wb  = XLSX.utils.book_new();
-      var dat = [['Sekolah', 'Email SA', 'Script ID', 'Tanggal', 'Status', 'Catatan']];
-      (rows || []).forEach(function(r) { dat.push([r.nama_sekolah, r.email_sa, r.script_id, r.tanggal, r.status, r.catatan]); });
-      var ws = XLSX.utils.aoa_to_sheet(dat);
-      ws['!cols'] = [25, 30, 40, 12, 10, 30].map(function(w){ return {wch:w}; });
-      XLSX.utils.book_append_sheet(wb, ws, 'Deployments');
-      XLSX.writeFile(wb, 'Deployments_' + new Date().toLocaleDateString('id-ID').replace(/\//g,'-') + '.xlsx');
-      if (typeof showToast === 'function') showToast('✅ Excel diunduh', 'success');
-    })
-    .withFailureHandler(function() {})
-    .getDeployments();
-}
-
 function _escSA(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1796,41 +1495,54 @@ function confirmSetMasaAktif_() {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   TIER MANAGEMENT — SuperAdmin
+   AKTIVASI AKUN GURU — Trial 30 hari → Aktif Penuh (SuperAdmin)
 ───────────────────────────────────────────────────────────── */
-function genTierKey_(tierType) {
+function loadTrialActivationPanel() {
+  var el = document.getElementById('trialActivationList');
+  var badge = document.getElementById('trialActivationCount');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+
   google.script.run
-    .withSuccessHandler(function(key) {
-      var el = document.getElementById('generatedTierKey');
-      if (el) { el.value = key; el.focus(); el.select(); }
-      if (typeof showToast === 'function') showToast('🎲 ' + tierType + ' Key: ' + key + '  (klik field untuk copy)', 'info', 6000);
+    .withSuccessHandler(function(rows) {
+      if (badge) badge.textContent = (rows || []).length;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Tidak ada akun guru dalam masa trial saat ini.</div>';
+        return;
+      }
+      var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Mulai Trial</th><th>Sisa Waktu</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        var statusHtml = r.expired
+          ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">⏰ Trial Habis</span>'
+          : '<span style="background:#fef9c3;color:#854d0e;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">🟡 ' + r.days_left + ' hari lagi</span>';
+        html += '<tr>' +
+          '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
+          '<td style="font-size:12px">' + _escSA(r.role) + '</td>' +
+          '<td style="font-size:12px">' + _escSA(r.dibuat) + '</td>' +
+          '<td>' + statusHtml + '</td>' +
+          '<td><button onclick="approveTrialAccountUI(\'' + _escSA(r.email) + '\')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">✅ Aktifkan Penuh</button></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-      else alert('❌ ' + err.message);
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar trial') + '</div>';
     })
-    .generateTierLicenseKey(tierType);
+    .getPendingTrialAccounts();
 }
 
-function setTierUI_() {
-  var tier = (document.getElementById('setTierSelect') || {}).value || 'LITE';
-  var key  = ((document.getElementById('setTierKeyInput') || {}).value || '').trim().toUpperCase();
-  if (tier !== 'LITE' && !key) {
-    if (typeof showToast === 'function') showToast('⚠️ Kode lisensi wajib untuk tier ' + tier, 'warning');
-    else alert('Kode lisensi wajib untuk tier ' + tier);
-    return;
-  }
-  if (!confirm('Set tier sekolah ini ke ' + tier + '?\n' + (tier === 'LITE' ? 'Semua fitur premium akan dinonaktifkan.' : 'Fitur ' + tier + ' akan diaktifkan.'))) return;
+function approveTrialAccountUI(email) {
+  if (!confirm('Aktifkan penuh akun ' + email + '?\nData yang sudah dibuat guru ini (jurnal/siswa/nilai/dll) TIDAK akan dihapus atau dipindah — hanya status akunnya yang berubah jadi aktif permanen.')) return;
   google.script.run
-    .withSuccessHandler(function(res) {
-      if (typeof showToast === 'function') showToast('✅ Tier berhasil diset ke ' + res.tier, 'success');
-      loadSchoolLicenseUI();
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Akun ' + email + ' berhasil diaktifkan penuh', 'success');
+      loadTrialActivationPanel();
     })
     .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-      else alert('❌ ' + err.message);
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
-    .setSchoolTier(tier, key);
+    .approveTrialAccount(email);
 }
 
 </script>

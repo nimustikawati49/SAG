@@ -81,7 +81,18 @@ function simpanSetting(){
 
         endProgress();
 
-        // 🔥 JIKA BUTUH LISENSI
+        // 🎓 MASA TRIAL HABIS / AKUN BELUM DIAKTIFKAN — bukan lagi lewat
+        // input kode lisensi manual, tapi menunggu SuperAdmin approve.
+        if(err.message === 'TRIAL_EXPIRED' || err.message === 'AKUN_TIDAK_AKTIF'){
+          const msg = err.message === 'TRIAL_EXPIRED'
+            ? '⏰ Masa uji coba 30 hari sudah berakhir. Hubungi SuperAdmin untuk aktivasi penuh.'
+            : '⚠️ Akun Anda belum aktif. Hubungi SuperAdmin untuk aktivasi.';
+          if(typeof showToast === 'function') showToast(msg, 'warning', 8000);
+          else alert(msg);
+          return;
+        }
+
+        // 🔥 JIKA BUTUH LISENSI SEKOLAH (school-wide, dikelola SuperAdmin)
         if(
           err.message === 'INPUT_LICENSE' ||
           err.message === 'LISENSI_EXPIRED'
@@ -393,7 +404,20 @@ async function uploadLogoIfAny(callback){
       .withFailureHandler(err => {
 
         // ===============================
-        // 🔑 TRIGGER INPUT LICENSE
+        // 🎓 MASA TRIAL HABIS / AKUN BELUM AKTIF
+        // ===============================
+        if(err.message === 'TRIAL_EXPIRED' || err.message === 'AKUN_TIDAK_AKTIF'){
+          const msg = err.message === 'TRIAL_EXPIRED'
+            ? '⏰ Masa uji coba 30 hari sudah berakhir. Hubungi SuperAdmin untuk aktivasi penuh.'
+            : '⚠️ Akun Anda belum aktif. Hubungi SuperAdmin untuk aktivasi.';
+          if(typeof showToast === 'function') showToast(msg, 'warning', 8000);
+          else alert(msg);
+          callback(null);
+          return;
+        }
+
+        // ===============================
+        // 🔑 TRIGGER INPUT LICENSE (lisensi sekolah, dikelola SuperAdmin)
         // ===============================
         if(
             err.message &&

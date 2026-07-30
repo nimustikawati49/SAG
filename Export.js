@@ -9,9 +9,9 @@ function dashVal_(v) {
   return s === '' ? '-' : v;
 }
 
-function exportJurnalExcel(){ 
-  assertMinTier_('PRO');
-  const auth = getAuth(); 
+function exportJurnalExcel(){
+  assertLicenseActive();
+  const auth = getAuth();
   const ss = getSpreadsheet_(); 
   let sh = ss.getSheetByName('EXPORT_JURNAL'); 
   if(sh) ss.deleteSheet(sh); 

@@ -3,12 +3,13 @@
  *
  * Lisensi disimpan di ScriptProperties (bukan per user).
  * 1 project GAS = 1 sekolah = 1 lisensi.
- * SuperAdmin yang mengelola (set / renew / deactivate / tier).
+ * SuperAdmin yang mengelola (set / renew / deactivate).
  *
- * TIER SYSTEM:
- *   LITE  — default gratis, maks 6 kelas, 192 siswa, tanpa fitur premium
- *   PRO   — unlock semua fitur 1 guru (modul ajar, export, katrol nilai)
- *   SCHOOL — PRO + multi-guru + rekap sekolah (dihandle via role kepsek)
+ * Akses guru sendiri diatur lewat status akun per-akun (lihat Users.js):
+ * guru baru otomatis dapat masa uji coba 30 hari, lalu SuperAdmin
+ * mengaktifkan penuh lewat panel "Aktivasi Akun Guru". Tidak ada lagi
+ * pembagian fitur per tier (LITE/PRO/SCHOOL) — begitu aktif, semua
+ * fitur terbuka.
  */
 
 var LIC_ = {
@@ -16,14 +17,7 @@ var LIC_ = {
   EXPIRES     : 'SCHOOL_LICENSE_EXPIRES',   // ISO date string
   STATUS      : 'SCHOOL_LICENSE_STATUS',    // 'active' | 'inactive'
   INSTALL_DATE: 'SCHOOL_INSTALL_DATE',      // legacy
-  TRIAL       : 'SCHOOL_LICENSE_IS_TRIAL',
-  TIER        : 'SCHOOL_TIER'              // 'LITE' | 'PRO' | 'SCHOOL'
-};
-
-/* Batas fitur tier LITE */
-var LITE_LIMITS_ = {
-  MAX_KELAS : 6,
-  MAX_SISWA : 192
+  TRIAL       : 'SCHOOL_LICENSE_IS_TRIAL'
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -211,175 +205,6 @@ function getSchoolLicenseInfo() {
     status   : lic.status,
     isTrial  : lic.isTrial,
     isLifetime: lic.isLifetime
-  };
-}
-
-/* ─────────────────────────────────────────────────────────────
-   TIER SYSTEM — LITE / PRO / SCHOOL
-───────────────────────────────────────────────────────────── */
-
-/**
- * Ambil tier aktif. Default LITE jika belum di-set.
- * SuperAdmin & kepsek selalu dapat tier tertinggi (SCHOOL).
- */
-function getTier_() {
-  var props = PropertiesService.getScriptProperties();
-  var tier  = props.getProperty(LIC_.TIER) || 'LITE';
-  // Normalise
-  tier = tier.toUpperCase();
-  if (tier !== 'PRO' && tier !== 'SCHOOL') tier = 'LITE';
-  return tier;
-}
-
-/**
- * Cek apakah tier saat ini memenuhi minimum yang dibutuhkan.
- * Order: LITE < PRO < SCHOOL
- */
-var TIER_ORDER_ = { LITE: 0, PRO: 1, SCHOOL: 2 };
-
-function _tierMeetsMin_(current, minimum) {
-  return (TIER_ORDER_[current] || 0) >= (TIER_ORDER_[minimum] || 0);
-}
-
-/**
- * Lempar error UPGRADE_REQUIRED jika tier tidak memenuhi minimum.
- * Selalu bypass untuk superadmin dan kepsek.
- */
-function assertMinTier_(minTier) {
-  var auth = getAuth();
-  if (auth.role === 'superadmin' || auth.role === 'kepsek') return true;
-  var tier = getTier_();
-  if (!_tierMeetsMin_(tier, minTier)) {
-    throw new Error('UPGRADE_REQUIRED:' + minTier);
-  }
-  return true;
-}
-
-/**
- * Cek batas kelas untuk tier LITE.
- * @param {number} currentCount — jumlah kelas yang sudah ada
- */
-function assertLiteKelasLimit_(currentCount) {
-  var auth = getAuth();
-  if (auth.role === 'superadmin' || auth.role === 'kepsek') return;
-  if (_tierMeetsMin_(getTier_(), 'PRO')) return;
-  if (currentCount >= LITE_LIMITS_.MAX_KELAS) {
-    throw new Error('LITE_LIMIT_KELAS:' + LITE_LIMITS_.MAX_KELAS);
-  }
-}
-
-/**
- * Cek batas siswa untuk tier LITE.
- * @param {number} currentCount — jumlah siswa yang sudah terdaftar
- */
-function assertLiteSiswaLimit_(currentCount) {
-  var auth = getAuth();
-  if (auth.role === 'superadmin' || auth.role === 'kepsek') return;
-  if (_tierMeetsMin_(getTier_(), 'PRO')) return;
-  if (currentCount >= LITE_LIMITS_.MAX_SISWA) {
-    throw new Error('LITE_LIMIT_SISWA:' + LITE_LIMITS_.MAX_SISWA);
-  }
-}
-
-/**
- * Set tier sekolah (SuperAdmin only).
- * @param {string} tier — 'LITE' | 'PRO' | 'SCHOOL'
- * @param {string} key  — kode lisensi (diperlukan untuk PRO/SCHOOL)
- */
-function setSchoolTier(tier, key) {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  tier = String(tier || '').toUpperCase();
-  if (tier !== 'LITE' && tier !== 'PRO' && tier !== 'SCHOOL') {
-    throw new Error('Tier tidak valid. Pilih: LITE, PRO, atau SCHOOL');
-  }
-
-  if (tier !== 'LITE') {
-    // Validasi kode lisensi untuk upgrade
-    key = String(key || '').trim().toUpperCase();
-    if (!key) throw new Error('Kode lisensi wajib diisi untuk upgrade ke ' + tier);
-    if (!_isValidTierKey_(key, tier)) {
-      throw new Error('Kode lisensi tidak valid untuk tier ' + tier);
-    }
-    // Simpan juga sebagai school license key
-    var props = PropertiesService.getScriptProperties();
-    props.setProperty(LIC_.KEY, key);
-    props.setProperty(LIC_.STATUS, 'active');
-    var exp = new Date();
-    exp.setFullYear(exp.getFullYear() + 99); // lifetime
-    props.setProperty(LIC_.EXPIRES, exp.toISOString());
-  }
-
-  PropertiesService.getScriptProperties().setProperty(LIC_.TIER, tier);
-  logAudit('SET_TIER', getLoginEmail(), 'Tier: ' + tier + (key ? ' | Key: ' + key : ''));
-  return { tier: tier, success: true };
-}
-
-/**
- * Validasi kode lisensi tier.
- * Format kode: PRO-XXXX-XXXX atau SCH-XXXX-XXXX (8 karakter alfanumerik unik).
- * Validasi sederhana berbasis format + checksum — tidak butuh server eksternal.
- */
-function _isValidTierKey_(key, tier) {
-  var prefix = (tier === 'PRO') ? 'PRO-' : 'SCH-';
-  if (!key.startsWith(prefix)) return false;
-  var parts = key.split('-');
-  if (parts.length !== 3) return false;
-  var a = parts[1], b = parts[2];
-  if (a.length !== 4 || b.length !== 4) return false;
-  // Checksum sederhana: sum char codes % 36 harus sama antara a dan b
-  var sumA = 0, sumB = 0;
-  for (var i = 0; i < a.length; i++) sumA += a.charCodeAt(i);
-  for (var i = 0; i < b.length; i++) sumB += b.charCodeAt(i);
-  return (sumA % 36) === (sumB % 36);
-}
-
-/**
- * Generate kode lisensi PRO atau SCHOOL (SuperAdmin only).
- * @param {string} tierType — 'PRO' | 'SCHOOL'
- */
-function generateTierLicenseKey(tierType) {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  tierType = String(tierType || 'PRO').toUpperCase();
-  if (tierType !== 'PRO' && tierType !== 'SCHOOL') throw new Error('Tier tidak valid');
-
-  var prefix = (tierType === 'PRO') ? 'PRO' : 'SCH';
-  var chars  = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-  // Generate part A (4 chars)
-  var a = '';
-  for (var i = 0; i < 4; i++) a += chars.charAt(Math.floor(Math.random() * chars.length));
-
-  // Generate part B yang checksumnya cocok dengan A
-  var sumA = 0;
-  for (var i = 0; i < a.length; i++) sumA += a.charCodeAt(i);
-  var targetMod = sumA % 36;
-
-  var b = '';
-  while (true) {
-    b = '';
-    for (var i = 0; i < 4; i++) b += chars.charAt(Math.floor(Math.random() * chars.length));
-    var sumB = 0;
-    for (var i = 0; i < b.length; i++) sumB += b.charCodeAt(i);
-    if (sumB % 36 === targetMod) break;
-  }
-
-  return prefix + '-' + a + '-' + b;
-}
-
-/**
- * Ambil info tier untuk frontend (semua user bisa akses).
- * Dipakai oleh bootApp() untuk menyesuaikan UI.
- */
-function getSchoolTierInfo() {
-  var auth = getAuth();
-  // SA dan kepsek tidak dibatasi
-  if (auth.role === 'superadmin' || auth.role === 'kepsek') {
-    return { tier: 'SCHOOL', limits: null };
-  }
-  var tier = getTier_();
-  return {
-    tier  : tier,
-    limits: tier === 'LITE' ? LITE_LIMITS_ : null
   };
 }
 

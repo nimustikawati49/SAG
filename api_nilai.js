@@ -581,7 +581,6 @@ function getKelasYangAdaNilai(mapel, tahun, semester) {
  */
 function recalcNilai(payload) {
   authAdmin_();
-  assertMinTier_('PRO'); // Katrol nilai hanya PRO ke atas
   const minTarget = Number(payload.setting?.nilai_min_target ?? 60);
   const maxTarget = Number(payload.setting?.nilai_max_target ?? 95);
   const semester  = String(payload.semester || '');

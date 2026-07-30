@@ -3,6 +3,133 @@
  * Dipecah dari Code.js untuk kemudahan pemeliharaan.
  */
 
+/* ─────────────────────────────────────────────────────────────
+   TRIAL 30 HARI — akun guru baru otomatis bisa mencoba aplikasi
+   tanpa perlu didaftarkan manual dulu oleh SuperAdmin. Statusnya
+   'trial' di USERS sampai SuperAdmin klik "Aktifkan Penuh", yang
+   mengubahnya jadi 'active' secara permanen tanpa pernah menyentuh
+   sheet operasional guru (SETTING/JURNAL/SISWA/dll).
+───────────────────────────────────────────────────────────── */
+var TRIAL_DAYS_ = 30;
+
+function _computeTrialInfo_(dibuatDate) {
+  var created = dibuatDate ? new Date(dibuatDate) : new Date();
+  var elapsedDays = Math.floor((Date.now() - created.getTime()) / 86400000);
+  return {
+    daysLeft: Math.max(0, TRIAL_DAYS_ - elapsedDays),
+    expired : elapsedDays >= TRIAL_DAYS_
+  };
+}
+
+/**
+ * _autoRegisterTrialUser_(email)
+ * Dipanggil dari getAuth() saat email belum ada di USERS sama sekali.
+ * Daftarkan sebagai guru role 'admin' status 'trial' supaya bisa
+ * langsung memakai aplikasi. Dikunci (LockService) supaya request
+ * paralel dari akun yang sama tidak membuat baris dobel.
+ */
+function _autoRegisterTrialUser_(email) {
+  var sh = sheet('USERS');
+  if (!sh) return null;
+
+  var lock = LockService.getScriptLock();
+  var gotLock = false;
+  try { gotLock = lock.tryLock(5000); } catch (e) { gotLock = false; }
+  if (!gotLock) return null;
+
+  try {
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0] || '').toLowerCase().trim() === email) {
+        return { dibuat: data[i][3] }; // sudah didaftarkan proses lain, jangan dobel
+      }
+    }
+    var now = new Date();
+    sh.appendRow([email, 'admin', 'trial', now]);
+    try { logAudit('AUTO_REGISTER_TRIAL', email, 'Trial 30 hari dimulai'); } catch (e2) {}
+    return { dibuat: now };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+/**
+ * getPendingTrialAccounts()
+ * SuperAdmin only — daftar akun guru yang masih berstatus 'trial',
+ * diurutkan yang paling mendesak (sudah expired) di atas.
+ */
+function getPendingTrialAccounts() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = sheet('USERS');
+  if (!sh) return [];
+  var data = sh.getDataRange().getValues();
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var status = String(data[i][2] || '').toLowerCase().trim();
+    if (status !== 'trial') continue;
+    var email = String(data[i][0] || '').toLowerCase().trim();
+    if (!email) continue;
+    var info = _computeTrialInfo_(data[i][3]);
+    result.push({
+      email: email,
+      role: String(data[i][1] || 'admin').toLowerCase(),
+      dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
+      days_left: info.daysLeft,
+      expired: info.expired
+    });
+  }
+  result.sort(function(a, b) {
+    if (a.expired === b.expired) return a.days_left - b.days_left;
+    return a.expired ? -1 : 1;
+  });
+  return result;
+}
+
+/**
+ * approveTrialAccount(email)
+ * SuperAdmin only — ubah status akun jadi 'active' permanen.
+ * HANYA mengubah baris USERS (dan memastikan ada baris LICENSES aktif
+ * untuk kompatibilitas fitur lama) — tidak pernah menyentuh sheet
+ * operasional guru (SETTING/JURNAL/SISWA/NILAI/dll), jadi data yang
+ * sudah dibuat guru selama masa trial tetap utuh.
+ */
+function approveTrialAccount(email) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  email = String(email || '').toLowerCase().trim();
+  if (!email) throw new Error('Email tidak valid');
+
+  var sh = sheet('USERS');
+  var data = sh.getDataRange().getValues();
+  var found = false;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0] || '').toLowerCase().trim() !== email) continue;
+    sh.getRange(i + 1, 3).setValue('active');
+    found = true;
+    break;
+  }
+  if (!found) throw new Error('Akun tidak ditemukan');
+
+  var shLic = sheet('LICENSES');
+  var lics = shLic.getDataRange().getValues();
+  var licFound = false;
+  var exp = new Date();
+  exp.setFullYear(exp.getFullYear() + 1);
+  for (var j = 1; j < lics.length; j++) {
+    if (String(lics[j][1] || '').toLowerCase().trim() !== email) continue;
+    shLic.getRange(j + 1, 3).setValue(exp);
+    shLic.getRange(j + 1, 4).setValue('active');
+    licFound = true;
+    break;
+  }
+  if (!licFound) {
+    var key = 'JGD-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
+    shLic.appendRow([key, email, exp, 'active', new Date(), new Date(), '']);
+  }
+
+  logAudit('APPROVE_TRIAL_ACCOUNT', email, 'Aktivasi penuh oleh SuperAdmin');
+  return { success: true, email: email };
+}
+
 function updateUser(email, payload){ 
   if(!isSuperAdmin()) throw new Error('Akses ditolak'); 
   const sh = sheet('USERS'); 

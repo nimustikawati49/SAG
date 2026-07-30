@@ -66,12 +66,6 @@ function importSiswa(rows){
   const tahunAktif = setting.tahun_pelajaran || getLegacyDefaultYear_();
   const semesterAktif = setting.semester || 'Ganjil';
 
-  // Hitung jumlah kelas & siswa milik guru ini sebelum import
-  const existingData = sh.getDataRange().getValues().slice(1)
-    .filter(r => String(r[5] || '').toLowerCase().trim() === auth.email);
-  const existingKelas = new Set(existingData.map(r => String(r[0] || '').trim()).filter(Boolean));
-  const existingSiswa = existingData.length;
-
   // Parser fleksibel: tetap menerima template lama, plus kolom baru untuk multi-tahun.
   const header = (rows[0] || []).map(function(h){ return String(h || '').toLowerCase().trim(); });
   const idx = {
@@ -103,17 +97,6 @@ function importSiswa(rows){
       status: String((idx.status > -1 ? r[idx.status] : 'AKTIF') || 'AKTIF').trim()
     };
   }).filter(function(r){ return r.kelas && r.nama && (r.nis || r.nisn); });
-
-  // Cek batas tier LITE per kelas baru
-  const newKelas = new Set(normalized.map(r => String(r.kelas || '').trim()).filter(Boolean));
-  newKelas.forEach(function(k) {
-    if (!existingKelas.has(k)) {
-      assertLiteKelasLimit_(existingKelas.size);
-      existingKelas.add(k); // prevent re-checking same new kelas
-    }
-  });
-  // Cek batas siswa
-  assertLiteSiswaLimit_(existingSiswa + normalized.length - 1);
 
   const rowsForMaster = [];
   normalized.forEach(r=>{

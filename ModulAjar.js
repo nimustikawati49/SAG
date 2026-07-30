@@ -68,7 +68,6 @@ function nextRelasiId_() {
  */
 function getAllModul() {
   assertLicenseActive();
-  assertMinTier_('PRO');
   const auth = getAuth();
 
   // Gunakan cache per email agar tidak konflik antar guru
@@ -124,7 +123,6 @@ function getModulByMapelKelas(mapel, kelas) {
  * data = { mapel, kelas, bab, judul, deskripsi, file_base64, file_name, file_mime }
  */
 function addModul(data) {
-  assertMinTier_('PRO');
   assertLicenseActive();
   const auth = getAuth();
 

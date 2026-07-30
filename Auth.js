@@ -50,7 +50,16 @@ function assertLicenseActive(){
   const auth = getAuth();
   // Superadmin & kepsek bypass lisensi
   if(auth.role === 'superadmin' || auth.role === 'kepsek') return true;
-  // Cek lisensi per sekolah (school-wide)
+
+  // Status akun guru: trial (masih dalam 30 hari) atau sudah diaktifkan
+  // penuh oleh SuperAdmin. Akun 'inactive'/lainnya diblokir di sini.
+  if(auth.status === 'trial'){
+    if(auth.trial_expired) throw new Error('TRIAL_EXPIRED');
+  } else if(auth.status !== 'active'){
+    throw new Error('AKUN_TIDAK_AKTIF');
+  }
+
+  // Cek lisensi per sekolah (school-wide) — tetap berlaku sebagai gerbang tambahan.
   return assertSchoolLicenseActive_();
 }
 
@@ -208,8 +217,13 @@ try {
       if(String(data[i][0]).toLowerCase().trim() === email){
         var role = String(data[i][1] || 'admin').toLowerCase();
         var status = String(data[i][2] || 'inactive').toLowerCase();
-        // Tier: SA & kepsek selalu SCHOOL, admin tergantung license
-        var tier = (role === 'superadmin' || role === 'kepsek') ? 'SCHOOL' : getTier_();
+
+        var result = { email, role, status };
+        if (status === 'trial') {
+          var trialInfo = _computeTrialInfo_(data[i][3]);
+          result.trial_days_left = trialInfo.daysLeft;
+          result.trial_expired = trialInfo.expired;
+        }
 
         // Database mandiri per guru: kalau storage mode = per_guru dan akun
         // ini aktif, pastikan guru punya spreadsheet pribadi sendiri
@@ -222,13 +236,28 @@ try {
           } catch (provErr) { /* fail-soft, jangan ganggu login */ }
         }
 
+        return result;
+      }
+    }
+
+    // Email belum pernah terdaftar sama sekali → daftarkan otomatis sebagai
+    // guru trial 30 hari, supaya siapa pun bisa langsung mencoba aplikasi
+    // tanpa perlu didaftarkan manual dulu oleh SuperAdmin. SuperAdmin tinggal
+    // approve (lihat approveTrialAccount di Users.js) untuk aktivasi permanen.
+    try {
+      var registered = _autoRegisterTrialUser_(email);
+      if (registered) {
+        var newTrialInfo = _computeTrialInfo_(registered.dibuat);
         return {
-          email,
-          role,
-          status,
-          tier
+          email: email,
+          role: 'admin',
+          status: 'trial',
+          trial_days_left: newTrialInfo.daysLeft,
+          trial_expired: newTrialInfo.expired
         };
       }
+    } catch (regErr) {
+      try { logError_('AUTO_REGISTER_TRIAL', regErr); } catch (e2) {}
     }
 
     return { email, role:'guest', status:'inactive' };
@@ -301,7 +330,7 @@ function checkLicenseAccess(){
 
   const auth = getAuth();
 
-  if(auth.role === 'superadmin'){
+  if(auth.role === 'superadmin' || auth.role === 'kepsek'){
     return { allowed:true };
   }
 
@@ -312,28 +341,16 @@ function checkLicenseAccess(){
     };
   }
 
-  const lic = getLicenseByEmail(auth.email);
-
-  if(!lic){
-    return {
-      allowed:false,
-      reason:'INPUT_LICENSE'
-    };
+  if(auth.status === 'active'){
+    return { allowed:true };
   }
 
-  if(lic.status !== 'active'){
-    return {
-      allowed:false,
-      reason:'INPUT_LICENSE'
-    };
+  if(auth.status === 'trial'){
+    if(auth.trial_expired){
+      return { allowed:false, reason:'TRIAL_EXPIRED', trial_days_left:0 };
+    }
+    return { allowed:true, reason:'TRIAL', trial_days_left: auth.trial_days_left };
   }
 
-  if(!lic.expired || new Date(lic.expired) < new Date()){
-    return {
-      allowed:false,
-      reason:'EXPIRED'
-    };
-  }
-
-  return { allowed:true };
+  return { allowed:false, reason:'AKUN_TIDAK_AKTIF' };
 }

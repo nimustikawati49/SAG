@@ -13,20 +13,9 @@ function saveSetting(data){
   }
 
   if(auth.role !== 'superadmin'){
-
-    const lic = getLicenseByEmail(auth.email);
-
-    if(!lic){
-      throw new Error('INPUT_LICENSE');
-    }
-
-    if(lic.status !== 'active'){
-      throw new Error('INPUT_LICENSE');
-    }
-
-    if(!lic.expired || new Date(lic.expired) < new Date()){
-      throw new Error('LISENSI_EXPIRED');
-    }
+    // Trial 30 hari atau sudah diaktifkan penuh oleh SuperAdmin — lempar
+    // TRIAL_EXPIRED / AKUN_TIDAK_AKTIF kalau belum/tidak lagi berhak.
+    assertLicenseActive();
   }
 
   const email = auth.email;
