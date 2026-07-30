@@ -226,7 +226,7 @@ function _computeDashboardMeta_(email, period, jurnalRows){
 
   // Override total kelas/siswa dari arsitektur multi-tahun jika data tersedia.
   try {
-    const kelasAktif = getKelasDiampuAktifForUser_(email);
+    const kelasAktif = getKelasDiampuAktifForUser_(email, period);
     if (kelasAktif.length) {
       totalKelas = kelasAktif.length;
       const counts = _countSiswaPerKelasBatch_(period.tahun_pelajaran, period.semester, kelasAktif);
@@ -321,17 +321,25 @@ function getDashboardAllData() {
   }
 
   var _email = '';
-  var _period = { tahun_pelajaran: '', semester: '' };
   try {
     var _auth = getAuth();
     _email = String(_auth.email || '').toLowerCase().trim();
   } catch(e) { logError_('getDashboardAllData/getAuth', e); }
-  try {
-    if (_email) _period = getUserAcademicPeriod(_email);
-  } catch(e) { logError_('getDashboardAllData/getUserAcademicPeriod', e); }
 
   var setting = {};
   try { setting = getSetting(); } catch(e) { logError_('getDashboardAllData/getSetting', e); }
+
+  // Derive periode aktif dari `setting` (sudah dihitung getSetting(), pakai
+  // cache 60s) alih-alih memanggil getUserAcademicPeriod() lagi — itu baca
+  // mentah sheet SETTING dari awal, jadi kalau dipanggil terpisah SETTING
+  // kebaca 2x per load dashboard untuk data yang sama persis.
+  var _period = {
+    tahun_pelajaran: setting.tahun_pelajaran || '',
+    semester: setting.semester || ''
+  };
+  if (!_period.tahun_pelajaran && _email) {
+    try { _period = getUserAcademicPeriod(_email); } catch(e) { logError_('getDashboardAllData/getUserAcademicPeriod', e); }
+  }
 
   // Baca jadwal LANGSUNG — dengan column-header mapping agar tahan perubahan urutan kolom
   var jadwal = {};

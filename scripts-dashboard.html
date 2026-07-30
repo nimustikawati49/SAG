@@ -490,31 +490,39 @@ function initDashboardMeta(){
     if(_prog >= 78) clearInterval(_progInterval);
   }, 150);
 
-  // 6. Safety timeout 35s
+  // 6. Peringatan lembut kalau masih lama (BUKAN batal — request GAS di
+  //    balik layar TIDAK BISA dibatalkan dari client, jadi kalau ini
+  //    terpicu, data asli tetap akan muncul begitu selesai lewat
+  //    withSuccessHandler di bawah; ini cuma kasih tahu user supaya tidak
+  //    kira aplikasi macet. Tidak lagi menghapus/menandai KPI dengan "—"
+  //    supaya begitu data asli datang, tidak ada kedipan status error.
+  const _slowWarnTimeout = setTimeout(function(){
+    if (typeof showToast === 'function') {
+      showToast('⏳ Data dashboard masih diproses (sheet cukup besar). Mohon tunggu sebentar lagi...', 'info', 8000);
+    }
+  }, 20000);
+
+  // 7. Safety timeout lebih panjang — kalau BENAR-BENAR macet (bukan cuma
+  //    lambat), baru tampilkan status gagal supaya user bisa coba lagi.
   const _skeletonTimeout = setTimeout(function(){
     clearInterval(_progInterval);
     _dashSetProgress(0);
     _metaCallInProgress = false;
     document.getElementById('dashboard').classList.remove('dashboard-loading');
     if(!hasCache){
-      ['kpiJurnal','kpiKelas','kpiRata','kpiRisiko'].forEach(function(id){
-        const el = document.getElementById(id);
-        if(el) el.innerHTML = '<span style="color:#ef4444;font-size:12px">—</span>';
-      });
       const rankingBox = document.getElementById('rankingBox');
       if(rankingBox) rankingBox.innerHTML = '<p class="muted">⚠️ Data dashboard belum selesai dimuat. Coba lagi sebentar.</p>';
-      const insightBox = document.getElementById('insightBox');
-      if(insightBox) insightBox.innerHTML = '<li style="color:#6b7280">Tidak ada data.</li>';
       const dash = document.getElementById('dashboard');
       if (dash && typeof showToast === 'function') {
         showToast('⚠️ Dashboard masih memuat data. Coba lagi sebentar.', 'warning', 7000);
       }
     }
-  }, 35000);
+  }, 90000);
 
   // 7. Single GAS call — getDashboardAllData() combines meta + V4
   google.script.run
     .withFailureHandler(function(err){
+      clearTimeout(_slowWarnTimeout);
       clearTimeout(_skeletonTimeout);
       clearInterval(_progInterval);
       _dashSetProgress(0);
@@ -524,6 +532,7 @@ function initDashboardMeta(){
         showToast('❌ Gagal memuat dashboard: ' + (err.message || 'Coba refresh'), 'error', 6000);
     })
     .withSuccessHandler(function(allData){
+      clearTimeout(_slowWarnTimeout);
       clearTimeout(_skeletonTimeout);
       clearInterval(_progInterval);
       _metaCallInProgress = false;

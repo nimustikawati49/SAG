@@ -377,10 +377,13 @@ function setUserAcademicPeriod(tahun, semester) {
   throw new Error('Data setting guru belum ada');
 }
 
-function getKelasDiampuAktifForUser_(email) {
+function getKelasDiampuAktifForUser_(email, precomputedPeriod) {
   ensureAcademicSchema_();
   const authEmailNorm = String(email || getLoginEmail()).toLowerCase().trim();
-  const period = getUserAcademicPeriod(authEmailNorm);
+  // Terima period yang sudah dihitung caller (mis. getDashboardAllData)
+  // supaya tidak baca ulang sheet SETTING — SETTING sudah dibaca sekali
+  // di sana, membaca ulang di sini murni redundan dan memperlambat load.
+  const period = precomputedPeriod || getUserAcademicPeriod(authEmailNorm);
 
   const sh = sheet('GuruMengajar');
   const rows = sh.getDataRange().getValues();
