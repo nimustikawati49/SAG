@@ -31,15 +31,15 @@ function downloadTemplate(){
 function simpanSetting(){
 
   if(!settingSudahAda){
-    if(
-      !set_sekolah.value.trim() ||
-      !set_tahun.value.trim() ||
-      !set_semester.value.trim() ||
-      !set_guru.value.trim() ||
-      !set_kelas_diampu.value.trim() ||
-      document.querySelectorAll('.mapel-cb:checked').length === 0
-    ){
-      alert('⚠️ Lengkapi semua data setting terlebih dahulu');
+    const missing = [];
+    if(!set_sekolah.value.trim()) missing.push('Nama Sekolah');
+    if(!set_tahun.value.trim()) missing.push('Tahun Pelajaran');
+    if(!set_semester.value.trim()) missing.push('Semester');
+    if(!set_guru.value.trim()) missing.push('Nama Guru');
+    if(!set_kelas_diampu.value.trim()) missing.push('Kelas Diampu');
+    if(document.querySelectorAll('.mapel-cb:checked').length === 0) missing.push('Mata Pelajaran (centang minimal 1)');
+    if(missing.length){
+      alert('⚠️ Lengkapi data berikut terlebih dahulu:\n- ' + missing.join('\n- '));
       return;
     }
   }
