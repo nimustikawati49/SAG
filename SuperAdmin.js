@@ -1332,13 +1332,22 @@ function _autoProvisionUserSpreadsheet_(email) {
     }
   } catch (e) { /* kalau cek gagal, lebih aman skip provisioning daripada salah pindah */ return null; }
 
-  var lock = LockService.getScriptLock();
-  var gotLock = false;
-  try { gotLock = lock.tryLock(5000); } catch (e) { gotLock = false; }
-  if (!gotLock) return null; // sedang direbut proses lain — lanjut tanpa memblokir sesi ini
+  // Pakai claim ringan berbasis cache (per-email), BUKAN LockService.getScriptLock()
+  // global. Membuat 1 spreadsheet+folder baru di Drive genuinely lambat (bisa
+  // >10 detik); kalau pakai lock GLOBAL, setiap guru LAIN yang kebetulan
+  // butuh lock yang sama di request lain (mis. ensureAcademicSchema_) ikut
+  // macet total menunggu proses provisioning guru ini selesai. Race super
+  // jarang di claim ini paling banter bikin 1 spreadsheet dobel, yang gampang
+  // dibersihkan lewat panel Resource Map SuperAdmin — jauh lebih aman
+  // daripada memblokir semua orang.
+  var claimKey = 'USER_PROVISIONING_CLAIM_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
+  try {
+    if (cache.get(claimKey)) return null; // proses lain sedang mengerjakan, jangan ikut nunggu
+    cache.put(claimKey, '1', 60);
+  } catch (e) {}
 
   try {
-    // Cek ulang setelah dapat lock, siapa tahu sudah diselesaikan proses lain.
+    // Cek ulang setelah klaim, siapa tahu sudah diselesaikan proses lain barusan.
     if (resolveSpreadsheetIdForUser_(targetEmail)) {
       try { cache.put(cacheKey, '1', 21600); } catch (e) {}
       return null;
@@ -1373,7 +1382,7 @@ function _autoProvisionUserSpreadsheet_(email) {
     try { logError_('AUTO_PROVISION_USER_SPREADSHEET', e); } catch (e2) {}
     return null;
   } finally {
-    try { lock.releaseLock(); } catch (e) {}
+    try { cache.remove(claimKey); } catch (e) {}
   }
 }
 
