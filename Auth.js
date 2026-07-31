@@ -269,9 +269,12 @@ function _resolveAuth_(email){
         }
 
         // Database mandiri per guru: kalau storage mode = per_guru dan akun
-        // ini aktif, pastikan guru punya spreadsheet pribadi sendiri
-        // (auto-provision sekali, cache-gated, tidak pernah melempar error).
-        if (status === 'active' && (role === 'admin' || role === 'kepsek')) {
+        // ini aktif ATAU masih trial, pastikan guru punya spreadsheet
+        // pribadi sendiri (auto-provision sekali, cache-gated, tidak pernah
+        // melempar error). Trial ikut disertakan supaya guru yang baru coba
+        // aplikasi langsung merasakan dashboard cepat (baca punya sendiri),
+        // bukan baru dapat itu setelah disetujui SuperAdmin.
+        if ((status === 'active' || status === 'trial') && (role === 'admin' || role === 'kepsek')) {
           try {
             if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
               _autoProvisionUserSpreadsheet_(email);

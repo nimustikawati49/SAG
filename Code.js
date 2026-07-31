@@ -43,7 +43,7 @@ const FOLDER_DOKUMENTASI  = 'JURNAL_DOKUMENTASI';
 const MAX_IMAGE_SIZE_KB   = 900;
 const THUMB_SIZE_KB       = 100;
 const APP_STORAGE_MODE_PROPERTY = 'APP_STORAGE_MODE';
-const DEFAULT_APP_STORAGE_MODE  = 'central';
+const DEFAULT_APP_STORAGE_MODE  = 'per_guru';
 
 // =========================================================
 // SPREADSHEET CONNECTION
@@ -56,7 +56,16 @@ function getCentralSpreadsheet_() {
 }
 
 function getStorageMode_() {
-  const mode = String(PropertiesService.getScriptProperties().getProperty(APP_STORAGE_MODE_PROPERTY) || DEFAULT_APP_STORAGE_MODE).toLowerCase().trim();
+  const props = PropertiesService.getScriptProperties();
+  let raw = props.getProperty(APP_STORAGE_MODE_PROPERTY);
+  if (!raw) {
+    // Migrasi satu kali: belum pernah di-set eksplisit lewat panel SuperAdmin,
+    // jadi pakai default & simpan supaya panel Storage Mode menampilkan
+    // pilihan yang benar-benar aktif (bukan diam-diam ganti tiap deploy).
+    raw = DEFAULT_APP_STORAGE_MODE;
+    try { props.setProperty(APP_STORAGE_MODE_PROPERTY, raw); } catch (e) {}
+  }
+  const mode = String(raw).toLowerCase().trim();
   return mode === 'per_guru' ? 'per_guru' : 'central';
 }
 

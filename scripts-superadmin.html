@@ -93,13 +93,12 @@ function saveStorageModeConfig() {
 
   if (mode === 'per_guru') {
     var ok = confirm(
-      '⚠️ PERINGATAN: Mode "per_guru" akan membuat SPREADSHEET PRIBADI BARU (kosong) ' +
-      'untuk setiap guru aktif saat mereka login berikutnya, dan SEMUA data operasional ' +
-      'mereka (Setting, Jurnal, Nilai, Jadwal, dst.) akan dialihkan ke spreadsheet baru itu ' +
-      '— BUKAN ke data lama di spreadsheet pusat.\n\n' +
-      'Data lama TIDAK hilang/terhapus, tapi guru tidak akan melihatnya lagi selama mode ini aktif ' +
-      '(seolah akun mereka kosong total).\n\n' +
-      'Jangan aktifkan mode ini kecuali kamu benar-benar siap memigrasikan setiap guru satu per satu. ' +
+      'Mode "per_guru" membuat SPREADSHEET PRIBADI BARU untuk guru yang BELUM PERNAH ' +
+      'punya data di spreadsheet pusat (akun baru/trial) — dashboard mereka jadi hanya ' +
+      'membaca data akun sendiri, bukan sheet gabungan semua guru.\n\n' +
+      'Guru yang SUDAH punya data lama di spreadsheet pusat (mis. Setting/Jurnal tercatat) ' +
+      'otomatis DILEWATI dan tetap memakai data lama seperti biasa — tidak ada yang dipindah ' +
+      'atau terlihat kosong.\n\n' +
       'Lanjutkan aktifkan "per_guru"?'
     );
     if (!ok) {
