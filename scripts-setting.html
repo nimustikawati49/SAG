@@ -1047,17 +1047,66 @@ function loadRiwayatTahunAjaran_(){
   box.innerHTML = '<p class="muted">Memuat...</p>';
   google.script.run
     .withSuccessHandler(function(res){
+      window._riwayatPeriod = { tahun: parts[0], semester: parts[1] };
       const siswaPerKelas = res.siswa_per_kelas || {};
-      const kelasRows = (res.kelas_diampu || []).map(function(k){
+      const kelasList = res.kelas_diampu || [];
+      const mapelList = res.mapel_diampu || [];
+      const kelasRows = kelasList.map(function(k){
         return '<tr><td>' + _escSetting_(k) + '</td><td>' + (siswaPerKelas[k] || 0) + '</td></tr>';
       }).join('') || '<tr><td colspan="2" class="muted">Tidak ada kelas tercatat</td></tr>';
-      box.innerHTML =
-        '<p><b>Mapel Diampu:</b> ' + ((res.mapel_diampu || []).join(', ') || '-') + '</p>' +
+
+      let html =
+        '<p><b>Mapel Diampu:</b> ' + (mapelList.join(', ') || '-') + '</p>' +
         '<p><b>Jadwal Hari/Jam:</b> ' + (res.jadwal_count || 0) + ' entri</p>' +
         '<table><thead><tr><th>Kelas</th><th>Jumlah Siswa</th></tr></thead><tbody>' + kelasRows + '</tbody></table>';
+
+      if(kelasList.length && mapelList.length){
+        html +=
+          '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #e5e7eb">' +
+            '<label>Lihat Daftar Nilai</label>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+              '<select id="wizRiwayatKelas">' + kelasList.map(function(k){ return '<option>' + _escSetting_(k) + '</option>'; }).join('') + '</select>' +
+              '<select id="wizRiwayatMapel">' + mapelList.map(function(m){ return '<option>' + _escSetting_(m) + '</option>'; }).join('') + '</select>' +
+              '<button type="button" class="ghost" onclick="loadRiwayatNilai_()">Tampilkan Nilai</button>' +
+            '</div>' +
+            '<div id="wizRiwayatNilaiResult" style="margin-top:10px"></div>' +
+          '</div>';
+      }
+
+      box.innerHTML = html;
     })
     .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal: ' + (err.message || err) + '</p>'; })
     .getAcademicHistorySummary(parts[0], parts[1]);
+}
+
+/**
+ * loadRiwayatNilai_()
+ * Daftar nilai (baca-saja) untuk 1 kelas+mapel di periode yang sedang
+ * dilihat di modal "Lihat Tahun Sebelumnya". Pakai getRankingNilai() yang
+ * sudah ada (dipakai juga oleh tab Input Nilai), tidak ada endpoint baru.
+ */
+function loadRiwayatNilai_(){
+  const p = window._riwayatPeriod;
+  const kelasEl = document.getElementById('wizRiwayatKelas');
+  const mapelEl = document.getElementById('wizRiwayatMapel');
+  const box = document.getElementById('wizRiwayatNilaiResult');
+  if(!p || !kelasEl || !mapelEl || !box) return;
+  box.innerHTML = '<p class="muted">Memuat nilai...</p>';
+  google.script.run
+    .withSuccessHandler(function(rows){
+      if(!rows || !rows.length){
+        box.innerHTML = '<p class="muted">Belum ada nilai tersimpan untuk kelas &amp; mapel ini.</p>';
+        return;
+      }
+      const trs = rows.map(function(r){
+        const nilai = (r.nilai_akhir !== null && r.nilai_akhir !== '' && r.nilai_akhir !== undefined) ? r.nilai_akhir : '-';
+        return '<tr><td>' + (r.ranking != null ? r.ranking : '-') + '</td><td>' + _escSetting_(r.nama_siswa || '-') + '</td><td>' + _escSetting_(r.nis || '-') + '</td><td>' + nilai + '</td></tr>';
+      }).join('');
+      box.innerHTML =
+        '<table><thead><tr><th>Rank</th><th>Nama</th><th>NIS</th><th>Nilai Akhir</th></tr></thead><tbody>' + trs + '</tbody></table>';
+    })
+    .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal memuat nilai: ' + (err.message || err) + '</p>'; })
+    .getRankingNilai(kelasEl.value, mapelEl.value, p.tahun, p.semester);
 }
 
 function initDashboardAcademicFilter(){
