@@ -388,6 +388,12 @@ function applyLockUI(isLocked){
     document.getElementById('btnResetSiswa')
   ];
 
+  // 🟢 Tahun Pelajaran & Semester SENGAJA tidak pernah dikunci — guru boleh
+  // pindah tahun ajaran kapan saja (lihat _afterSettingSaved_ di
+  // scripts-setting.html yang otomatis cek transisi kelas/jadwal saat
+  // tahun/semester berubah). Jangan tambahkan set_tahun/set_semester ke
+  // headerInputs.
+
   if(isLocked){
 
     if(lockIcon) lockIcon.style.display = 'inline';
@@ -396,16 +402,15 @@ function applyLockUI(isLocked){
     headerInputs.forEach(el=>{
       if(el) el.disabled = true;
     });
-    // 🔒 Lock mapel checkboxes
+    // 🔒 Lock mapel checkboxes + kelas diampu
     document.querySelectorAll('.mapel-cb').forEach(cb=>{ cb.disabled = true; });
+    const kelasEl = document.getElementById('set_kelas_diampu');
+    if(kelasEl) kelasEl.disabled = true;
 
     // 🔒 Lock upload siswa
     siswaControls.forEach(el=>{
       if(el) el.disabled = true;
     });
-
-    // 🟢 Semester tetap bisa diganti
-    set_semester.disabled = false;
 
   }else{
 
@@ -414,8 +419,10 @@ function applyLockUI(isLocked){
     headerInputs.forEach(el=>{
       if(el) el.disabled = false;
     });
-    // 🔓 Unlock mapel checkboxes
+    // 🔓 Unlock mapel checkboxes + kelas diampu
     document.querySelectorAll('.mapel-cb').forEach(cb=>{ cb.disabled = false; });
+    const kelasElUnlock = document.getElementById('set_kelas_diampu');
+    if(kelasElUnlock) kelasElUnlock.disabled = false;
 
     siswaControls.forEach(el=>{
       if(el) el.disabled = false;

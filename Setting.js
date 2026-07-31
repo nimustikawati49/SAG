@@ -45,6 +45,12 @@ function saveSetting(data){
   if(!payload.tahun){
     throw new Error('Field tahun belum diisi');
   }
+  if(!/^\d{4}\/\d{4}$/.test(payload.tahun)){
+    throw new Error('Format tahun pelajaran tidak valid (contoh: 2026/2027)');
+  }
+  if(payload.semester && ['Ganjil','Genap'].indexOf(payload.semester) === -1){
+    throw new Error('Semester harus Ganjil atau Genap');
+  }
 
   // Pastikan master tahun pelajaran tersedia dan dapat dipakai lintas tahun.
   ensureAcademicYearExists_(payload.tahun, payload.semester || 'Ganjil', false);

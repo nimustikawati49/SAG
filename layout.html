@@ -1030,19 +1030,7 @@
   🔒
 </span>
 </h3>
-  <div class="card" style="margin-bottom:14px;background:#f8fafc;border-left:6px solid #0ea5e9">
-    <h4 style="margin-top:0">Pengaturan Akademik Multi Tahun</h4>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="ghost" onclick="openAcademicModal('periode')">Tahun Pelajaran</button>
-      <button class="ghost" onclick="openAcademicModal('semester')">Semester</button>
-      <button class="ghost" onclick="openAcademicModal('mapel')">Mata Pelajaran Diampu</button>
-      <button class="ghost" onclick="openAcademicModal('kelas')">Kelas Diampu</button>
-      <button class="ghost superadmin-only" style="display:none" onclick="openAcademicModal('clone')" title="Salin jadwal mengajar SEMUA guru dari satu tahun ke tahun lain (khusus SuperAdmin)">Clone Tahun Pelajaran (Semua Guru)</button>
-      <button class="ghost" onclick="openAcademicModal('promosi')">Promosi Siswa</button>
-      <button class="ghost" onclick="openAcademicModal('alumni')">Alumni</button>
-    </div>
-    <div id="academicQuickInfo" class="muted" style="margin-top:8px">Memuat konfigurasi akademik...</div>
-  </div>
+  <div id="academicQuickInfo" class="muted" style="margin-bottom:14px">Memuat konfigurasi akademik...</div>
   <!-- ================= PANDUAN ================= -->
   <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1">
     <h4 style="margin-top:0">📌 Langkah Penggunaan</h4>
@@ -1062,7 +1050,7 @@
       <label>Nama Sekolah</label>
       <input id="set_sekolah">
       <label>Tahun Pelajaran</label>
-      <input id="set_tahun">
+      <select id="set_tahun"></select>
       <label>Logo Sekolah</label>
       <input type="file"
              id="logoFile"
@@ -1078,15 +1066,13 @@
     <!-- KANAN -->
     <div class="setting-col">
       <label>Semester</label>
-          <div style="display:flex;gap:10px;align-items:center">
-            <input id="set_semester" style="flex:1">
-            <button class="ghost" onclick="gantiSemester()" title="Ganti semester aktif">
-              🔄 Ganti
-            </button>
-          </div>
-              <small class="helper">
-                Digunakan untuk jurnal baru. Jurnal lama tidak berubah.
-              </small>
+      <select id="set_semester">
+        <option>Ganjil</option>
+        <option>Genap</option>
+      </select>
+      <small class="helper">
+        Bisa diganti kapan saja. Digunakan untuk jurnal baru, jurnal lama tidak berubah.
+      </small>
       <label>Nama Guru</label>
       <input id="set_guru">
       <label>NIP Guru</label>
@@ -1141,6 +1127,12 @@
     </div>
     <!-- Preview mapel terpilih -->
     <div id="mapelSelectedPreview" style="margin-top:8px;min-height:22px;font-size:12px;color:#6C63FF;font-weight:600"></div>
+  </div>
+  <!-- ===== KELAS DIAMPU (FULL WIDTH) ===== -->
+  <div style="margin-top:18px">
+    <label style="font-weight:600;font-size:14px">Kelas Diampu <span style="color:#ef4444">*</span></label>
+    <p class="muted" style="margin:2px 0 6px;font-size:12px">Pisahkan dengan koma, contoh: VII A, VII B, VIII A</p>
+    <input id="set_kelas_diampu" placeholder="VII A, VII B, VIII A">
   </div>
   <div class="setting-actions">
     <button onclick="simpanSetting()">💾 Simpan Setting</button>
@@ -1200,6 +1192,18 @@
             disabled>
       💾 Simpan Data Siswa
     </button>
+  </div>
+
+  <div class="card" style="margin:24px 0;background:#f8fafc;border-left:6px solid #0ea5e9">
+    <h4 style="margin-top:0">Riwayat &amp; Kenaikan Kelas</h4>
+    <p class="muted" style="font-size:12px;margin:0 0 10px">
+      Alumni tidak dihapus — status disimpan sebagai ALUMNI pada riwayat kelas dan tetap tampil di histori.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="ghost" onclick="openAcademicModal('promosi')">Promosi Siswa</button>
+      <button class="ghost" onclick="openAcademicModal('riwayat')">Lihat Tahun Sebelumnya</button>
+      <button class="ghost superadmin-only" style="display:none" onclick="openAcademicModal('clone')" title="Salin jadwal mengajar SEMUA guru dari satu tahun ke tahun lain (khusus SuperAdmin)">Clone Tahun Pelajaran (Semua Guru)</button>
+    </div>
   </div>
 
   <hr style="margin:32px 0">

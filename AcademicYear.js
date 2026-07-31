@@ -954,3 +954,63 @@ function promoteSiswaWizard(payload) {
   return { success: true, processed: processed };
 }
 
+/**
+ * getKelasListForPeriod(tahun, semester)
+ * Wrapper tipis untuk UI Promosi Siswa — daftar kelas yang diampu GURU
+ * YANG LOGIN di satu periode tertentu, supaya guru tinggal pilih dari
+ * kelas yang benar-benar ia ajar (bukan mengetik nama kelas manual).
+ */
+function getKelasListForPeriod(tahun, semester) {
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  if (!auth.email || auth.role === 'guest') throw new Error('AKSES_DITOLAK');
+  const combos = getGuruMengajarForPeriod_(auth.email, tahun, semester);
+  return Array.from(new Set(combos.map(function(c) { return c.kelas; }).filter(Boolean))).sort();
+}
+
+/**
+ * getAcademicHistorySummary(tahun, semester)
+ * Rekap BACA-SAJA untuk periode manapun milik guru yang login — kelas
+ * diampu, mapel diampu, jumlah siswa aktif per kelas, jumlah entri
+ * jadwal hari/jam. Tidak menyentuh/menulis apapun, dan tidak mengubah
+ * periode aktif guru (beda dari setUserAcademicPeriod).
+ */
+function getAcademicHistorySummary(tahun, semester) {
+  ensureAcademicSchema_();
+  const auth = getAuth();
+  if (!auth.email || auth.role === 'guest') throw new Error('AKSES_DITOLAK');
+
+  tahun = String(tahun || '').trim();
+  semester = String(semester || '').trim();
+  if (!tahun || !semester) throw new Error('Tahun & semester wajib diisi');
+
+  const combos = getGuruMengajarForPeriod_(auth.email, tahun, semester);
+  const kelasList = Array.from(new Set(combos.map(function(c) { return c.kelas; }).filter(Boolean))).sort();
+  const mapelList = Array.from(new Set(combos.map(function(c) { return c.mapel; }).filter(Boolean))).sort();
+  const jadwal = (typeof getJadwalSemesterForPeriod_ === 'function')
+    ? getJadwalSemesterForPeriod_(auth.email, tahun, semester) : [];
+
+  const riwayat = sheet('RiwayatKelas').getDataRange().getValues().slice(1).filter(function(r) {
+    return String(r[1] || '') === tahun &&
+      String(r[2] || '').toLowerCase().trim() === semester.toLowerCase() &&
+      kelasList.indexOf(String(r[4] || '').trim()) > -1;
+  });
+  const siswaPerKelas = {};
+  kelasList.forEach(function(k) { siswaPerKelas[k] = 0; });
+  riwayat.forEach(function(r) {
+    const k = String(r[4] || '').trim();
+    const status = String(r[5] || '').toUpperCase();
+    if (status === 'ALUMNI' || status === 'MUTASI_KELUAR') return;
+    if (siswaPerKelas.hasOwnProperty(k)) siswaPerKelas[k]++;
+  });
+
+  return {
+    tahun_pelajaran: tahun,
+    semester: semester,
+    kelas_diampu: kelasList,
+    mapel_diampu: mapelList,
+    siswa_per_kelas: siswaPerKelas,
+    jadwal_count: jadwal.length
+  };
+}
+
