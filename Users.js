@@ -126,6 +126,7 @@ function approveTrialAccount(email) {
     shLic.appendRow([key, email, exp, 'active', new Date(), new Date(), '']);
   }
 
+  if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
   logAudit('APPROVE_TRIAL_ACCOUNT', email, 'Aktivasi penuh oleh SuperAdmin');
   return { success: true, email: email };
 }
@@ -149,13 +150,14 @@ function updateUser(email, payload){
             sheet('LICENSES').getRange(j+1,4).setValue(payload.status); 
           } 
         } 
-        logAudit('UPDATE_STATUS', email, payload.status); 
-      } 
-      return true; 
-    } 
-  } 
-  throw new Error('User tidak ditemukan'); 
-} 
+        logAudit('UPDATE_STATUS', email, payload.status);
+      }
+      if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
+      return true;
+    }
+  }
+  throw new Error('User tidak ditemukan');
+}
 
 /**
  * Set tanggal expired lisensi untuk user tertentu.

@@ -53,6 +53,10 @@ function bootApp(){
 
   // ===== KEPSEK =====
   if (auth.role === 'kepsek') {
+    // Defense-in-depth: pastikan elemen SuperAdmin tetap tersembunyi
+    // biarpun (mis.) CSS default-nya gagal load duluan.
+    document.querySelectorAll('.superadmin-only')
+      .forEach(el => el.style.setProperty('display','none','important'));
     // Use setProperty with !important to beat .sb-item { display:flex !important }
     document.querySelectorAll('.kepsek-only')
       .forEach(el => el.style.setProperty('display', 'flex', 'important'));
@@ -85,8 +89,8 @@ function bootApp(){
 
   // ===== ADMIN =====
   if (auth.role === 'admin') {
-    // Explicitly keep kepsek-only hidden for regular admin/guru
-    document.querySelectorAll('.kepsek-only')
+    // Explicitly keep superadmin-only / kepsek-only hidden for regular admin/guru
+    document.querySelectorAll('.superadmin-only,.kepsek-only')
       .forEach(el => el.style.setProperty('display','none','important'));
     document.querySelectorAll('.admin-only')
       .forEach(el => el.style.display = 'inline-block');

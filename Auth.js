@@ -198,17 +198,57 @@ function getAuth(){
       return { email:null, role:'guest', status:'inactive' };
     }
 
-// Rate limiting: max 60 calls per minute per email
-try {
-  const cache   = CacheService.getScriptCache();
-  const rlKey   = 'RL_' + email.replace(/[^a-z0-9]/g, '_');
-  const current = parseInt(cache.get(rlKey) || '0', 10);
-  if (current >= 60) {
-    return { email, role:'guest', status:'rate_limited' };
-  }
-  cache.put(rlKey, String(current + 1), 60);
-} catch(rlErr) { /* cache non-critical, silently ignore */ }
+    const cache = CacheService.getScriptCache();
 
+    // Rate limiting: max 60 calls per minute per email
+    try {
+      const rlKey   = 'RL_' + email.replace(/[^a-z0-9]/g, '_');
+      const current = parseInt(cache.get(rlKey) || '0', 10);
+      if (current >= 60) {
+        return { email, role:'guest', status:'rate_limited' };
+      }
+      cache.put(rlKey, String(current + 1), 60);
+    } catch(rlErr) { /* cache non-critical, silently ignore */ }
+
+    // Cache HASIL resolusi auth (bukan rate limit) selama beberapa detik.
+    // getAuth() dipanggil di 80+ titik di seluruh backend — satu page load
+    // memicu puluhan panggilan google.script.run yang masing-masing manggil
+    // getAuth() sendiri-sendiri, HAMPIR BERSAMAAN. Tanpa cache ini, SETIAP
+    // panggilan baca ulang seluruh sheet USERS dari nol, dan untuk email yang
+    // BELUM terdaftar, semuanya berebut LockService SECARA BERSAMAAN buat
+    // auto-registrasi trial — itulah yang bikin aksi seperti simpan
+    // setting/jadwal terasa "tidak ada respons sama sekali" khususnya di
+    // akun yang baru pertama kali dipakai.
+    const authCacheKey = 'AUTH_' + email.replace(/[^a-z0-9]/g, '_');
+    try {
+      const cachedAuth = cache.get(authCacheKey);
+      if (cachedAuth) return JSON.parse(cachedAuth);
+    } catch(cacheErr) { /* lanjut resolusi normal kalau cache gagal dibaca */ }
+
+    const resolved = _resolveAuth_(email);
+    try { cache.put(authCacheKey, JSON.stringify(resolved), 15); } catch(putErr) { /* quota — abaikan */ }
+    return resolved;
+
+  }catch(e){
+    return { email:null, role:'guest', status:'inactive' };
+  }
+}
+
+/**
+ * _invalidateAuthCache_(email)
+ * Hapus cache getAuth() untuk satu email — dipanggil setelah role/status
+ * akun berubah (approveTrialAccount, updateUser) supaya perubahan berlaku
+ * saat itu juga alih-alih menunggu sampai 15 detik TTL habis.
+ */
+function _invalidateAuthCache_(email){
+  try {
+    var e = String(email || '').toLowerCase().trim();
+    if (!e) return;
+    CacheService.getScriptCache().remove('AUTH_' + e.replace(/[^a-z0-9]/g, '_'));
+  } catch (err) { /* non-critical */ }
+}
+
+function _resolveAuth_(email){
     const sh = sheet('USERS');
     if(!sh){
       return { email, role:'guest', status:'inactive' };
@@ -264,10 +304,6 @@ try {
     }
 
     return { email, role:'guest', status:'inactive' };
-
-  }catch(e){
-    return { email:null, role:'guest', status:'inactive' };
-  }
 }
 
 function findUserByEmail(email){
