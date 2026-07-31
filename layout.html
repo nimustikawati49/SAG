@@ -1131,8 +1131,23 @@
   <!-- ===== KELAS DIAMPU (FULL WIDTH) ===== -->
   <div style="margin-top:18px">
     <label style="font-weight:600;font-size:14px">Kelas Diampu <span style="color:#ef4444">*</span></label>
-    <p class="muted" style="margin:2px 0 6px;font-size:12px">Pisahkan dengan koma, contoh: VII A, VII B, VIII A</p>
-    <input id="set_kelas_diampu" placeholder="VII A, VII B, VIII A">
+    <p class="muted" style="margin:2px 0 6px;font-size:12px">Pisahkan dengan koma, contoh: 7A, 7B, 8A — atau pakai bantuan di bawah supaya nama kelas otomatis konsisten dengan data siswa.</p>
+    <input id="set_kelas_diampu" placeholder="7A, 7B, 8A" oninput="refreshSiswaKelasHint_()">
+    <div style="margin-top:10px;padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;font-weight:600;margin:0">🧩 Bantu buat daftar kelas</label>
+        <select id="genJenjang" onchange="renderGenTingkat_()">
+          <option value="">-- Pilih Jenjang --</option>
+          <option value="PAUD/TK">PAUD / TK</option>
+          <option value="SD">SD</option>
+          <option value="SMP">SMP</option>
+          <option value="SMA">SMA</option>
+          <option value="SMK">SMK</option>
+        </select>
+      </div>
+      <div id="genTingkatRows" style="margin-top:8px"></div>
+      <button type="button" class="ghost" style="margin-top:8px;display:none;font-size:12px" id="btnGenKelas" onclick="applyGeneratedKelas_()">+ Tambahkan ke Kelas Diampu</button>
+    </div>
   </div>
   <div class="setting-actions">
     <button onclick="simpanSetting()">💾 Simpan Setting</button>
@@ -1159,6 +1174,7 @@
         <b>kelas, no_absen, nis, nama, jk</b><br>
         Opsional: <b>nisn, ttl, alamat, orang_tua, kontak, status</b>
       </p>
+      <p class="muted" id="siswaKelasHint" style="font-size:12px"></p>
       <button id="btnDownloadTemplate"
               class="btn btn-secondary"
               onclick="downloadTemplate()"

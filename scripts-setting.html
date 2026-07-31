@@ -716,6 +716,7 @@ function refreshAcademicQuickInfo(){
       if(kEl && document.activeElement !== kEl && !kEl.value.trim()){
         kEl.value = kelasList.join(', ');
       }
+      refreshSiswaKelasHint_();
     })
     .withFailureHandler(function(err){
       el.textContent = 'Gagal memuat data akademik: ' + (err.message || err);
@@ -744,6 +745,87 @@ function populateTahunPelajaranSelect_(selectEl, selectedValue){
   if(!selectEl) return;
   selectEl.innerHTML = _tahunOptionsHtml_(selectedValue);
   if(selectedValue) selectEl.value = selectedValue;
+}
+
+/* ===== Bantuan generator Kelas Diampu (jenjang + jumlah rombel) =====
+   Kelas Diampu tetap field teks bebas (fleksibel untuk sekolah dengan
+   penamaan non-standar), generator ini cuma bantu isi otomatis supaya
+   nama kelas KONSISTEN dengan yang nanti diketik di kolom "kelas" pada
+   upload CSV data siswa — sumber kebanyakan masalah "kelas kosong di
+   dashboard" sebelumnya adalah nama kelas yang beda persis (typo). */
+const JENJANG_TINGKAT_ = {
+  'PAUD/TK': ['PG', 'TK A', 'TK B'],
+  'SD': ['1','2','3','4','5','6'],
+  'SMP': ['7','8','9'],
+  'SMA': ['10','11','12'],
+  'SMK': ['10','11','12']
+};
+
+function renderGenTingkat_(){
+  const jenjang = (document.getElementById('genJenjang') || {}).value || '';
+  const box = document.getElementById('genTingkatRows');
+  const btn = document.getElementById('btnGenKelas');
+  if(!box) return;
+  const tingkatList = JENJANG_TINGKAT_[jenjang];
+  if(!tingkatList){
+    box.innerHTML = '';
+    if(btn) btn.style.display = 'none';
+    return;
+  }
+  box.innerHTML = tingkatList.map(function(t){
+    const safe = _escSetting_(t);
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">' +
+      '<label style="display:flex;gap:4px;align-items:center;min-width:90px;font-size:13px">' +
+        '<input type="checkbox" class="genTingkatCb" value="' + safe + '" checked> ' + safe +
+      '</label>' +
+      '<span class="muted" style="font-size:12px">Jumlah rombel:</span>' +
+      '<input type="number" class="genRombelInput" value="1" min="1" max="12" style="width:60px">' +
+    '</div>';
+  }).join('');
+  if(btn) btn.style.display = 'inline-block';
+}
+
+function applyGeneratedKelas_(){
+  const jenjang = (document.getElementById('genJenjang') || {}).value || '';
+  const names = [];
+  document.querySelectorAll('.genTingkatCb:checked').forEach(function(cb){
+    const tingkat = cb.value;
+    const row = cb.closest('div');
+    const rombelInput = row ? row.querySelector('.genRombelInput') : null;
+    const rombel = Math.max(1, parseInt((rombelInput && rombelInput.value) || '1', 10) || 1);
+    if(rombel === 1){
+      names.push(tingkat);
+    } else if(jenjang === 'PAUD/TK'){
+      for(let i = 1; i <= rombel; i++) names.push(tingkat + ' ' + i);
+    } else {
+      for(let i = 0; i < rombel; i++) names.push(tingkat + String.fromCharCode(65 + i));
+    }
+  });
+  if(!names.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+
+  const kEl = document.getElementById('set_kelas_diampu');
+  if(!kEl) return;
+  const existing = kEl.value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+  names.forEach(function(n){ if(existing.indexOf(n) === -1) existing.push(n); });
+  kEl.value = existing.join(', ');
+  refreshSiswaKelasHint_();
+  showAcademicToast('✅ ' + names.length + ' kelas ditambahkan ke Kelas Diampu', 'success');
+}
+
+/**
+ * refreshSiswaKelasHint_()
+ * Tampilkan daftar Kelas Diampu yang sedang diketik/tersimpan di dekat
+ * tombol Upload Data Siswa, supaya guru menyalin nama kelas yang PERSIS
+ * sama ke kolom "kelas" di CSV (bukan mengetik ulang dari ingatan).
+ */
+function refreshSiswaKelasHint_(){
+  const hint = document.getElementById('siswaKelasHint');
+  const kEl = document.getElementById('set_kelas_diampu');
+  if(!hint || !kEl) return;
+  const list = kEl.value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+  hint.innerHTML = list.length
+    ? 'Kelas terdaftar (salin persis ke kolom <b>kelas</b> di CSV): <b>' + list.map(_escSetting_).join(', ') + '</b>'
+    : '';
 }
 
 function openAcademicModal(mode){
