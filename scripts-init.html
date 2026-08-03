@@ -335,7 +335,6 @@ function initApp(){
       .withFailureHandler(function(err){ console.warn('[initApp] getSetting gagal:', err && err.message); })
       .withSuccessHandler(function(d){
         if(typeof _applySettingToHeader_ === 'function') _applySettingToHeader_(d);
-        if(typeof initDashboardAcademicFilter === 'function') initDashboardAcademicFilter();
         if(typeof refreshAcademicQuickInfo === 'function') refreshAcademicQuickInfo();
       })
       .getSetting();

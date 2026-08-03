@@ -571,7 +571,6 @@ function loadSettingForm(){
     // ===============================
     _applySettingToHeader_(d);
     refreshAcademicQuickInfo();
-    initDashboardAcademicFilter();
 
   }).getSetting();
 }
@@ -764,12 +763,10 @@ const JENJANG_TINGKAT_ = {
 function renderGenTingkat_(){
   const jenjang = (document.getElementById('genJenjang') || {}).value || '';
   const box = document.getElementById('genTingkatRows');
-  const btn = document.getElementById('btnGenKelas');
   if(!box) return;
   const tingkatList = JENJANG_TINGKAT_[jenjang];
   if(!tingkatList){
     box.innerHTML = '';
-    if(btn) btn.style.display = 'none';
     return;
   }
   box.innerHTML = tingkatList.map(function(t){
@@ -782,17 +779,33 @@ function renderGenTingkat_(){
       '<input type="number" class="genRombelInput" value="1" min="1" max="12" style="width:60px">' +
     '</div>';
   }).join('');
-  if(btn) btn.style.display = 'inline-block';
+  // Live-apply: setiap ubah centang/jumlah rombel langsung update Kelas
+  // Diampu, tidak perlu tombol terpisah — supaya tidak ada keraguan
+  // "apakah sudah kepencet atau belum".
+  document.querySelectorAll('.genTingkatCb, .genRombelInput').forEach(function(el){
+    el.addEventListener('change', applyGeneratedKelas_);
+    el.addEventListener('input', applyGeneratedKelas_);
+  });
+  applyGeneratedKelas_();
 }
 
+/**
+ * applyGeneratedKelas_()
+ * Live-generate nama kelas dari pilihan jenjang+rombel, lalu GANTI
+ * (bukan gabung) isi Kelas Diampu dengan hasilnya — supaya field selalu
+ * persis mencerminkan pengaturan generator yang sedang aktif, tidak ada
+ * sisa teks lama yang membingungkan. Kalau sekolah butuh kelas dengan
+ * nama non-standar, ketik manual SETELAH generator selesai dipakai.
+ */
 function applyGeneratedKelas_(){
   try {
     const genEl = document.getElementById('genJenjang');
-    if(!genEl) return alert('[DEBUG] #genJenjang tidak ditemukan di halaman');
+    const kEl = document.getElementById('set_kelas_diampu');
+    if(!genEl || !kEl || kEl.disabled) return;
     const jenjang = genEl.value || '';
 
     const checkedBoxes = document.querySelectorAll('.genTingkatCb:checked');
-    if(!checkedBoxes.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+    if(!checkedBoxes.length) return;
 
     const names = [];
     checkedBoxes.forEach(function(cb){
@@ -808,20 +821,12 @@ function applyGeneratedKelas_(){
         for(let i = 0; i < rombel; i++) names.push(tingkat + String.fromCharCode(65 + i));
       }
     });
-    if(!names.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+    if(!names.length) return;
 
-    const kEl = document.getElementById('set_kelas_diampu');
-    if(!kEl) return alert('[DEBUG] #set_kelas_diampu tidak ditemukan di halaman');
-    if(kEl.disabled) return alert('[DEBUG] Field Kelas Diampu sedang terkunci (disabled) — klik ✏️ Edit Setting dulu.');
-
-    const existing = kEl.value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
-    names.forEach(function(n){ if(existing.indexOf(n) === -1) existing.push(n); });
-    kEl.value = existing.join(', ');
+    kEl.value = names.join(', ');
     kEl.dispatchEvent(new Event('input', { bubbles: true }));
     refreshSiswaKelasHint_();
-    showAcademicToast('✅ ' + names.length + ' kelas ditambahkan ke Kelas Diampu', 'success');
   } catch (e) {
-    alert('[DEBUG] applyGeneratedKelas_ error: ' + (e && e.message || e));
     console.error('[applyGeneratedKelas_]', e);
   }
 }
@@ -1131,8 +1136,7 @@ function runPromosiWizard(){
 /**
  * loadRiwayatTahunAjaran_()
  * Modal "Lihat Tahun Sebelumnya" — murni baca, tidak mengubah periode
- * aktif guru sama sekali (beda dari dashTahunFilter yang mengubah
- * periode aktif). Dipanggil saat modal dibuka & saat ganti pilihan periode.
+ * aktif guru sama sekali. Dipanggil saat modal dibuka & saat ganti pilihan periode.
  */
 function loadRiwayatTahunAjaran_(){
   const sel = document.getElementById('wizRiwayatPeriod');
@@ -1203,51 +1207,6 @@ function loadRiwayatNilai_(){
     })
     .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal memuat nilai: ' + (err.message || err) + '</p>'; })
     .getRankingNilai(kelasEl.value, mapelEl.value, p.tahun, p.semester);
-}
-
-function initDashboardAcademicFilter(){
-  const tahunEl = document.getElementById('dashTahunFilter');
-  const semEl = document.getElementById('dashSemesterFilter');
-  if(!tahunEl || !semEl) return;
-
-  google.script.run
-    .withFailureHandler(function(err){
-      console.error('[initDashboardAcademicFilter] getAcademicConfig gagal:', err && err.message);
-      tahunEl.innerHTML = '<option>-</option>';
-      semEl.innerHTML = '<option>Ganjil</option><option>Genap</option>';
-      if (typeof showToast === 'function') showToast('❌ Gagal memuat data akademik: ' + (err && err.message || 'error'), 'error', 6000);
-    })
-    .withSuccessHandler(function(cfg){
-    const years = (cfg.years || []).map(function(y){ return y.tahun_pelajaran; })
-      .filter(function(v,i,arr){ return v && arr.indexOf(v) === i; });
-    const user = cfg.user || {};
-
-    tahunEl.innerHTML = years.map(function(y){
-      return '<option ' + (String(y)===String(user.tahun_pelajaran)?'selected':'') + '>' + y + '</option>';
-    }).join('');
-    if(!tahunEl.innerHTML) tahunEl.innerHTML = '<option>' + (user.tahun_pelajaran || '-') + '</option>';
-
-    semEl.innerHTML = ['Ganjil','Genap'].map(function(s){
-      return '<option ' + (String(s).toLowerCase()===String(user.semester||'').toLowerCase()?'selected':'') + '>' + s + '</option>';
-    }).join('');
-
-    if(!tahunEl.dataset.binded){
-      tahunEl.addEventListener('change', applyDashboardAcademicFilter);
-      semEl.addEventListener('change', applyDashboardAcademicFilter);
-      tahunEl.dataset.binded = '1';
-    }
-  }).getAcademicConfig();
-}
-
-function applyDashboardAcademicFilter(){
-  const tahunEl = document.getElementById('dashTahunFilter');
-  const semEl = document.getElementById('dashSemesterFilter');
-  if(!tahunEl || !semEl) return;
-
-  google.script.run
-    .withSuccessHandler(function(){ loadDashboardV4(); })
-    .withFailureHandler(function(err){ showAcademicToast('Gagal ubah filter dashboard: ' + err.message, 'error'); })
-    .setUserAcademicPeriod(tahunEl.value, semEl.value);
 }
 
 /* ===================================================
