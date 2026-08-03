@@ -4,8 +4,10 @@
  */
 
 function saveSetting(data){
+  const _t0 = Date.now();
 
   ensureAcademicSchema_();
+  logTiming_('saveSetting > ensureAcademicSchema_', _t0);
 
   const auth = getAuth();
   if(auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek'){
@@ -19,8 +21,10 @@ function saveSetting(data){
   }
 
   const email = auth.email;
+  const _tSheet = Date.now();
   const sh = sheet('SETTING');
   const values = sh.getDataRange().getValues();
+  logTiming_('saveSetting > sheet(SETTING)+getDataRange', _tSheet);
 
   if(values.length === 0){
     throw new Error('Header SETTING belum ada');
@@ -90,8 +94,11 @@ function saveSetting(data){
   logAudit('SAVE_SETTING', email, 'Setting disimpan & dikunci');
   invalidateCache_('SETTING');
   invalidateDashboardCache_();
+  const _tSync = Date.now();
   trySyncGuruSummaryAfterMutation_(email, 'SAVE_SETTING');
+  logTiming_('saveSetting > trySyncGuruSummaryAfterMutation_', _tSync);
 
+  logTiming_('saveSetting > TOTAL', _t0);
   return {
     success:true,
     locked:true

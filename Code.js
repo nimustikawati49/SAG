@@ -326,6 +326,19 @@ function invalidateDashboardCache_() {
  * Catat error ke sheet _LOG_ERROR_ untuk monitoring.
  * Tidak pernah throw agar tidak mengganggu caller.
  */
+/**
+ * logTiming_(label, startMs)
+ * Diagnostik performa sementara — catat berapa lama sebuah tahap makan
+ * waktu, ditulis ke sheet _LOG_ERROR_ yang sama (context diberi prefix
+ * ⏱️ TIMING supaya gampang dibedakan dari error asli saat ditinjau).
+ */
+function logTiming_(label, startMs) {
+  try {
+    var elapsed = Date.now() - startMs;
+    logError_('⏱️ TIMING: ' + label, new Error(elapsed + 'ms'));
+  } catch (e) {}
+}
+
 function logError_(context, err) {
   try {
     var ss = getCentralSpreadsheet_();

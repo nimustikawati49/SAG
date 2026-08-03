@@ -417,7 +417,9 @@ function getMapelDiampuAktifForUser_(email) {
 }
 
 function saveGuruMengajarSetting(payload) {
+  const _t0 = Date.now();
   ensureAcademicSchema_();
+  logTiming_('saveGuruMengajarSetting > ensureAcademicSchema_', _t0);
   const auth = getAuth();
   if (auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek') throw new Error('AKSES_DITOLAK');
 
@@ -427,15 +429,26 @@ function saveGuruMengajarSetting(payload) {
   const kelasList = Array.isArray(payload.kelas) ? payload.kelas : [];
   const mapelList = Array.isArray(payload.mapel) ? payload.mapel : [];
 
+  const _tSheet = Date.now();
   const sh = sheet('GuruMengajar');
   const rows = sh.getDataRange().getValues();
+  logTiming_('saveGuruMengajarSetting > sheet(GuruMengajar)+getDataRange', _tSheet);
+
+  // Hapus baris lama milik guru ini di periode ini. deleteRow() satu-satu
+  // memang N panggilan API terpisah, tapi jumlah baris yang dihapus di sini
+  // wajar kecil (kombinasi kelas x mapel guru itu sendiri), beda dari
+  // masalah penulisan di bawah yang bisa puluhan baris sekaligus.
+  const _tDelete = Date.now();
+  let deletedCount = 0;
   for (let i = rows.length; i >= 2; i--) {
     const r = rows[i - 1];
     if (String(r[1] || '').toLowerCase().trim() !== auth.email) continue;
     if (String(r[2] || '') !== tahun) continue;
     if (String(r[3] || '').toLowerCase().trim() !== semester.toLowerCase()) continue;
     sh.deleteRow(i);
+    deletedCount++;
   }
+  logTiming_('saveGuruMengajarSetting > delete ' + deletedCount + ' baris lama', _tDelete);
 
   const now = new Date();
   if (kelasList.length === 0 && mapelList.length === 0) return { success: true, inserted: 0 };
@@ -451,8 +464,14 @@ function saveGuruMengajarSetting(payload) {
     mapelList.forEach(function(m) { combos.push(['', m]); });
   }
 
-  combos.forEach(function(c) {
-    sh.appendRow([
+  // Tulis SEMUA kombinasi kelas x mapel dalam SATU panggilan setValues(),
+  // bukan appendRow() satu-satu per baris. appendRow() per-baris adalah
+  // N round-trip Sheets API terpisah — untuk guru dengan banyak kelas
+  // (mis. 10 kelas x beberapa mapel = puluhan baris) ini bisa memakan
+  // 20-40+ detik. Batch write ini turunkan jadi 1 round-trip.
+  const _tWrite = Date.now();
+  const rowsToWrite = combos.map(function(c) {
+    return [
       'GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(),
       auth.email,
       tahun,
@@ -460,12 +479,18 @@ function saveGuruMengajarSetting(payload) {
       c[0],
       c[1],
       now
-    ]);
+    ];
   });
+  const startRow = sh.getLastRow() + 1;
+  sh.getRange(startRow, 1, rowsToWrite.length, 7).setValues(rowsToWrite);
+  logTiming_('saveGuruMengajarSetting > batch write ' + combos.length + ' baris', _tWrite);
 
   logAudit('SAVE_GURU_MENGAJAR', auth.email, tahun + ' | ' + semester + ' | ' + combos.length + ' baris');
   invalidateDashboardCache_();
+  const _tSync = Date.now();
   trySyncGuruSummaryAfterMutation_(auth.email, 'SAVE_GURU_MENGAJAR');
+  logTiming_('saveGuruMengajarSetting > trySyncGuruSummaryAfterMutation_', _tSync);
+  logTiming_('saveGuruMengajarSetting > TOTAL', _t0);
   return { success: true, inserted: combos.length };
 }
 

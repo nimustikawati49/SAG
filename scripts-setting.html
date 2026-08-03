@@ -786,30 +786,44 @@ function renderGenTingkat_(){
 }
 
 function applyGeneratedKelas_(){
-  const jenjang = (document.getElementById('genJenjang') || {}).value || '';
-  const names = [];
-  document.querySelectorAll('.genTingkatCb:checked').forEach(function(cb){
-    const tingkat = cb.value;
-    const row = cb.closest('div');
-    const rombelInput = row ? row.querySelector('.genRombelInput') : null;
-    const rombel = Math.max(1, parseInt((rombelInput && rombelInput.value) || '1', 10) || 1);
-    if(rombel === 1){
-      names.push(tingkat);
-    } else if(jenjang === 'PAUD/TK'){
-      for(let i = 1; i <= rombel; i++) names.push(tingkat + ' ' + i);
-    } else {
-      for(let i = 0; i < rombel; i++) names.push(tingkat + String.fromCharCode(65 + i));
-    }
-  });
-  if(!names.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+  try {
+    const genEl = document.getElementById('genJenjang');
+    if(!genEl) return alert('[DEBUG] #genJenjang tidak ditemukan di halaman');
+    const jenjang = genEl.value || '';
 
-  const kEl = document.getElementById('set_kelas_diampu');
-  if(!kEl) return;
-  const existing = kEl.value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
-  names.forEach(function(n){ if(existing.indexOf(n) === -1) existing.push(n); });
-  kEl.value = existing.join(', ');
-  refreshSiswaKelasHint_();
-  showAcademicToast('✅ ' + names.length + ' kelas ditambahkan ke Kelas Diampu', 'success');
+    const checkedBoxes = document.querySelectorAll('.genTingkatCb:checked');
+    if(!checkedBoxes.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+
+    const names = [];
+    checkedBoxes.forEach(function(cb){
+      const tingkat = cb.value;
+      const row = cb.closest('div');
+      const rombelInput = row ? row.querySelector('.genRombelInput') : null;
+      const rombel = Math.max(1, parseInt((rombelInput && rombelInput.value) || '1', 10) || 1);
+      if(rombel === 1){
+        names.push(tingkat);
+      } else if(jenjang === 'PAUD/TK'){
+        for(let i = 1; i <= rombel; i++) names.push(tingkat + ' ' + i);
+      } else {
+        for(let i = 0; i < rombel; i++) names.push(tingkat + String.fromCharCode(65 + i));
+      }
+    });
+    if(!names.length) return showAcademicToast('Pilih minimal 1 tingkat', 'warning');
+
+    const kEl = document.getElementById('set_kelas_diampu');
+    if(!kEl) return alert('[DEBUG] #set_kelas_diampu tidak ditemukan di halaman');
+    if(kEl.disabled) return alert('[DEBUG] Field Kelas Diampu sedang terkunci (disabled) — klik ✏️ Edit Setting dulu.');
+
+    const existing = kEl.value.split(',').map(function(v){ return v.trim(); }).filter(Boolean);
+    names.forEach(function(n){ if(existing.indexOf(n) === -1) existing.push(n); });
+    kEl.value = existing.join(', ');
+    kEl.dispatchEvent(new Event('input', { bubbles: true }));
+    refreshSiswaKelasHint_();
+    showAcademicToast('✅ ' + names.length + ' kelas ditambahkan ke Kelas Diampu', 'success');
+  } catch (e) {
+    alert('[DEBUG] applyGeneratedKelas_ error: ' + (e && e.message || e));
+    console.error('[applyGeneratedKelas_]', e);
+  }
 }
 
 /**
