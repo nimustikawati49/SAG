@@ -313,10 +313,29 @@ function _saveJadwalUIInner_(){
     btn.innerText = "⏳ Memeriksa jadwal...";
   }
 
+  // 🛟 Safety watchdog — kalau request server-side benar-benar hang (tidak
+  // pernah memanggil success/failure handler sama sekali), tombol yang
+  // di-disable di atas akan STUCK SELAMANYA (klik berikutnya tidak akan
+  // memicu apa-apa sama sekali, bukan cuma lambat — browser tidak
+  // menjalankan onclick pada button yang disabled). Ini paksa aktifkan
+  // lagi tombolnya setelah 45 detik kalau belum juga selesai, supaya
+  // pengguna tidak permanen "diam" tanpa cara memulihkan diri sendiri
+  // selain refresh halaman.
+  const _jadwalWatchdog = setTimeout(function(){
+    if(btn && btn.disabled){
+      btn.disabled = false;
+      btn.classList.remove("btn-saving");
+      btn.innerText = "💾 Simpan Jadwal";
+      endProgress();
+      showToast('⏱️ Server tidak merespons dalam 45 detik, tombol diaktifkan lagi. Cek daftar jadwal di bawah untuk pastikan sudah tersimpan atau belum sebelum coba lagi.', 'warning', 10000);
+    }
+  }, 45000);
+
   startProgress(); // ✅ aktifkan progress bar (top bar + widget pojok kanan bawah)
 
   google.script.run
     .withFailureHandler(err=>{
+      clearTimeout(_jadwalWatchdog);
       endProgress();
       if(btn){
         btn.disabled = false;
@@ -328,6 +347,7 @@ function _saveJadwalUIInner_(){
     .withSuccessHandler(res=>{
 
       if(res.bentrok){
+        clearTimeout(_jadwalWatchdog);
         endProgress();
         if(btn){
           btn.disabled = false;
@@ -344,6 +364,7 @@ function _saveJadwalUIInner_(){
 
       google.script.run
         .withFailureHandler(err=>{
+          clearTimeout(_jadwalWatchdog);
           endProgress();
           if(btn){
             btn.disabled = false;
@@ -354,6 +375,7 @@ function _saveJadwalUIInner_(){
         })
         .withSuccessHandler(()=>{
 
+          clearTimeout(_jadwalWatchdog);
           endProgress(); // ✅ progress selesai
 
           // ✅ Notifikasi sukses eksplisit — sebelumnya TIDAK ADA toast sama
