@@ -844,15 +844,40 @@ function _buildLocalFavoriteAndMasterySummary_(email, tahunPelajaran, semesterAk
   return result;
 }
 
+/**
+ * buildGuruSummarySync_(email)
+ * PENTING: sengaja TIDAK memanggil getDashboardAllData() lagi. Fungsi ini
+ * dipanggil dari trySyncGuruSummaryAfterMutation_() setiap kali guru
+ * menyimpan Setting/Kelas Diampu/Jurnal/Nilai/dll — kalau lewat
+ * getDashboardAllData() (yang JUGA membangun grid jadwal, ranking, dan
+ * notifikasi risiko), ini jadi jauh lebih berat dari yang dibutuhkan
+ * (cuma 4 angka ringkasan) dan terbukti dari log timing memakan
+ * 10-80+ detik SETIAP mutasi karena memicu cascade ensureAcademicSchema_
+ * dari banyak sub-pemanggilan sekaligus. Di sini kita baca JURNAL/ABSENSI
+ * sendiri lalu panggil langsung _computeDashboardMeta_/_computeV4FromRows_
+ * (inti perhitungan, tanpa jadwal/ranking/chart) supaya jauh lebih ringan.
+ */
 function buildGuruSummarySync_(email) {
   if (!email) throw new Error('Email guru wajib diisi');
   email = String(email).toLowerCase().trim();
 
   var setting = getSetting();
-  var dash = getDashboardAllData();
+  var period = { tahun_pelajaran: setting.tahun_pelajaran || '', semester: setting.semester || '' };
+
+  var jurnalRows = [];
+  var absenRows = [];
+  try { var shJ = sheet('JURNAL'); jurnalRows = shJ ? shJ.getDataRange().getValues() : []; } catch (e) {}
+  try { var shA = sheet('ABSENSI'); absenRows = shA ? shA.getDataRange().getValues() : []; } catch (e) {}
+
+  var meta = { totalKelas: 0, totalSiswa: 0, firstDate: '', lastDate: '' };
+  try { meta = _computeDashboardMeta_(email, period, jurnalRows); } catch (e) {}
+
+  var v4 = { totalJurnal: 0, totalKelas: 0, rata2: 0 };
+  try { v4 = _computeV4FromRows_(jurnalRows, absenRows, email, period, meta.firstDate || '', meta.lastDate || ''); } catch (e) {}
+
   var license = getSchoolLicenseInfo() || {};
   var deployment = _getDeploymentEntryForUser_(email) || {};
-  var localSummary = _buildLocalFavoriteAndMasterySummary_(email, setting.tahun_pelajaran || '', setting.semester || '');
+  var localSummary = _buildLocalFavoriteAndMasterySummary_(email, period.tahun_pelajaran, period.semester);
 
   return {
     deployment_id: deployment.id || '',
@@ -861,10 +886,10 @@ function buildGuruSummarySync_(email) {
     sekolah: setting.sekolah || '-',
     tahun_pelajaran: setting.tahun_pelajaran || '-',
     semester: setting.semester || '-',
-    total_jurnal: Number(dash.totalJurnal || 0),
-    total_kelas: Number(dash.totalKelas || 0),
-    total_siswa: Number(dash.totalSiswa || 0),
-    rata_hadir: Number(dash.rata2 || 0),
+    total_jurnal: Number(v4.totalJurnal || 0),
+    total_kelas: Number(v4.totalKelas || 0),
+    total_siswa: Number(meta.totalSiswa || 0),
+    rata_hadir: Number(v4.rata2 || 0),
     kelas_favorit: localSummary.kelas_favorit || '-',
     ketuntasan_terbaik: localSummary.ketuntasan_terbaik || '-',
     license_status: license.isLifetime ? 'lifetime' : (license.isTrial ? 'trial' : (license.isActive ? 'active' : 'inactive')),
