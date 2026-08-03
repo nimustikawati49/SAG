@@ -255,6 +255,12 @@ function loadJadwalDashboard_(){
 }
 
 function saveJadwalUI(){
+  // [DEBUG] Bukti klik benar-benar sampai ke handler ini — kalau alert ini
+  // TIDAK muncul saat tombol diklik, berarti onclick tidak terpasang/tidak
+  // ke-trigger sama sekali (bukan error di dalam logic simpan), beda
+  // penyebab dan penanganannya. Hapus setelah root cause ketemu.
+  try { console.log('[DEBUG] saveJadwalUI() dipanggil, waktu:', new Date().toISOString()); } catch(e){}
+  try { if (typeof showToast === 'function') showToast('🖱️ [DEBUG] Tombol Simpan Jadwal terklik, memproses...', 'info', 3000); } catch(e){}
 
   // Jaring pengaman: kalau ADA error sinkron apa pun di bawah (mis. field
   // input tidak ketemu di DOM), tetap tampilkan sesuatu ke user alih-alih
@@ -1296,26 +1302,4 @@ function uploadSiswaBinaan(){
   };
   reader.readAsText(f);
 }
-
-
-/* ================================================================
-   MODUL INPUT & PENGOLAHAN NILAI SISWA  v2
-   ================================================================ */
-
-/** State terpusat modul nilai */
-let nilaiState = {
-  kelas: '', mapel: '', tahun: '', semester: '',
-  rows: [],
-  dataVersion: 0,
-  setting: { nilai_min_target: 60, nilai_max_target: 95, kkm: 70 },
-  locked: true,
-  focusKomponen: 'all',
-  cetakPreviewOk: false,
-  isDirty: false,
-  lastAutosaveAt: 0
-};
-
-const NILAI_INPUT_KEYS = ['tgs1','tgs2','tgs3','uh1','uh2','uh3','pts','pas','pat','nilai_remedial'];
-
-/** Dipanggil saat tab Input Nilai pertama kali dibuka */
 </script>
