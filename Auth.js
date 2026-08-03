@@ -19,13 +19,7 @@ function getSuperAdminEmailForUI() {
   return getSuperAdminEmail_();
 }
 
-function getLicenseBadge(){
-  const auth = getAuth();
-  // Delegasi ke License.js (school-wide)
-  return getSchoolLicenseBadge_();
-} 
-
-function getLoginEmail(){ 
+function getLoginEmail(){
   const email = Session.getEffectiveUser().getEmail(); 
   if(!email){ 
     throw new Error('Tidak dapat mendeteksi email login'); 

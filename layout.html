@@ -1336,7 +1336,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
     <div>
       <h3 style="margin:0">🎓 Aktivasi Akun Guru</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Guru baru otomatis dapat masa uji coba 30 hari begitu pertama kali membuka aplikasi — tidak perlu didaftarkan manual dulu. Aktifkan di sini supaya akunnya jadi permanen. Data yang sudah dibuat guru selama trial tidak akan hilang.</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Guru baru otomatis dapat masa uji coba 30 hari begitu pertama kali membuka aplikasi — tidak perlu didaftarkan manual dulu. Aktifkan di sini supaya akunnya jadi permanen (lifetime), atau nonaktifkan akun yang sudah aktif. Data yang sudah dibuat guru tidak akan hilang meski statusnya berubah.</p>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="trialActivationCount" style="background:#fef9c3;color:#854d0e;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">0</span>
@@ -1347,35 +1347,17 @@
 </div>
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
-<!-- ===== LISENSI APLIKASI ===== -->
+<!-- ===== REMINDER LISENSI (trigger email, tersisa dari sistem lisensi lama) ===== -->
 <div class="card" style="margin-top:16px">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-    <div>
-      <h3 style="margin:0">🔑 Lisensi Aplikasi</h3>
-      <p class="muted" style="margin:4px 0 0">Lisensi berlaku untuk akun guru aktif dan akses admin sekolah.</p>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="loadSchoolLicenseUI()" class="ghost" style="font-size:13px">🔄 Refresh</button>
-    </div>
-  </div>
-
-  <!-- Info lisensi aktif -->
-  <div id="schoolLicenseInfo" style="margin-bottom:14px">
-    <p class="muted">⏳ Memuat info lisensi...</p>
-  </div>
-
-  <!-- Reminder trigger lisensi -->
-  <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb">
-    <h4 style="margin:0 0 6px;font-size:13px">🔔 Reminder Renewal Otomatis</h4>
-    <p class="muted" style="font-size:12px;margin:0 0 8px">Email ke SuperAdmin saat lisensi H-60, H-30, H-7 sebelum expired.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span id="licReminderStatus" style="font-size:12px;color:#6b7280">⏳ Mengecek...</span>
-      <button onclick="activateLicenseReminderTrigger_()" id="btnSetLicReminder" style="font-size:12px">🔔 Aktifkan</button>
-      <button onclick="deactivateLicenseReminderTrigger_()" class="ghost" id="btnDelLicReminder" style="font-size:12px">🗑️ Nonaktifkan</button>
-    </div>
+  <h4 style="margin:0 0 6px;font-size:13px">🔔 Reminder Renewal Otomatis</h4>
+  <p class="muted" style="font-size:12px;margin:0 0 8px">Email ke SuperAdmin saat lisensi H-60, H-30, H-7 sebelum expired.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <span id="licReminderStatus" style="font-size:12px;color:#6b7280">⏳ Mengecek...</span>
+    <button onclick="activateLicenseReminderTrigger_()" id="btnSetLicReminder" style="font-size:12px">🔔 Aktifkan</button>
+    <button onclick="deactivateLicenseReminderTrigger_()" class="ghost" id="btnDelLicReminder" style="font-size:12px">🗑️ Nonaktifkan</button>
   </div>
 </div>
-<!-- ===== END LISENSI APLIKASI ===== -->
+<!-- ===== END REMINDER LISENSI ===== -->
 
       <div style="
         display:flex;

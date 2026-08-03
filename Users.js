@@ -54,33 +54,52 @@ function _autoRegisterTrialUser_(email) {
 }
 
 /**
- * getPendingTrialAccounts()
- * SuperAdmin only — daftar akun guru yang masih berstatus 'trial',
- * diurutkan yang paling mendesak (sudah expired) di atas.
+ * getGuruActivationList()
+ * SuperAdmin only — daftar SEMUA akun guru (role admin/kepsek, bukan
+ * superadmin) beserta status aktivasinya (trial/active/inactive).
+ * Menggantikan kartu "Lisensi Aplikasi" lama sebagai satu-satunya
+ * tempat SuperAdmin mengaktifkan/menonaktifkan akun guru. Urutan:
+ * trial (paling mendesak dulu) > active > inactive.
  */
-function getPendingTrialAccounts() {
+function getGuruActivationList() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
   var sh = sheet('USERS');
   if (!sh) return [];
   var data = sh.getDataRange().getValues();
   var result = [];
   for (var i = 1; i < data.length; i++) {
-    var status = String(data[i][2] || '').toLowerCase().trim();
-    if (status !== 'trial') continue;
+    var role = String(data[i][1] || 'admin').toLowerCase();
+    if (role === 'superadmin') continue;
     var email = String(data[i][0] || '').toLowerCase().trim();
     if (!email) continue;
-    var info = _computeTrialInfo_(data[i][3]);
-    result.push({
+    var status = String(data[i][2] || 'inactive').toLowerCase().trim();
+
+    var entry = {
       email: email,
-      role: String(data[i][1] || 'admin').toLowerCase(),
+      role: role,
+      status: status,
       dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
-      days_left: info.daysLeft,
-      expired: info.expired
-    });
+      days_left: null,
+      expired: false
+    };
+    if (status === 'trial') {
+      var info = _computeTrialInfo_(data[i][3]);
+      entry.days_left = info.daysLeft;
+      entry.expired = info.expired;
+    }
+    result.push(entry);
   }
+
+  var statusOrder = { trial: 0, active: 1, inactive: 2 };
   result.sort(function(a, b) {
-    if (a.expired === b.expired) return a.days_left - b.days_left;
-    return a.expired ? -1 : 1;
+    var oa = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 3;
+    var ob = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 3;
+    if (oa !== ob) return oa - ob;
+    if (a.status === 'trial') {
+      if (a.expired === b.expired) return a.days_left - b.days_left;
+      return a.expired ? -1 : 1;
+    }
+    return a.email.localeCompare(b.email);
   });
   return result;
 }

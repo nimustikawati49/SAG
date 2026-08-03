@@ -82,30 +82,6 @@ function assertSchoolLicenseActive_() {
    PUBLIC – dipanggil dari frontend via google.script.run
 ───────────────────────────────────────────────────────────── */
 
-/** Ambil info lisensi sekolah (SuperAdmin only) */
-function getSchoolLicense() {
-  var auth = getAuth();
-  if (auth.role !== 'superadmin' && auth.role !== 'admin') throw new Error('AKSES_DITOLAK');
-  return _readSchoolLicense_();
-}
-
-/**
- * Dipanggil dari getLicenseBadge() di Auth.js agar UI bisa
- * menampilkan badge expiry yang benar.
- */
-function getSchoolLicenseBadge_() {
-  var lic = _readSchoolLicense_();
-  if (!lic.isActive) {
-    return { level: 'expired', days: lic.daysLeft };
-  }
-  if (lic.isLifetime) {
-    return { level: 'ok', days: null, isLifetime: true };
-  }
-  if (lic.daysLeft <= 30) return { level: 'danger',  days: lic.daysLeft };
-  if (lic.daysLeft <= 60) return { level: 'warning', days: lic.daysLeft };
-  return { level: 'ok', days: lic.daysLeft };
-}
-
 /**
  * Ambil status lisensi sekolah — bisa dipanggil oleh SEMUA role (bukan SA only).
  * Dipakai oleh checkLicenseStatusBadge() dan checkLicenseExpiryWarning_() di frontend.
