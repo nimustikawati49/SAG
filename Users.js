@@ -250,10 +250,41 @@ function deleteUser(email){
       return true; 
     } 
   } 
-  throw new Error('User tidak ditemukan'); 
-} 
+  throw new Error('User tidak ditemukan');
+}
 
-function createLicense(email){ 
+/**
+ * deleteInactiveUsers()
+ * Hapus SEMUA akun berstatus 'inactive' sekaligus (SuperAdmin only).
+ * Sama seperti deleteUser(): akun superadmin dan akun yang sedang login
+ * tidak pernah ikut terhapus, apapun statusnya.
+ */
+function deleteInactiveUsers(){
+  const auth = getAuth();
+  if(!isSuperAdmin()){ throw new Error('Akses ditolak'); }
+
+  const sh = sheet('USERS');
+  const data = sh.getDataRange().getValues();
+  const deletedEmails = [];
+
+  for(let i = data.length - 1; i >= 1; i--){
+    const rowEmail = String(data[i][0] || '').toLowerCase().trim();
+    const role = String(data[i][1] || '').toLowerCase().trim();
+    const status = String(data[i][2] || '').toLowerCase().trim();
+    if(status !== 'inactive') continue;
+    if(role === 'superadmin') continue;
+    if(rowEmail === auth.email) continue;
+    sh.deleteRow(i + 1);
+    deletedEmails.push(rowEmail);
+  }
+
+  if(deletedEmails.length){
+    logAudit('DELETE_INACTIVE_USERS', auth.email, deletedEmails.length + ' user: ' + deletedEmails.join(', '));
+  }
+  return { success: true, deleted: deletedEmails.length, emails: deletedEmails };
+}
+
+function createLicense(email){
   const sh = sheet('LICENSES'); 
   email = String(email).toLowerCase().trim(); 
   if(!email.includes('@')){ throw new Error('Email tidak valid'); } 

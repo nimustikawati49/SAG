@@ -856,6 +856,20 @@ function deleteUserUI(email){
   }).deleteUser(email);
 }
 
+function deleteInactiveUsersUI(){
+  if(!confirm('⚠️ Hapus SEMUA user berstatus Tidak Aktif?\nTindakan ini permanen dan tidak bisa dibatalkan. Akun SuperAdmin dan akun Anda sendiri tidak akan ikut terhapus.')) return;
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(typeof showToast === 'function') showToast('✅ ' + res.deleted + ' user tidak aktif dihapus', 'success');
+      else alert(res.deleted + ' user tidak aktif dihapus');
+      loadUserManagement();
+    })
+    .withFailureHandler(function(err){
+      alert('❌ Gagal hapus user tidak aktif: ' + err.message);
+    })
+    .deleteInactiveUsers();
+}
+
 /* ===== AUDIT TRAIL PER USER ===== */
 function openUserAuditModal_(email) {
   const modal = document.getElementById('userAuditModal');
@@ -1324,74 +1338,6 @@ function loadSchoolLicenseUI() {
         '</div>';
     })
     .getSchoolLicense();
-}
-
-function setSchoolLicenseUI() {
-  var key  = (document.getElementById('schoolLicKey')     || {}).value || '';
-  var exp  = (document.getElementById('schoolLicExpires') || {}).value || '';
-  key = key.trim().toUpperCase();
-  if (!key || !exp) {
-    if (typeof showToast === 'function') showToast('⚠️ Kode lisensi dan tanggal expired wajib diisi', 'warning');
-    else alert('Kode lisensi dan tanggal expired wajib diisi');
-    return;
-  }
-  google.script.run
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-      else alert('❌ ' + err.message);
-    })
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('✅ Lisensi berhasil disimpan', 'success');
-      else alert('Lisensi berhasil disimpan');
-      loadSchoolLicenseUI();
-    })
-    .setSchoolLicense(key, exp);
-}
-
-function renewSchoolLicenseUI(years) {
-  if (!confirm('Perpanjang lisensi aplikasi +' + years + ' tahun?')) return;
-  google.script.run
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-      else alert('❌ ' + err.message);
-    })
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('✅ Lisensi diperpanjang +' + years + ' tahun', 'success');
-      else alert('Lisensi diperpanjang.');
-      loadSchoolLicenseUI();
-    })
-    .renewSchoolLicense(years);
-}
-
-function deactivateSchoolLicenseUI() {
-  if (!confirm('Nonaktifkan lisensi aplikasi sekarang?\nSemua guru tidak dapat mengakses aplikasi.')) return;
-  google.script.run
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-      else alert('❌ ' + err.message);
-    })
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('Lisensi dinonaktifkan', 'warning');
-      loadSchoolLicenseUI();
-    })
-    .deactivateSchoolLicense();
-}
-
-function genSchoolLicenseKey_() {
-  google.script.run
-    .withSuccessHandler(function(key) {
-      var el = document.getElementById('schoolLicKey');
-      if (el) {
-        el.value = key;
-        el.focus();
-        el.select();
-      }
-      if (typeof showToast === 'function') showToast('🎲 Key baru: ' + key, 'info');
-    })
-    .withFailureHandler(function(err) {
-      alert('❌ ' + err.message);
-    })
-    .generateSchoolLicenseKey();
 }
 
 /* ---- Reminder Trigger untuk Lisensi Aplikasi ---- */
