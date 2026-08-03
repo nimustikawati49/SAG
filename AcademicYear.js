@@ -135,7 +135,13 @@ function migrateLegacyData_() {
   const defaultTahun = getLegacyDefaultYear_();
   const defaultSemester = 'Ganjil';
 
-  ensureAcademicYearExists_(defaultTahun, defaultSemester, true);
+  // Pakai versi RAW (tanpa ensureAcademicSchema_ lagi) -- kita SUDAH di
+  // dalam ensureAcademicSchema_() sekarang (memegang lock-nya), jadi
+  // memanggil ensureAcademicYearExists_()/setGlobalAcademicPeriod() biasa
+  // di sini bikin ensureAcademicSchema_ terpanggil ULANG 2 LAPIS secara
+  // rekursif SAAT LOCK MASIH DIPEGANG -- salah satu penyebab lock
+  // "dipakai proses lain" bertumpuk yang terlihat di log timing.
+  _ensureAcademicYearExistsRaw_(defaultTahun, defaultSemester, true);
 
   if (shSiswa && shMaster && shRiwayat) {
     const masterRows = shMaster.getDataRange().getValues();
@@ -154,8 +160,14 @@ function migrateLegacyData_() {
       riwayatKey[k] = true;
     }
 
+    // Kumpulkan baris baru dulu, tulis SEKALI di akhir lewat setValues()
+    // batch -- bukan appendRow() satu-satu per siswa (bisa ratusan baris
+    // untuk sekolah dengan banyak siswa, sama kelasnya dengan bug JURNAL
+    // di atas: N+1 write saat memegang lock global).
     const siswaRows = shSiswa.getDataRange().getValues();
     const now = new Date();
+    const newMasterRows = [];
+    const newRiwayatRows = [];
     for (let i = 1; i < siswaRows.length; i++) {
       const kelas = String(siswaRows[i][0] || '').trim();
       const nis = String(siswaRows[i][2] || '').trim();
@@ -166,13 +178,13 @@ function migrateLegacyData_() {
       let siswaId = masterByNis['NIS:' + nis] || '';
       if (!siswaId) {
         siswaId = 'SIS-' + Utilities.getUuid().slice(0, 8).toUpperCase();
-        shMaster.appendRow([siswaId, nis, '', nama, jk, '', '', '', '', 'AKTIF', now, now]);
+        newMasterRows.push([siswaId, nis, '', nama, jk, '', '', '', '', 'AKTIF', now, now]);
         masterByNis['NIS:' + nis] = siswaId;
       }
 
       const k = [defaultTahun, defaultSemester, siswaId, kelas].join('|');
       if (!riwayatKey[k]) {
-        shRiwayat.appendRow([
+        newRiwayatRows.push([
           'RK-' + Utilities.getUuid().slice(0, 8).toUpperCase(),
           defaultTahun,
           defaultSemester,
@@ -185,6 +197,12 @@ function migrateLegacyData_() {
         riwayatKey[k] = true;
       }
     }
+    if (newMasterRows.length) {
+      shMaster.getRange(shMaster.getLastRow() + 1, 1, newMasterRows.length, newMasterRows[0].length).setValues(newMasterRows);
+    }
+    if (newRiwayatRows.length) {
+      shRiwayat.getRange(shRiwayat.getLastRow() + 1, 1, newRiwayatRows.length, newRiwayatRows[0].length).setValues(newRiwayatRows);
+    }
   }
 
   if (shSet && shSet.getLastRow() > 1) {
@@ -194,28 +212,88 @@ function migrateLegacyData_() {
     const idxSem = header.indexOf('semester');
     const idxTaAktif = header.indexOf('tahun_pelajaran_aktif');
     const idxSemAktif = header.indexOf('semester_aktif');
+    const numRows = all.length - 1;
 
-    for (let i = 1; i < all.length; i++) {
-      const tahunOld = idxTahun > -1 ? String(all[i][idxTahun] || '').trim() : '';
-      const semOld = idxSem > -1 ? String(all[i][idxSem] || '').trim() : '';
-      if (idxTaAktif > -1 && !String(all[i][idxTaAktif] || '').trim()) {
-        shSet.getRange(i + 1, idxTaAktif + 1).setValue(tahunOld || defaultTahun);
+    // Batch per kolom, bukan setValue() satu-satu per baris guru.
+    if (idxTaAktif > -1) {
+      let changed = false;
+      const col = [];
+      for (let i = 1; i < all.length; i++) {
+        const cur = String(all[i][idxTaAktif] || '').trim();
+        const tahunOld = idxTahun > -1 ? String(all[i][idxTahun] || '').trim() : '';
+        if (!cur) { col.push([tahunOld || defaultTahun]); changed = true; }
+        else col.push([cur]);
       }
-      if (idxSemAktif > -1 && !String(all[i][idxSemAktif] || '').trim()) {
-        shSet.getRange(i + 1, idxSemAktif + 1).setValue(semOld || defaultSemester);
+      if (changed) shSet.getRange(2, idxTaAktif + 1, numRows, 1).setValues(col);
+    }
+    if (idxSemAktif > -1) {
+      let changed = false;
+      const col = [];
+      for (let i = 1; i < all.length; i++) {
+        const cur = String(all[i][idxSemAktif] || '').trim();
+        const semOld = idxSem > -1 ? String(all[i][idxSem] || '').trim() : '';
+        if (!cur) { col.push([semOld || defaultSemester]); changed = true; }
+        else col.push([cur]);
       }
+      if (changed) shSet.getRange(2, idxSemAktif + 1, numRows, 1).setValues(col);
     }
   }
 
+  // Batch write, BUKAN setValue() satu-satu per baris. Sheet JURNAL bisa
+  // punya ratusan/ribuan baris (data gabungan semua guru di sheet pusat)
+  // -- versi lama di sini melakukan sampai 2 panggilan Sheets API
+  // TERPISAH per baris SAAT MEMEGANG LOCK GLOBAL, gampang memakan
+  // puluhan detik sampai menit dan memblokir semua guru lain.
   if (shJurnal && shJurnal.getLastRow() > 1) {
-    const rows = shJurnal.getDataRange().getValues();
-    for (let i = 1; i < rows.length; i++) {
-      if (!rows[i][18]) shJurnal.getRange(i + 1, 19).setValue(defaultTahun);
-      if (!rows[i][13]) shJurnal.getRange(i + 1, 14).setValue(defaultSemester);
+    const numRows = shJurnal.getLastRow() - 1;
+    const tahunCol = shJurnal.getRange(2, 19, numRows, 1).getValues();
+    const semCol = shJurnal.getRange(2, 14, numRows, 1).getValues();
+    let tahunChanged = false;
+    let semChanged = false;
+    for (let i = 0; i < numRows; i++) {
+      if (!tahunCol[i][0]) { tahunCol[i][0] = defaultTahun; tahunChanged = true; }
+      if (!semCol[i][0]) { semCol[i][0] = defaultSemester; semChanged = true; }
     }
+    if (tahunChanged) shJurnal.getRange(2, 19, numRows, 1).setValues(tahunCol);
+    if (semChanged) shJurnal.getRange(2, 14, numRows, 1).setValues(semCol);
   }
 
   cache.put(cacheKey, '1', 21600);
+}
+
+/**
+ * _ensureAcademicYearExistsRaw_(tahun, semester, setActive)
+ * Versi TANPA ensureAcademicSchema_()/auth-check/audit-log, dipakai HANYA
+ * dari dalam migrateLegacyData_() yang sudah berjalan di dalam
+ * ensureAcademicSchema_()'s lock -- memanggil versi publik di sana bikin
+ * ensureAcademicSchema_() terpanggil ulang 2 lapis secara rekursif SAAT
+ * LOCK MASIH DIPEGANG, salah satu penyebab log "lock dipakai proses lain"
+ * bertumpuk. Batched (bukan setValue() satu-satu per baris) untuk kasus
+ * setActive juga.
+ */
+function _ensureAcademicYearExistsRaw_(tahun, semester, setActive) {
+  tahun = String(tahun || '').trim();
+  semester = String(semester || '').trim();
+  if (!tahun || !semester) return;
+
+  const sh = sheet('MasterTahunPelajaran');
+  const rows = sh.getDataRange().getValues();
+
+  if (setActive && rows.length > 1) {
+    const statusCol = rows.slice(1).map(function(r) {
+      const isTarget = String(r[1] || '') === tahun && String(r[2] || '') === semester;
+      return [isTarget ? 'AKTIF' : 'NONAKTIF'];
+    });
+    sh.getRange(2, 4, statusCol.length, 1).setValues(statusCol);
+  }
+
+  let foundRow = -1;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '') === tahun && String(rows[i][2] || '') === semester) { foundRow = i + 1; break; }
+  }
+  if (foundRow === -1) {
+    sh.appendRow(['TP-' + Utilities.getUuid().slice(0, 8).toUpperCase(), tahun, semester, setActive ? 'AKTIF' : 'NONAKTIF', new Date()]);
+  }
 }
 
 function ensureAcademicYearExists_(tahun, semester, setActive) {
@@ -294,10 +372,13 @@ function setGlobalAcademicPeriod(tahun, semester) {
   const rows = sh.getDataRange().getValues();
   let found = -1;
 
-  for (let i = 1; i < rows.length; i++) {
-    const isTarget = String(rows[i][1] || '') === tahun && String(rows[i][2] || '') === semester;
-    sh.getRange(i + 1, 4).setValue(isTarget ? 'AKTIF' : 'NONAKTIF');
-    if (isTarget) found = i + 1;
+  if (rows.length > 1) {
+    const statusCol = rows.slice(1).map(function(r, idx) {
+      const isTarget = String(r[1] || '') === tahun && String(r[2] || '') === semester;
+      if (isTarget) found = idx + 2;
+      return [isTarget ? 'AKTIF' : 'NONAKTIF'];
+    });
+    sh.getRange(2, 4, statusCol.length, 1).setValues(statusCol);
   }
 
   if (found === -1) {
