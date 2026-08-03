@@ -327,6 +327,26 @@ function invalidateDashboardCache_() {
  * Tidak pernah throw agar tidak mengganggu caller.
  */
 /**
+ * trimLogSheetIfNeeded_(sh, maxRows)
+ * Kalau jumlah baris data (tidak termasuk header) di sheet log/audit
+ * melebihi maxRows, hapus baris PALING LAMA (persis di bawah header)
+ * sampai sisa tepat maxRows baris terbaru. Dipakai untuk sheet yang terus
+ * bertambah tanpa batas (_LOG_ERROR_, AUDIT_LOG, UPDATE_LOG) supaya tidak
+ * membengkak dan memperlambat baca/tulis sheet lain di spreadsheet yang
+ * sama. Gagal diam-diam (jangan sampai proses utama ikut gagal cuma
+ * karena trim gagal).
+ */
+function trimLogSheetIfNeeded_(sh, maxRows) {
+  try {
+    if (!sh) return;
+    var dataRows = sh.getLastRow() - 1; // exclude header
+    if (dataRows <= maxRows) return;
+    var excess = dataRows - maxRows;
+    sh.deleteRows(2, excess);
+  } catch (e) { /* jangan sampai trim gagal mengganggu proses utama */ }
+}
+
+/**
  * logTiming_(label, startMs)
  * Diagnostik performa sementara — catat berapa lama sebuah tahap makan
  * waktu, ditulis ke sheet _LOG_ERROR_ yang sama (context diberi prefix
@@ -354,6 +374,7 @@ function logError_(context, err) {
     var msg   = String(err && err.message ? err.message : err);
     var stack = String(err && err.stack  ? err.stack  : '');
     sh.appendRow([new Date(), email, String(context), msg, stack.substring(0, 500)]);
+    trimLogSheetIfNeeded_(sh, 300);
   } catch(innerErr) { /* must not throw */ }
 }
 

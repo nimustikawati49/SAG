@@ -1123,6 +1123,7 @@ function approveDeploymentUpdate(obj) {
     now,
     obj.catatan || ''
   ]);
+  trimLogSheetIfNeeded_(sh, 300);
   logAudit('APPROVE_DEPLOYMENT_UPDATE', actor, dep.nama_sekolah + ' | ' + (rel.version || ''));
   return { success: true, id: id };
 }

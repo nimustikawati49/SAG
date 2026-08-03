@@ -214,9 +214,11 @@ function getUsers(){
   }); 
 } 
 
-function logAudit(action, target, detail){ 
-  sheet('AUDIT_LOG').appendRow([ new Date(), getLoginEmail(), action, target, detail ]); 
-} 
+function logAudit(action, target, detail){
+  var sh = sheet('AUDIT_LOG');
+  sh.appendRow([ new Date(), getLoginEmail(), action, target, detail ]);
+  trimLogSheetIfNeeded_(sh, 300);
+}
 
 function ensureUserOnce(email){ 
   const sh = sheet('USERS'); 
