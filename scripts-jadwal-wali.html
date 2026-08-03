@@ -1,5 +1,17 @@
 <script>
-try { console.log('[BUILD-CHECK] scripts-jadwal-wali.html loaded, saveJadwalUI will be defined below — build 2026-07-30-a'); } catch(e){}
+try { console.log('[BUILD-CHECK] scripts-jadwal-wali.html loaded, saveJadwalUI will be defined below — build 2026-07-31'); } catch(e){}
+
+// 🛟 Binding via event delegation di document, BUKAN inline onclick di
+// tombol. Ini sengaja lebih kuat/tahan banting: tidak peduli kapan atau
+// berapa kali tombol #btnSimpanJadwal dirender ulang, listener di
+// document ini akan selalu menangkap kliknya selama halaman terbuka —
+// menghindari kelas masalah "onclick tidak ke-bind" yang susah dilacak
+// lewat kode statis saja. Dipasang sekali saat script ini dimuat.
+document.addEventListener('click', function(e){
+  var btn = e.target && e.target.closest && e.target.closest('#btnSimpanJadwal');
+  if(btn) saveJadwalUI();
+});
+
 /**
  * Render jadwal mengajar – modern, responsive, minimalis.
  * Layout: kolom per hari, scroll horizontal di mobile, fill di desktop.
