@@ -17,7 +17,6 @@ function loadDashboardSuperAdmin(){
       // loadStatistikGlobal();
 
       // ✅ panggil bertahap (AMAN)
-      setTimeout(loadUserManagement, 100);
       setTimeout(loadArsipSemuaUser, 300);
       setTimeout(loadStatistikGlobal, 500);
       setTimeout(loadBackupTriggerStatus, 900);
@@ -642,216 +641,20 @@ function loadCentralDataSizeReport(){
     .getCentralDataSizeReport();
 }
 
-// LOAD USER DATA SUPERADMIN //
-function loadUserManagement(){
-  const body = document.getElementById('userBody');
-  if(!body) return;
-
-  body.innerHTML = `
-    <tr>
-      <td colspan="8" style="text-align:center;color:#888">
-        ⏳ Memuat data user...
-      </td>
-    </tr>
-  `;
-
-  google.script.run
-    .withFailureHandler(err=>{
-      body.innerHTML = `
-        <tr>
-          <td colspan="8" style="color:red;text-align:center">
-            ❌ ${err.message}
-          </td>
-        </tr>
-      `;
-    })
-    .withSuccessHandler(users=>{
-      if(!users || users.length === 0){
-        body.innerHTML = `
-          <tr>
-            <td colspan="9" style="text-align:center;color:#888">
-              📭 Belum ada user
-            </td>
-          </tr>
-        `;
-        return;
-      }
-
-      body.innerHTML = users.map(u=>`
-        <tr>
-          <td>${u.no}</td>
-          <td>${u.email}</td>
-          <td>${u.nama_guru || '-'}</td>
-          <td>${u.sekolah || '-'}</td>
-          <td>
-            <span style="
-              display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
-              background:${u.role==='superadmin'?'#7c3aed':u.role==='kepsek'?'#0369a1':u.role==='admin'?'#059669':'#6b7280'};
-              color:#fff;
-            ">${u.role==='kepsek'?'🏫 Kepsek':u.role==='superadmin'?'👑 SA':u.role==='admin'?'👨‍🏫 Guru':u.role}</span>
-          </td>
-          <td>
-            <span class="badge ${u.status==='active'?'badge-green':'badge-red'}">
-              ${u.status}
-            </span>
-          </td>
-          <td>${renderMasaAktif_(u)}</td>
-          <td>${u.dibuat}</td>
-          <td>${renderUserActions(u)}
-            <button class="ghost"
-                    onclick="openUserAuditModal_('${u.email}')"
-                    style="background:#eef2ff;color:#4338ca;font-size:12px">
-              📋 Riwayat
-            </button>
-          </td>
-        </tr>
-      `).join('');
-    })
-    .getUsers(); // ⬅️ SATU-SATUNYA PANGGILAN
-}
-
-function generateLicenseUI(email){
-  if(!confirm(`Generate lisensi 1 tahun untuk ${email}?`)) return;
-  google.script.run
-    .withSuccessHandler(res=>{
-      alert(
-        `✅ Lisensi dibuat\n\n`+
-        `Key: ${res.key}\n`+
-        `Expired: ${res.expired}`
-      );
-      loadUserManagement();
-    })
-    .withFailureHandler(err=>{
-      alert('❌ ' + err.message);
-    })
-    .generateLicense(email, 1);
-}
-
-/*************************************************
- * LICENSE BADGE (FINAL – STABLE)
- *************************************************/
-function renderLicenseBadge(u){
-  if(!u || !u.licenseKey || u.sisaHari === null || u.sisaHari === undefined){
-    return '<span class="badge">-</span>';
-  }
-
-  const sisa = Number(u.sisaHari);
-  let bg   = '#22c55e';
-  let text = `Aktif (${sisa} hari)`;
-
-  if(sisa <= 60){
-    bg = '#facc15';
-    text = `⚠️ ${sisa} hari`;
-  }
-  if(sisa <= 30){
-    bg = '#ef4444';
-    text = `⛔ ${sisa} hari`;
-  }
-  if(sisa <= 0){
-    bg = '#6b7280';
-    text = `Expired`;
-  }
-
-  return `
-    <span style="
-      background:${bg};
-      color:#fff;
-      padding:4px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-      display:inline-block;
-      box-shadow:0 6px 14px rgba(0,0,0,.25)
-    ">
-      ${text}
-    </span>
-  `;
-}
-
-/*************************************************
- * MASA AKTIF BADGE
- *************************************************/
-function renderMasaAktif_(u) {
-  // sisaHari === null → lifetime (expired kosong)
-  if (u.sisaHari === null || u.sisaHari === undefined) {
-    return '<span style="background:#6366f1;color:#fff;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;display:inline-block">♾️ Lifetime</span>';
-  }
-  var sisa = Number(u.sisaHari);
-  var exp  = u.expired && u.expired !== '-' ? u.expired : '-';
-  var bg, label;
-  if (sisa > 60) {
-    bg = '#22c55e'; label = '✅ ' + sisa + ' hari';
-  } else if (sisa > 30) {
-    bg = '#f59e0b'; label = '⚠️ ' + sisa + ' hari';
-  } else if (sisa > 0) {
-    bg = '#ef4444'; label = '🔴 ' + sisa + ' hari';
-  } else {
-    bg = '#6b7280'; label = '⛔ Expired';
-  }
-  return '<span style="background:' + bg + ';color:#fff;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;display:inline-block" title="s.d. ' + exp + '">' + label + '</span><br><span style="font-size:10px;color:#6b7280">' + exp + '</span>';
-}
-
-/*************************************************
- * USER ACTIONS (FINAL – EXPIRED SAFE)
- *************************************************/
-function renderUserActions(u){
-  const expired = (u.sisaHari !== null && Number(u.sisaHari) <= 0);
-  let btn = '';
-
-  if(expired){
-    return `
-      <span class="badge" style="background:#9ca3af;color:#fff">
-        🔒 Expired
-      </span>
-    `;
-  }
-
-  // Toggle status
-  if(u.status === 'active'){
-    btn += `<button class="ghost" onclick="setUserStatus('${u.email}','inactive')">🚫 Nonaktif</button>`;
-  }else{
-    btn += `<button onclick="setUserStatus('${u.email}','active')">✅ Aktifkan</button>`;
-  }
-
-  // Toggle role — now includes kepsek
-  if(u.role === 'admin'){
-    btn += `<button class="ghost" onclick="setUserRole('${u.email}','kepsek')">🏫 Jadikan Kepsek</button>`;
-    btn += `<button class="ghost" onclick="setUserRole('${u.email}','superadmin')">👑 Jadikan SA</button>`;
-  }else if(u.role === 'kepsek'){
-    btn += `<button class="ghost" onclick="setUserRole('${u.email}','admin')">👨‍🏫 Jadikan Guru</button>`;
-    btn += `<button class="ghost" onclick="setUserRole('${u.email}','superadmin')">👑 Jadikan SA</button>`;
-  }else{
-    btn += `<button class="ghost" onclick="setUserRole('${u.email}','admin')">⬇️ Turunkan</button>`;
-  }
-
-  // Delete
-  btn += `<button class="danger" onclick="deleteUserUI('${u.email}')">🗑️</button>`;
-  // Atur masa aktif (SA can extend/set expiry for any non-SA user)
-  btn += `<button class="ghost" onclick="openSetMasaAktifModal_('${u.email}')" style="background:#f0fdf4;color:#16a34a;font-size:12px">📅 Masa Aktif</button>`;
-
-  return btn;
-}
 
 
 // CALL BACKEND SUPERADMIN //
-function setUserStatus(email,status){
-  if(!confirm(`Ubah status ${email} menjadi ${status}?`)) return;
-  google.script.run.withSuccessHandler(()=>{
-    loadUserManagement();
-  }).updateUser(email,{status});
-}
-
 function setUserRole(email,role){
   if(!confirm(`Ubah role ${email} menjadi ${role}?`)) return;
   google.script.run.withSuccessHandler(()=>{
-    loadUserManagement();
+    loadTrialActivationPanel();
   }).updateUser(email,{role});
 }
 
 function deleteUserUI(email){
   if(!confirm(`⚠️ Hapus user ${email}?\nTindakan ini permanen.`)) return;
   google.script.run.withSuccessHandler(()=>{
-    loadUserManagement();
+    loadTrialActivationPanel();
   }).deleteUser(email);
 }
 
@@ -861,7 +664,7 @@ function deleteInactiveUsersUI(){
     .withSuccessHandler(function(res){
       if(typeof showToast === 'function') showToast('✅ ' + res.deleted + ' user tidak aktif dihapus', 'success');
       else alert(res.deleted + ' user tidak aktif dihapus');
-      loadUserManagement();
+      loadTrialActivationPanel();
     })
     .withFailureHandler(function(err){
       alert('❌ Gagal hapus user tidak aktif: ' + err.message);
@@ -1225,28 +1028,6 @@ function loadArsipRiwayat(){
 }
 
 
-function renewLicenseUI(email){
-  if(!confirm(`Perpanjang lisensi ${email} selama 1 tahun?`)) return;
-
-  google.script.run
-    .withSuccessHandler(res=>{
-      alert(`✅ Lisensi diperpanjang sampai ${res.expired || '-'}`);
-
-      // 🔄 AUTO REFRESH TABEL (FIX UTAMA)
-      if(typeof loadUserManagement === 'function'){
-        loadUserManagement();
-      }
-
-      if(typeof loadDashboardSuperAdmin === 'function'){
-        loadDashboardSuperAdmin();
-      }
-    })
-    .withFailureHandler(err=>{
-      alert('❌ ' + err.message);
-    })
-    .renewLicense(email, 1);
-}
-
 /*************************************************
  * SEND LICENSE EMAIL (UI SAFE)
  *************************************************/
@@ -1271,39 +1052,6 @@ function sendLicenseEmailUI(email){
     'ℹ️ Backend pengiriman email belum diaktifkan.\n\n' +
     'Silakan hubungi user secara manual.'
   );
-}
-
-/*************************************************
- * REGENERATE LICENSE UI (SUPERADMIN ONLY)
- *************************************************/
-function regenerateLicenseUI(email){
-  if(!confirm(
-    `⚠️ Regenerate lisensi untuk:\n\n${email}\n\n` +
-    `Key lama akan dinonaktifkan.\nUser harus aktivasi ulang.\n\nLanjutkan?`
-  )) return;
-
-  google.script.run
-    .withSuccessHandler(res=>{
-      alert(
-        `🔑 Lisensi berhasil di-regenerate\n\n` +
-        `Email  : ${email}\n` +
-        `Key Baru:\n${res.key}\n\n` +
-        `Status : Inactive\n` +
-        `Expired: Akan dihitung saat aktivasi`
-      );
-
-      // 🔄 refresh tabel & dashboard
-      if(typeof loadUserManagement === 'function'){
-        loadUserManagement();
-      }
-      if(typeof loadDashboardSuperAdmin === 'function'){
-        loadDashboardSuperAdmin();
-      }
-    })
-    .withFailureHandler(err=>{
-      alert('❌ Gagal regenerate lisensi:\n' + err.message);
-    })
-    .regenerateLicense(email);
 }
 
 /* ---- Reminder Trigger untuk Lisensi Aplikasi ---- */
@@ -1358,91 +1106,7 @@ function _escSA(s) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   ATUR MASA AKTIF USER — SuperAdmin
-───────────────────────────────────────────────────────────── */
-var _masaAktifTargetEmail_ = '';
-
-function openSetMasaAktifModal_(email) {
-  _masaAktifTargetEmail_ = email;
-  var emailEl = document.getElementById('setMasaEmail');
-  if (emailEl) emailEl.textContent = email;
-
-  // Reset radio + date
-  var def = document.querySelector('input[name="masaDurasi"][value="lifetime"]');
-  if (def) def.checked = true;
-  var dateEl = document.getElementById('masaCustomDate');
-  if (dateEl) dateEl.value = '';
-  _updateMasaPreview_();
-
-  // Attach events
-  document.querySelectorAll('input[name="masaDurasi"]').forEach(function(r) {
-    r.onchange = _updateMasaPreview_;
-  });
-  var dateEl2 = document.getElementById('masaCustomDate');
-  if (dateEl2) dateEl2.oninput = _updateMasaPreview_;
-
-  document.getElementById('setMasaAktifModal').style.display = '';
-}
-
-function _updateMasaPreview_() {
-  var customDate = (document.getElementById('masaCustomDate') || {}).value || '';
-  var radioEl    = document.querySelector('input[name="masaDurasi"]:checked');
-  var val        = radioEl ? radioEl.value : 'lifetime';
-  var preview    = document.getElementById('masaPreviewText');
-
-  // Highlight selected radio label
-  [30, 90, 180, 365, 0].forEach(function(d) {
-    var lbl = document.getElementById('maDur-' + d);
-    if (lbl) lbl.style.borderColor = '#e5e7eb';
-  });
-  var activeLbl = document.getElementById('maDur-' + val);
-  if (!activeLbl) activeLbl = document.getElementById('maDur-0');
-  if (activeLbl) activeLbl.style.borderColor = '#6366f1';
-
-  if (customDate) {
-    if (preview) preview.textContent = customDate + ' (manual)';
-    return;
-  }
-  if (val === 'lifetime') {
-    if (preview) preview.textContent = '♾️ Seumur Hidup';
-    return;
-  }
-  var d = new Date();
-  d.setDate(d.getDate() + parseInt(val, 10));
-  if (preview) preview.textContent = d.toLocaleDateString('id-ID', {day:'2-digit',month:'long',year:'numeric'});
-}
-
-function confirmSetMasaAktif_() {
-  var customDate = (document.getElementById('masaCustomDate') || {}).value || '';
-  var radioEl    = document.querySelector('input[name="masaDurasi"]:checked');
-  var val        = radioEl ? radioEl.value : 'lifetime';
-
-  var expiredStr = '';
-  if (customDate) {
-    expiredStr = customDate; // yyyy-mm-dd
-  } else if (val !== 'lifetime') {
-    var d = new Date();
-    d.setDate(d.getDate() + parseInt(val, 10));
-    expiredStr = d.toISOString().split('T')[0];
-  }
-  // lifetime → expiredStr = '' (kosong)
-
-  google.script.run
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function')
-        showToast('✅ Masa aktif ' + _masaAktifTargetEmail_ + ' berhasil diupdate', 'success');
-      document.getElementById('setMasaAktifModal').style.display = 'none';
-      loadUserManagement();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function')
-        showToast('❌ ' + (err.message || 'Gagal'), 'error');
-    })
-    .setUserExpiry(_masaAktifTargetEmail_, expiredStr);
-}
-
-/* ─────────────────────────────────────────────────────────────
-   AKTIVASI AKUN GURU — Trial 30 hari → Aktif Penuh (SuperAdmin)
+   AKTIVASI AKUN GURU — kelola status & role semua guru (SuperAdmin)
 ───────────────────────────────────────────────────────────── */
 function loadTrialActivationPanel() {
   var el = document.getElementById('trialActivationList');
@@ -1460,19 +1124,38 @@ function loadTrialActivationPanel() {
       }
       var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Dibuat</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
       rows.forEach(function(r) {
-        var statusHtml, actionHtml;
+        var statusHtml, statusActionHtml;
         if (r.status === 'trial') {
           statusHtml = r.expired
             ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">⏰ Trial Habis</span>'
             : '<span style="background:#fef9c3;color:#854d0e;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">🟡 ' + r.days_left + ' hari lagi</span>';
-          actionHtml = '<button onclick="approveTrialAccountUI(\'' + _escSA(r.email) + '\')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">✅ Aktifkan Penuh</button>';
+          statusActionHtml = '<button onclick="approveTrialAccountUI(\'' + _escSA(r.email) + '\')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">✅ Aktifkan Penuh</button>';
         } else if (r.status === 'active') {
           statusHtml = '<span style="background:#dcfce7;color:#166534;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">♾️ Aktif (Lifetime)</span>';
-          actionHtml = '<button onclick="deactivateGuruUI(\'' + _escSA(r.email) + '\')" class="ghost" style="font-size:12px;color:#dc2626">⛔ Nonaktifkan</button>';
+          statusActionHtml = '<button onclick="deactivateGuruUI(\'' + _escSA(r.email) + '\')" class="ghost" style="font-size:12px;color:#dc2626">⛔ Nonaktifkan</button>';
         } else {
           statusHtml = '<span style="background:#f3f4f6;color:#6b7280;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">⭘ Tidak Aktif</span>';
-          actionHtml = '<button onclick="activateGuruLifetimeUI(\'' + _escSA(r.email) + '\')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">♾️ Aktifkan Lifetime</button>';
+          statusActionHtml = '<button onclick="activateGuruLifetimeUI(\'' + _escSA(r.email) + '\')" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">♾️ Aktifkan Lifetime</button>';
         }
+
+        var roleActionHtml;
+        if (r.role === 'kepsek') {
+          roleActionHtml =
+            '<button class="ghost" onclick="setUserRole(\'' + _escSA(r.email) + '\',\'admin\')" style="font-size:12px">👨‍🏫 Jadikan Guru</button>' +
+            '<button class="ghost" onclick="setUserRole(\'' + _escSA(r.email) + '\',\'superadmin\')" style="font-size:12px">👑 Jadikan SA</button>';
+        } else {
+          roleActionHtml =
+            '<button class="ghost" onclick="setUserRole(\'' + _escSA(r.email) + '\',\'kepsek\')" style="font-size:12px">🏫 Jadikan Kepsek</button>' +
+            '<button class="ghost" onclick="setUserRole(\'' + _escSA(r.email) + '\',\'superadmin\')" style="font-size:12px">👑 Jadikan SA</button>';
+        }
+
+        var actionHtml =
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+            statusActionHtml + roleActionHtml +
+            '<button class="ghost" onclick="deleteUserUI(\'' + _escSA(r.email) + '\')" style="font-size:12px;color:#dc2626">🗑️ Hapus</button>' +
+            '<button class="ghost" onclick="openUserAuditModal_(\'' + _escSA(r.email) + '\')" style="background:#eef2ff;color:#4338ca;font-size:12px">📋 Riwayat</button>' +
+          '</div>';
+
         html += '<tr>' +
           '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
           '<td style="font-size:12px">' + _escSA(r.role) + '</td>' +

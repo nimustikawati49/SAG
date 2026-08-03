@@ -1338,8 +1338,9 @@
       <h3 style="margin:0">🎓 Aktivasi Akun Guru</h3>
       <p class="muted" style="margin:4px 0 0;font-size:12px">Guru baru otomatis dapat masa uji coba 30 hari begitu pertama kali membuka aplikasi — tidak perlu didaftarkan manual dulu. Aktifkan di sini supaya akunnya jadi permanen (lifetime), atau nonaktifkan akun yang sudah aktif. Data yang sudah dibuat guru tidak akan hilang meski statusnya berubah.</p>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span id="trialActivationCount" style="background:#fef9c3;color:#854d0e;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:700">0</span>
+      <button onclick="deleteInactiveUsersUI()" class="ghost" style="font-size:12px;color:#dc2626">🗑️ Hapus User Tidak Aktif</button>
       <button class="ghost" onclick="loadTrialActivationPanel()" style="font-size:12px">🔄</button>
     </div>
   </div>
@@ -1359,130 +1360,7 @@
 </div>
 <!-- ===== END REMINDER LISENSI ===== -->
 
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        margin-bottom:10px;
-        flex-wrap:wrap;
-        gap:10px
-      ">
-        <div>
-          <h3 style="margin:0">👥 Manajemen User</h3>
-          <p class="muted" style="margin:4px 0 0">
-            Kelola akun guru yang menggunakan aplikasi ini.
-          </p>
-        </div>
-
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="deleteInactiveUsersUI()" class="ghost" style="font-size:13px;color:#dc2626">
-            🗑️ Hapus User Tidak Aktif
-          </button>
-          <button onclick="openAddAdminModal()"
-            style="
-              display:flex;
-              align-items:center;
-              gap:6px;
-              padding:8px 14px;
-              font-weight:700;
-              border-radius:999px;
-              background:linear-gradient(135deg,#22c55e,#16a34a);
-              box-shadow:0 8px 18px rgba(34,197,94,.45)
-            ">
-            ➕ Tambah Admin
-          </button>
-        </div>
-      </div>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>No</th>
-        <th>Email</th>
-        <th>Nama Guru</th>
-        <th>Sekolah</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Masa Aktif</th>
-        <th>Dibuat</th>
-        <th>Aksi</th>
-      </tr>
-    </thead>
-    <tbody id="userBody">
-      <tr>
-        <td colspan="9" class="muted">⏳ Memuat data user...</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-<!-- MODAL TAMBAH ADMIN -->
-<div id="addAdminModal" style="
-  position:fixed;
-  top:0;left:0;right:0;bottom:0;
-  background:rgba(0,0,0,.45);
-  display:none;
-  z-index:99999;
-">
-  <div style="
-    position:fixed;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    background:#fff;
-    width:90%;
-    max-width:360px;
-    padding:24px;
-    border-radius:16px;
-    box-shadow:0 30px 60px rgba(0,0,0,.35);
-  ">
-    <h3 style="margin:0 0 16px">➕ Tambah User</h3>
-
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600">Email <span style="color:#ef4444">*</span></label>
-        <input id="newAdminEmail" type="email" placeholder="guru@sekolah.sch.id" style="width:100%">
-      </div>
-
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600">No WhatsApp</label>
-        <input id="newAdminWA" placeholder="08xxx (opsional)" style="width:100%">
-      </div>
-
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Role</label>
-        <div style="display:flex;gap:10px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px;transition:border-color .15s" id="lbl-role-guru">
-            <input type="radio" name="newAdminRole" value="admin" checked onchange="updateRoleLabel_()"> 👨‍🏫 Guru
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px;transition:border-color .15s" id="lbl-role-kepsek">
-            <input type="radio" name="newAdminRole" value="kepsek" onchange="updateRoleLabel_()"> 🏫 Kepsek
-          </label>
-        </div>
-        <p id="roleHintText" style="font-size:11px;color:#6b7280;margin:4px 0 0">Guru: akses jurnal, absensi, nilai. Kepsek: akses Rekap Sekolah.</p>
-      </div>
-
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Masa Aktif</label>
-        <div style="display:flex;gap:10px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #e5e7eb;border-radius:10px;flex:1;font-size:13px" id="lbl-ma-1year">
-            <input type="radio" name="newAdminMasa" value="1year" checked onchange="updateMasaLabel_()"> 📅 1 Tahun
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border:2px solid #6366f1;border-radius:10px;flex:1;font-size:13px;background:#eff6ff" id="lbl-ma-lifetime">
-            <input type="radio" name="newAdminMasa" value="lifetime" onchange="updateMasaLabel_()"> ♾️ Seumur Hidup
-          </label>
-        </div>
-        <p id="masaHintText" style="font-size:11px;color:#6b7280;margin:4px 0 0">Expired: <b id="masaExpiredPreview"></b></p>
-      </div>
-    </div>
-
-  <div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">
-    <button type="button" class="ghost" onclick="closeAddAdminModal()">Batal</button>
-    <button type="button" onclick="addAdminUI()" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none">💾 Simpan</button>
-  </div>
-  </div>
-</div>
-
-<hr style="margin:28px 0">
+      <hr style="margin:28px 0">
 <div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
   ⚠️ <b>Peringatan Storage:</b> Folder arsip telah menggunakan <b id="arsipWarnUsed">-</b> MB, melebihi batas <b id="arsipWarnThreshold">-</b> MB. Pertimbangkan untuk menghapus arsip lama.
 </div>
@@ -2392,48 +2270,6 @@
     <p id="lemBody" class="muted" style="font-size:14px;line-height:1.6"></p>
     <p style="font-size:12px;color:#9ca3af;margin-top:8px">Hubungi Admin Sekolah atau vendor untuk perpanjangan.</p>
     <button onclick="closeLicenseExpiryModal_()" style="margin-top:16px;width:100%">✅ Mengerti</button>
-  </div>
-</div>
-
-<!-- ===== MODAL: ATUR MASA AKTIF USER ===== -->
-<div id="setMasaAktifModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99999">
-  <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;width:90%;max-width:400px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4)">
-    <h3 style="margin:0 0 4px">📅 Atur Masa Aktif</h3>
-    <p class="muted" style="font-size:12px;margin:0 0 16px">User: <b id="setMasaEmail" style="color:#6366f1"></b></p>
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:6px">Pilih durasi</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="masaDurasiGrid">
-          <label id="maDur-30"  style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
-            <input type="radio" name="masaDurasi" value="30">  30 Hari (Trial)
-          </label>
-          <label id="maDur-90"  style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
-            <input type="radio" name="masaDurasi" value="90">  3 Bulan
-          </label>
-          <label id="maDur-180" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
-            <input type="radio" name="masaDurasi" value="180"> 6 Bulan
-          </label>
-          <label id="maDur-365" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:13px">
-            <input type="radio" name="masaDurasi" value="365"> 1 Tahun
-          </label>
-          <label id="maDur-0"   style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:2px solid #6366f1;border-radius:10px;font-size:13px;background:#eff6ff;grid-column:span 2">
-            <input type="radio" name="masaDurasi" value="lifetime" checked> ♾️ Seumur Hidup
-          </label>
-        </div>
-      </div>
-      <div>
-        <label style="font-size:12px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px">Atau set tanggal expired manual</label>
-        <input type="date" id="masaCustomDate" style="width:100%">
-        <p style="font-size:11px;color:#9ca3af;margin:3px 0 0">Kosongkan jika pakai pilihan durasi di atas.</p>
-      </div>
-      <div id="masaPreviewBox" style="background:#f8fafc;border-radius:10px;padding:10px 14px;font-size:13px;color:#374151">
-        Expired: <b id="masaPreviewText">—</b>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
-      <button class="ghost" onclick="document.getElementById('setMasaAktifModal').style.display='none'">Batal</button>
-      <button onclick="confirmSetMasaAktif_()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none">💾 Simpan</button>
-    </div>
   </div>
 </div>
 
