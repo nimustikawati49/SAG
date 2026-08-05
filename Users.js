@@ -131,22 +131,20 @@ function approveTrialAccount(email) {
   var shLic = sheet('LICENSES');
   var lics = shLic.getDataRange().getValues();
   var licFound = false;
-  var exp = new Date();
-  exp.setFullYear(exp.getFullYear() + 1);
   for (var j = 1; j < lics.length; j++) {
     if (String(lics[j][1] || '').toLowerCase().trim() !== email) continue;
-    shLic.getRange(j + 1, 3).setValue(exp);
+    shLic.getRange(j + 1, 3).setValue('');
     shLic.getRange(j + 1, 4).setValue('active');
     licFound = true;
     break;
   }
   if (!licFound) {
     var key = 'JGD-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
-    shLic.appendRow([key, email, exp, 'active', new Date(), new Date(), '']);
+    shLic.appendRow([key, email, '', 'active', new Date(), new Date(), '']);
   }
 
   if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
-  logAudit('APPROVE_TRIAL_ACCOUNT', email, 'Aktivasi penuh oleh SuperAdmin');
+  logAudit('APPROVE_TRIAL_ACCOUNT', email, 'Aktivasi lifetime oleh SuperAdmin');
   return { success: true, email: email };
 }
 
@@ -163,12 +161,20 @@ function updateUser(email, payload){
       } 
       if(payload.status){ 
         sh.getRange(i+1,3).setValue(payload.status); 
-        const lic = sheet('LICENSES').getDataRange().getValues(); 
+        const licSheet = sheet('LICENSES');
+        const lic = licSheet.getDataRange().getValues(); 
+        let licFound = false;
         for(let j=1;j<lic.length;j++){ 
           if(String(lic[j][1]).toLowerCase() === email){ 
-            sheet('LICENSES').getRange(j+1,4).setValue(payload.status); 
+            licSheet.getRange(j+1,4).setValue(payload.status); 
+            if(payload.status === 'active') licSheet.getRange(j+1,3).setValue('');
+            licFound = true;
           } 
         } 
+        if(!licFound && (payload.status === 'active' || payload.status === 'inactive')){
+          const key = 'JGD-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
+          licSheet.appendRow([key, email, payload.status === 'active' ? '' : '', payload.status, new Date(), '', '']);
+        }
         logAudit('UPDATE_STATUS', email, payload.status);
       }
       if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);

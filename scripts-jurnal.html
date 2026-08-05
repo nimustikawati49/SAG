@@ -5,6 +5,14 @@ function _setGlobalBar_(pct){
   bar.style.width = pct + '%';
 }
 
+function _getProgressUi_(){
+  return {
+    box: document.getElementById('progressBox'),
+    inner: document.getElementById('progressInner'),
+    percent: document.getElementById('progressPercent')
+  };
+}
+
 function startProgress(){
   if(typeof _markProgressStart === 'function') _markProgressStart();
   // Animate green top bar
@@ -16,18 +24,20 @@ function startProgress(){
     _setGlobalBar_(_gp);
     if(_gp >= 85) clearInterval(window._globalBarInterval);
   }, 150);
-  // Animate centered progress box
-  clearInterval(progressInterval);
-  progressValue=0;
-  progressInner.style.width='0%';
-  progressPercent.innerText='0%';
-  progressBox.style.display='block';
-  progressInterval=setInterval(()=>{
-    if(progressValue<90){
-      progressValue+=Math.random()*8+4;
-      if(progressValue>90) progressValue=90;
-      progressInner.style.width=progressValue+'%';
-      progressPercent.innerText=Math.floor(progressValue)+'%';
+  // Animate centered progress box. Jangan bergantung pada global ID-to-window
+  // binding karena itu tidak konsisten di semua browser/webview GAS.
+  var ui = _getProgressUi_();
+  clearInterval(window.progressInterval);
+  window.progressValue = 0;
+  if(ui.inner) ui.inner.style.width = '0%';
+  if(ui.percent) ui.percent.innerText = '0%';
+  if(ui.box) ui.box.style.display = 'block';
+  window.progressInterval = setInterval(function(){
+    if(window.progressValue < 90){
+      window.progressValue += Math.random()*8+4;
+      if(window.progressValue > 90) window.progressValue = 90;
+      if(ui.inner) ui.inner.style.width = window.progressValue + '%';
+      if(ui.percent) ui.percent.innerText = Math.floor(window.progressValue) + '%';
     }
   },180);
 }
@@ -39,11 +49,12 @@ function endProgress(){
   _setGlobalBar_(100);
   setTimeout(function(){ _setGlobalBar_(0); }, 600);
   // Complete centered progress box
-  clearInterval(progressInterval);
-  progressValue=100;
-  progressInner.style.width='100%';
-  progressPercent.innerText='100%';
-  setTimeout(()=>progressBox.style.display='none',600);
+  var ui = _getProgressUi_();
+  clearInterval(window.progressInterval);
+  window.progressValue = 100;
+  if(ui.inner) ui.inner.style.width = '100%';
+  if(ui.percent) ui.percent.innerText = '100%';
+  if(ui.box) setTimeout(function(){ ui.box.style.display = 'none'; }, 600);
 }
 
 /* ================= INIT ================= */

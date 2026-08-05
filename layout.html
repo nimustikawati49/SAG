@@ -1318,7 +1318,10 @@
       <h3 style="margin:0">📊 Ukuran Data Sheet Central</h3>
       <p class="muted" style="margin:4px 0 0;font-size:12px">Read-only — cuma menghitung, tidak mengubah/menghapus apa pun. Dipakai untuk cek sheet mana yang paling besar sebelum bersih-bersih data lama/test.</p>
     </div>
-    <button class="ghost" onclick="loadCentralDataSizeReport()" style="font-size:12px">🔄 Cek Sekarang</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="ghost" onclick="cleanupUnusedLegacySheetsUI()" style="font-size:12px;color:#0f766e">🧹 Cleanup Sheet Kosong</button>
+      <button class="ghost" onclick="loadCentralDataSizeReport()" style="font-size:12px">🔄 Cek Sekarang</button>
+    </div>
   </div>
   <div id="dataSizeReportBox"><div class="muted">Klik "Cek Sekarang" untuk memuat laporan.</div></div>
 </div>

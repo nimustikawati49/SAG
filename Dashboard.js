@@ -377,9 +377,7 @@ function getDashboardAllData() {
           if (_semAktif && String(_jv[i][_cSem] || '').trim().toLowerCase() !== _semAktif) continue;
           if (_cTahun !== -1 && _tahunAktif) {
             var _rowTahun = String(_jv[i][_cTahun] || '').trim();
-            // Baris lama sebelum migrasi tahun_pelajaran (kosong) dianggap
-            // cocok ke periode manapun — baris baru WAJIB cocok tahunnya.
-            if (_rowTahun && _rowTahun !== _tahunAktif) continue;
+            if (_rowTahun !== _tahunAktif) continue;
           }
           var hari = String(_jv[i][_cHari] || '').trim().toUpperCase();
           if (!hari) continue;

@@ -641,6 +641,24 @@ function loadCentralDataSizeReport(){
     .getCentralDataSizeReport();
 }
 
+function cleanupUnusedLegacySheetsUI(){
+  if (!confirm('Hapus sheet yang tidak dipakai lagi?\n\nYang akan dihapus hanya sheet central yang BUKAN bagian aktif aplikasi dan kosong/header-only, plus duplikat nama jadwal yang kosong. Sheet yang masih berisi data akan dilewati.')) return;
+  google.script.run
+    .withSuccessHandler(function(res){
+      var deleted = (res && res.deleted) || [];
+      var skipped = (res && res.skipped) || [];
+      if(typeof showToast === 'function'){
+        showToast('🧹 Cleanup selesai. Dihapus: ' + deleted.length + ', dilewati: ' + skipped.length, 'success', 7000);
+      }
+      loadCentralDataSizeReport();
+      loadCentralRegistryOverview();
+    })
+    .withFailureHandler(function(err){
+      if(typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal cleanup sheet'), 'error', 7000);
+    })
+    .cleanupUnusedLegacySheets();
+}
+
 
 
 // CALL BACKEND SUPERADMIN //

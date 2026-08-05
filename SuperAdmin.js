@@ -579,6 +579,82 @@ function getNotifikasiGuru() {
 
   return result;
 }
+
+function cleanupUnusedLegacySheets() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+
+  var ss = getCentralSpreadsheet_();
+  var activeSheets = {
+    'JURNAL': true,
+    'ABSENSI': true,
+    'SISWA': true,
+    'MasterSiswa': true,
+    'RiwayatKelas': true,
+    'GuruMengajar': true,
+    'MasterTahunPelajaran': true,
+    'JADWAL_SEMESTER': true,
+    'NILAI_SISWA': true,
+    'SETTING_NILAI': true,
+    'ModulAjar': true,
+    'Relasi_Modul_Jadwal': true,
+    'SETTING': true,
+    'USERS': true,
+    'LICENSES': true,
+    'AUDIT_LOG': true,
+    '_LOG_ERROR_': true,
+    'RESOURCE_MAP': true,
+    'SUMMARY_SYNC': true,
+    'APP_RELEASES': true,
+    'UPDATE_LOG': true,
+    'DEPLOYMENTS': true
+  };
+  var duplicateCandidates = ['jadwal_semester', 'Jadwal_Semester'];
+  var deleted = [];
+  var skipped = [];
+
+  duplicateCandidates.forEach(function(name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) return;
+    if (!ss.getSheetByName('JADWAL_SEMESTER')) {
+      skipped.push(name + ' (duplikat dibiarkan karena sheet utama belum ada)');
+      return;
+    }
+    if (sh.getLastRow() > 1) {
+      skipped.push(name + ' (berisi data)');
+      return;
+    }
+    ss.deleteSheet(sh);
+    deleted.push(name);
+  });
+
+  ss.getSheets().forEach(function(sh) {
+    var name = sh.getName();
+    if (activeSheets[name]) return;
+    if (duplicateCandidates.indexOf(name) > -1) return;
+
+    var lastRow = sh.getLastRow();
+    var lastCol = sh.getLastColumn();
+    var isHeaderOnly = false;
+    if (lastRow <= 1) {
+      if (lastRow === 0 || lastCol === 0) {
+        isHeaderOnly = true;
+      } else {
+        var firstRow = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+        isHeaderOnly = firstRow.every(function(v) { return !String(v || '').trim(); });
+      }
+    }
+
+    if (isHeaderOnly) {
+      ss.deleteSheet(sh);
+      deleted.push(name);
+      return;
+    }
+    skipped.push(name + ' (tidak aktif tapi masih berisi data)');
+  });
+
+  logAudit('CLEANUP_UNUSED_SHEETS', getLoginEmail(), 'deleted=' + (deleted.join(', ') || '-') + ' | skipped=' + (skipped.length || 0));
+  return { deleted: deleted, skipped: skipped };
+}
 // =====================================================================
 // CENTRAL REGISTRY HUB
 // DEPLOYMENTS   : identitas deployment per sekolah/tenant
@@ -901,15 +977,25 @@ function buildGuruSummarySync_(email) {
 
 function trySyncGuruSummaryAfterMutation_(email, sourceAction) {
   try {
-    syncGuruSummaryToCentral();
-    return { synced: true, source: sourceAction || '', email: email || '' };
+    var targetEmail = String(email || '').toLowerCase().trim();
+    if (!targetEmail) targetEmail = getLoginEmail();
+
+    var cache = CacheService.getScriptCache();
+    var syncKey = 'SUMMARY_SYNC_PENDING_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
+    if (cache.get(syncKey)) {
+      return { synced: false, skipped: true, source: sourceAction || '', email: targetEmail };
+    }
+    cache.put(syncKey, '1', 12);
+
+    syncGuruSummaryToCentral(targetEmail);
+    return { synced: true, source: sourceAction || '', email: targetEmail };
   } catch (e) {
     try { logError_('SYNC_GURU_SUMMARY_AFTER:' + String(sourceAction || ''), e); } catch(inner) {}
     return { synced: false, source: sourceAction || '', email: email || '', error: String(e && e.message ? e.message : e) };
   }
 }
 
-function syncGuruSummaryToCentral() {
+function syncGuruSummaryToCentral(targetEmail) {
   const auth = getAuth();
   if (!auth.email || (auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek')) {
     throw new Error('AKSES_DITOLAK');
@@ -918,33 +1004,11 @@ function syncGuruSummaryToCentral() {
   const sh = _ensureSummarySyncSheet_();
   const rows = sh.getDataRange().getValues();
   const idx = _getHeaderIndexMap_(sh);
-  const summary = buildGuruSummarySync_(auth.email);
+  const email = String(targetEmail || auth.email || '').toLowerCase().trim();
+  const summary = buildGuruSummarySync_(email);
   const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][idx.email_guru] || '').toLowerCase().trim() !== auth.email) continue;
-    sh.getRange(i + 1, idx.deployment_id + 1).setValue(summary.deployment_id);
-    sh.getRange(i + 1, idx.nama_guru + 1).setValue(summary.nama_guru);
-    sh.getRange(i + 1, idx.sekolah + 1).setValue(summary.sekolah);
-    sh.getRange(i + 1, idx.tahun_pelajaran + 1).setValue(summary.tahun_pelajaran);
-    sh.getRange(i + 1, idx.semester + 1).setValue(summary.semester);
-    sh.getRange(i + 1, idx.total_jurnal + 1).setValue(summary.total_jurnal);
-    sh.getRange(i + 1, idx.total_kelas + 1).setValue(summary.total_kelas);
-    sh.getRange(i + 1, idx.total_siswa + 1).setValue(summary.total_siswa);
-    sh.getRange(i + 1, idx.rata_hadir + 1).setValue(summary.rata_hadir);
-    sh.getRange(i + 1, idx.kelas_favorit + 1).setValue(summary.kelas_favorit);
-    sh.getRange(i + 1, idx.ketuntasan_terbaik + 1).setValue(summary.ketuntasan_terbaik);
-    sh.getRange(i + 1, idx.license_status + 1).setValue(summary.license_status);
-    sh.getRange(i + 1, idx.app_version + 1).setValue(summary.app_version);
-    sh.getRange(i + 1, idx.schema_version + 1).setValue(summary.schema_version);
-    sh.getRange(i + 1, idx.last_sync + 1).setValue(now);
-    sh.getRange(i + 1, idx.catatan + 1).setValue(summary.catatan || '');
-    logAudit('SYNC_GURU_SUMMARY', auth.email, summary.sekolah + ' | ' + now);
-    return { success: true, action: 'updated', last_sync: now };
-  }
-
-  sh.appendRow([
-    'SUM_' + new Date().getTime(),
+  const rowPayload = [
+    '',
     summary.deployment_id,
     summary.email_guru,
     summary.nama_guru,
@@ -962,6 +1026,36 @@ function syncGuruSummaryToCentral() {
     summary.schema_version,
     now,
     summary.catatan || ''
+  ];
+
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][idx.email_guru] || '').toLowerCase().trim() !== email) continue;
+    rowPayload[0] = String(rows[i][idx.id] || '').trim() || ('SUM_' + new Date().getTime());
+    sh.getRange(i + 1, 1, 1, rowPayload.length).setValues([rowPayload]);
+    logAudit('SYNC_GURU_SUMMARY', auth.email, summary.sekolah + ' | ' + now);
+    return { success: true, action: 'updated', last_sync: now };
+  }
+
+  rowPayload[0] = 'SUM_' + new Date().getTime();
+  sh.appendRow([
+    rowPayload[0],
+    rowPayload[1],
+    rowPayload[2],
+    rowPayload[3],
+    rowPayload[4],
+    rowPayload[5],
+    rowPayload[6],
+    rowPayload[7],
+    rowPayload[8],
+    rowPayload[9],
+    rowPayload[10],
+    rowPayload[11],
+    rowPayload[12],
+    rowPayload[13],
+    rowPayload[14],
+    rowPayload[15],
+    rowPayload[16],
+    rowPayload[17]
   ]);
   logAudit('SYNC_GURU_SUMMARY', auth.email, summary.sekolah + ' | ' + now);
   return { success: true, action: 'created', last_sync: now };

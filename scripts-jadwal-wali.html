@@ -178,22 +178,25 @@ function _renderJadwalGrid_(obj, container){
 }
 
 function loadJadwalMengajar(){
-  // Fungsi ini dipanggil setelah save jadwal untuk refresh dashboard
-  // Tidak dipakai saat init — jadwal sudah bundled di getDashboardAllData()
+  // Refresh jadwal dashboard via endpoint khusus agar filter periode aktif
+  // konsisten dengan jalur dashboard utama dan tidak ikut menarik bundle
+  // dashboard penuh yang lebih lambat.
   var container = document.getElementById('jadwalGridContainer');
   if(!container) return;
   container.innerHTML = '<p class="muted">⏳ Memuat ulang jadwal...</p>';
   google.script.run
-    .withSuccessHandler(function(allData){
-      if(!allData) return;
-      var obj = allData.jadwal || {};
+    .withSuccessHandler(function(obj){
+      if(!obj || obj._error) {
+        container.innerHTML = '<p class="muted">📭 Belum ada jadwal untuk semester ini.</p>';
+        return;
+      }
       _renderJadwalGrid_(obj, container);
     })
     .withFailureHandler(function(err){
       console.error('[JADWAL] reload failed:', err);
       container.innerHTML = '<p class="muted" style="color:#ef4444">\u274C Gagal muat ulang jadwal: '+(err&&err.message?err.message:'Refresh halaman')+'</p>';
     })
-    .getDashboardAllData();
+    .getDashboardJadwal();
 }
 
 /**
