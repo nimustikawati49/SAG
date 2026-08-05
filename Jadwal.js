@@ -97,6 +97,42 @@ function normalizeJam_(val){
   return '';
 }
 
+function normalizeSemesterLabel_(val){
+  var s = String(val || '').trim().toLowerCase();
+  if(!s) return '';
+  if(s === 'ganjil' || s === 'i' || s === '1') return 'Ganjil';
+  if(s === 'genap' || s === 'ii' || s === '2') return 'Genap';
+  return String(val || '').trim();
+}
+
+function getActiveJadwalPeriod_(email, overrideData){
+  var period = { tahun_pelajaran: '', semester: '' };
+  var targetEmail = String(email || '').toLowerCase().trim();
+
+  if (overrideData) {
+    period.tahun_pelajaran = String(overrideData.tahun_pelajaran || '').trim();
+    period.semester = normalizeSemesterLabel_(overrideData.semester || '');
+  }
+
+  if (!period.tahun_pelajaran || !period.semester) {
+    try {
+      var p = getUserAcademicPeriod(targetEmail || getLoginEmail());
+      if (!period.tahun_pelajaran) period.tahun_pelajaran = String(p.tahun_pelajaran || '').trim();
+      if (!period.semester) period.semester = normalizeSemesterLabel_(p.semester || '');
+    } catch (e) {}
+  }
+
+  if (!period.tahun_pelajaran || !period.semester) {
+    try {
+      var setting = getSetting();
+      if (!period.tahun_pelajaran) period.tahun_pelajaran = String(setting.tahun_pelajaran || setting.tahun_pelajaran_aktif || '').trim();
+      if (!period.semester) period.semester = normalizeSemesterLabel_(setting.semester || setting.semester_aktif || '');
+    } catch (e) {}
+  }
+
+  return period;
+}
+
 function toMinutes_(val){
 
   const t = normalizeJam_(val);
@@ -352,13 +388,16 @@ function saveJadwalSemester(data){
   const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
 
-  const setting = getSetting();
-  const semesterAktif = setting.semester || '';
-  const tahunAktif = setting.tahun_pelajaran || '';
   const email = auth.email;
+  const period = getActiveJadwalPeriod_(email, data);
+  const semesterAktif = normalizeSemesterLabel_(period.semester);
+  const tahunAktif = String(period.tahun_pelajaran || '').trim();
 
   if(!data.hari || !data.kelas || !data.jam_mulai || !data.jam_selesai){
     throw new Error('Data jadwal belum lengkap');
+  }
+  if(!semesterAktif || !tahunAktif){
+    throw new Error('Tahun ajaran/semester aktif belum valid. Simpan setting terlebih dahulu.');
   }
 
   if(data.jam_mulai >= data.jam_selesai){
@@ -373,7 +412,7 @@ function saveJadwalSemester(data){
     const rowTahun = String(values[i][tIdx] || '').trim();
 
     if(rowEmail !== email) continue;
-    if(rowSemester !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(rowSemester) !== semesterAktif) continue;
     if(tahunAktif && rowTahun !== tahunAktif) continue;
     if(rowHari !== data.hari) continue;
 
@@ -397,7 +436,7 @@ function saveJadwalSemester(data){
     semesterAktif,
     data.hari,
     data.kelas,
-    data.mapel || setting.mata_pelajaran || '',
+    data.mapel || '',
     data.jam_mulai,
     data.jam_selesai,
     new Date()
@@ -457,10 +496,14 @@ function saveBulkJadwalSemester(list){
   const sh = ensureJadwalSheet_();
   const tIdx = ensureJadwalSchemaAcademic_();
   const values = sh.getDataRange().getValues();
-  const settingBulk = getSetting();
-  const semesterAktif = settingBulk.semester || '';
-  const tahunAktif = settingBulk.tahun_pelajaran || '';
   const email = auth.email;
+  const period = getActiveJadwalPeriod_(email, list[0] || {});
+  const semesterAktif = normalizeSemesterLabel_(period.semester);
+  const tahunAktif = String(period.tahun_pelajaran || '').trim();
+
+  if(!semesterAktif || !tahunAktif){
+    throw new Error('Tahun ajaran/semester aktif belum valid. Simpan setting terlebih dahulu.');
+  }
 
   for(let i=0;i<list.length;i++){
     for(let j=i+1;j<list.length;j++){
@@ -481,7 +524,7 @@ function saveBulkJadwalSemester(list){
   for(let i=1;i<values.length;i++){
 
     if(String(values[i][0]).toLowerCase() !== email) continue;
-    if(values[i][1] !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(values[i][1]) !== semesterAktif) continue;
     const rowTahunBulk = String(values[i][tIdx] || '').trim();
     if(tahunAktif && rowTahunBulk !== tahunAktif) continue;
 
@@ -506,7 +549,7 @@ function saveBulkJadwalSemester(list){
       semesterAktif,
       item.hari,
       item.kelas,
-      item.mapel || settingBulk.mata_pelajaran || '',
+      item.mapel || '',
       normalizeJam_(item.jam_mulai),
       normalizeJam_(item.jam_selesai),
       new Date()
@@ -527,9 +570,9 @@ function getJadwalMengajar(){
 
   const emailLogin = String(auth.email).toLowerCase().trim();
 
-  const setting = getSetting();
-  const semesterAktif = String(setting.semester || '').trim();
-  const tahunAktif = String(setting.tahun_pelajaran || '').trim();
+  const period = getActiveJadwalPeriod_(emailLogin);
+  const semesterAktif = normalizeSemesterLabel_(period.semester);
+  const tahunAktif = String(period.tahun_pelajaran || '').trim();
 
   const sh = getJadwalSheet_();
   if(!sh) return [];
@@ -545,7 +588,7 @@ function getJadwalMengajar(){
     const tahunRow = String(values[i][tIdx] || '').trim();
 
     if(emailRow !== emailLogin) continue;
-    if(semesterRow !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(semesterRow) !== semesterAktif) continue;
     if(tahunAktif && tahunRow !== tahunAktif) continue;
 
     result.push({
@@ -618,9 +661,9 @@ function getDashboardJadwal(){
     var semesterAktif = '';
     var tahunAktif = '';
     try {
-      const setting = getSetting();
-      semesterAktif = String(setting.semester || '').trim().toLowerCase();
-      tahunAktif = String(setting.tahun_pelajaran || '').trim();
+      var period = getActiveJadwalPeriod_(email);
+      semesterAktif = normalizeSemesterLabel_(period.semester).toLowerCase();
+      tahunAktif = String(period.tahun_pelajaran || '').trim();
     } catch(e) {
       semesterAktif = '';
       tahunAktif = '';
@@ -633,7 +676,7 @@ function getDashboardJadwal(){
       if(rowEmail !== email) continue;
 
       if(semesterAktif){
-        const rowSemester = String(values[i][1] || '').trim().toLowerCase();
+        const rowSemester = normalizeSemesterLabel_(values[i][1]).toLowerCase();
         if(rowSemester !== semesterAktif) continue;
       }
 
@@ -670,9 +713,9 @@ function previewBentrokJadwal(data){
   if(!sh) return { bentrok:false };
 
   const tIdxPreview = ensureJadwalSchemaAcademic_();
-  const settingPreview = getSetting();
-  const semesterAktif = settingPreview.semester || '';
-  const tahunAktifPreview = settingPreview.tahun_pelajaran || '';
+  const periodPreview = getActiveJadwalPeriod_(auth.email, data);
+  const semesterAktif = normalizeSemesterLabel_(periodPreview.semester);
+  const tahunAktifPreview = String(periodPreview.tahun_pelajaran || '').trim();
   const values = sh.getDataRange().getValues();
 
   const startNew = toMinutes_(data.jam_mulai);
@@ -681,7 +724,7 @@ function previewBentrokJadwal(data){
   for(let i=1;i<values.length;i++){
 
     if(String(values[i][0]).toLowerCase().trim() !== auth.email) continue;
-    if(values[i][1] !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(values[i][1]) !== semesterAktif) continue;
     const rowTahunPreview = String(values[i][tIdxPreview] || '').trim();
     if(tahunAktifPreview && rowTahunPreview !== tahunAktifPreview) continue;
     if(values[i][2] !== data.hari) continue;
@@ -710,9 +753,9 @@ function getJadwalForSetting(){
   if(!auth || !auth.email) return [];
 
   const emailLogin = String(auth.email).toLowerCase().trim();
-  const settingForList = getSetting();
-  const semesterAktif = String(settingForList.semester || '').trim();
-  const tahunAktif = String(settingForList.tahun_pelajaran || '').trim();
+  const periodForList = getActiveJadwalPeriod_(emailLogin);
+  const semesterAktif = normalizeSemesterLabel_(periodForList.semester);
+  const tahunAktif = String(periodForList.tahun_pelajaran || '').trim();
 
   const sh = getJadwalSheet_();
   if(!sh) return [];
@@ -728,7 +771,7 @@ function getJadwalForSetting(){
     const tahunRow = String(values[i][tIdx] || '').trim();
 
     if(emailRow !== emailLogin) continue;
-    if(semesterRow !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(semesterRow) !== semesterAktif) continue;
     if(tahunAktif && tahunRow !== tahunAktif) continue;
 
     result.push({
@@ -772,9 +815,9 @@ function updateJadwalSemester(row,data){
   const auth = getAuth();
   const sh = ensureJadwalSheet_();
   const tIdxUpd = ensureJadwalSchemaAcademic_();
-  const settingUpd = getSetting();
-  const semesterAktif = settingUpd.semester || '';
-  const tahunAktifUpd = settingUpd.tahun_pelajaran || '';
+  const periodUpd = getActiveJadwalPeriod_(auth.email, data);
+  const semesterAktif = normalizeSemesterLabel_(periodUpd.semester);
+  const tahunAktifUpd = String(periodUpd.tahun_pelajaran || '').trim();
 
   if(sh.getRange(row,1).getValue() !== auth.email){
     throw new Error('AKSES_DITOLAK');
@@ -789,7 +832,7 @@ function updateJadwalSemester(row,data){
 
     if(i+1 === row) continue;
     if(String(values[i][0]).toLowerCase() !== auth.email) continue;
-    if(values[i][1] !== semesterAktif) continue;
+    if(normalizeSemesterLabel_(values[i][1]) !== semesterAktif) continue;
     const rowTahunUpd = String(values[i][tIdxUpd] || '').trim();
     if(tahunAktifUpd && rowTahunUpd !== tahunAktifUpd) continue;
     if(values[i][2] !== data.hari) continue;

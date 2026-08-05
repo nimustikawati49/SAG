@@ -155,7 +155,11 @@ function showTab(id){
   // 🔥 AUTO LOAD SETTING + JADWAL
   if(id === 'setting'){
     loadSettingForm();
-    loadJadwalSetting(); // <-- ini penting
+    if(typeof loadJadwalSetting === 'function'){
+      loadJadwalSetting();
+    } else {
+      console.warn('[JADWAL] loadJadwalSetting belum tersedia saat tab setting dibuka');
+    }
   }
 
   // 🔥 LOAD KELAS SAAT BUKA JURNALKU
