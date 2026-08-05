@@ -446,6 +446,10 @@ function loadJadwalSetting(){
   return __loadJadwalSettingImpl();
 }
 
+window.loadJadwalSetting = loadJadwalSetting;
+
+window.saveJadwalUI = saveJadwalUI;
+
 function __loadJadwalSettingImpl(){
 
   google.script.run

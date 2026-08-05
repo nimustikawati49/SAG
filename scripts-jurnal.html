@@ -5,6 +5,10 @@ function _setGlobalBar_(pct){
   bar.style.width = pct + '%';
 }
 
+window.showTab = window.showTab || function(){
+  console.warn('[JADWAL] showTab fallback dipakai sebelum scripts-nav ter-load');
+};
+
 if (typeof window.loadJadwalSetting !== 'function') {
   window.loadJadwalSetting = function(){
     if (window._jadwalSettingQueued) return;
@@ -15,6 +19,12 @@ if (typeof window.loadJadwalSetting !== 'function') {
         window.__loadJadwalSettingImpl();
       }
     }, 0);
+  };
+}
+
+if (typeof window.saveJadwalUI !== 'function') {
+  window.saveJadwalUI = function(){
+    console.warn('[JADWAL] saveJadwalUI fallback dipakai sebelum scripts-jadwal-wali ter-load');
   };
 }
 
