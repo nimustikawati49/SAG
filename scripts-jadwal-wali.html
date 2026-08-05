@@ -443,6 +443,10 @@ function _saveJadwalUIInner_(){
     .previewBentrokJadwal(data);
 }
 function loadJadwalSetting(){
+  return __loadJadwalSettingImpl();
+}
+
+function __loadJadwalSettingImpl(){
 
   google.script.run
     .withSuccessHandler(data=>{
