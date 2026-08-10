@@ -298,31 +298,32 @@ function _saveJadwalUIInner_(){
   const elMapel   = document.getElementById('jadwal_mapel');
   const elMulai   = document.getElementById('jadwal_mulai');
   const elSelesai = document.getElementById('jadwal_selesai');
-  const elTahun   = document.getElementById('set_tahun');
-  const elSemester= document.getElementById('set_semester');
 
   if(!elHari || !elKelas || !elMapel || !elMulai || !elSelesai){
-    showToast('❌ Form jadwal tidak ditemukan di halaman. Coba refresh halaman (Ctrl+Shift+R).', 'error', 8000);
+    alert('❌ Form jadwal tidak ditemukan. Coba refresh halaman.');
     return;
   }
 
+  // tahun_pelajaran/semester TIDAK dibaca dari DOM — backend sudah punya
+  // fallback chain via getActiveJadwalPeriod_ → getUserAcademicPeriod.
   const data = {
     hari: elHari.value,
     kelas: elKelas.value.trim(),
     mapel: elMapel.value.trim(),
     jam_mulai: elMulai.value,
-    jam_selesai: elSelesai.value,
-    tahun_pelajaran: elTahun ? String(elTahun.value || '').trim() : '',
-    semester: elSemester ? String(elSemester.value || '').trim() : ''
+    jam_selesai: elSelesai.value
   };
 
-  if(!data.kelas || !data.mapel || !data.jam_mulai || !data.jam_selesai){
-    showToast('⚠️ Lengkapi semua field jadwal (kelas, mapel, jam mulai, jam selesai)', 'warning');
+  if(!data.kelas){
+    _jadwalFeedback_('⚠️ Kelas wajib diisi', 'warning');
     return;
   }
-
-  if(!data.tahun_pelajaran || !data.semester){
-    _jadwalFeedback_('⚠️ Tahun ajaran / semester belum terbaca. Buka tab Setting → simpan setting terlebih dahulu.', 'warning');
+  if(!data.mapel){
+    _jadwalFeedback_('⚠️ Pilih Mapel terlebih dahulu. Pastikan Mata Pelajaran sudah disimpan di Setting.', 'warning');
+    return;
+  }
+  if(!data.jam_mulai || !data.jam_selesai){
+    _jadwalFeedback_('⚠️ Jam Mulai dan Jam Selesai wajib diisi', 'warning');
     return;
   }
 
