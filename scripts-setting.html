@@ -1078,35 +1078,73 @@ function loadKelasForPromosi_(){
   if(!box || !fromYear || !fromSem) return;
   box.innerHTML = '<p class="muted">Memuat kelas...</p>';
   google.script.run
-    .withSuccessHandler(function(kelasList){
-      if(!kelasList || !kelasList.length){
+    .withSuccessHandler(function(res){
+      const kelasList  = (res && res.kelas_diampu) || [];
+      const siswaCount = (res && res.siswa_per_kelas) || {};
+      if(!kelasList.length){
         box.innerHTML = '<p class="muted">Tidak ada Kelas Diampu tercatat di periode ini.</p>';
         return;
       }
-      box.innerHTML = '<div style="font-size:12px;color:#6b7280;margin-bottom:6px">Kelas di tahun lama → kelas di tahun baru</div>' +
+      box.innerHTML =
+        '<div style="font-size:12px;color:#4b5563;margin-bottom:8px">'+
+          '✅ Centang kelas yang Anda ajar di tahun baru — siswa otomatis naik ke kelas tersebut.</div>' +
         kelasList.map(function(k){
-          const safe = _escSetting_(k);
-          const sug  = _escSetting_(_suggestNextKelas_(k));
-          return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
-            '<b style="min-width:80px;font-size:13px">' + safe + '</b>' +
-            '<span style="color:#9ca3af;font-size:16px">→</span>' +
-            '<select class="promKelasAction" data-from="' + safe + '" onchange="_togglePromTarget_(this)" style="flex:0 0 auto">' +
-              '<option value="lanjut">Naik tingkat ke...</option>' +
-              '<option value="alumni">Alumni / Lulus</option>' +
-              '<option value="stop">Tidak diajar lagi</option>' +
-            '</select>' +
-            '<input class="promKelasTarget" data-from="' + safe + '" value="' + sug + '" placeholder="Nama kelas baru, mis. 8A" style="flex:1;min-width:80px">' +
+          const safe  = _escSetting_(k);
+          const sug   = _escSetting_(_suggestNextKelas_(k));
+          const count = siswaCount[k] || 0;
+          return '<div class="prom-row" data-alumni="0"'+
+            ' style="display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border-radius:8px;border:1px solid #6366f1;background:#f5f3ff">' +
+            '<input type="checkbox" class="promKelasCheck" data-from="' + safe + '" id="ck_' + safe + '"'+
+              ' style="width:16px;height:16px;flex-shrink:0" checked onchange="_onPromRowChange_(this)">' +
+            '<label for="ck_' + safe + '" style="flex:0 0 auto;cursor:pointer;font-size:13px">'+
+              '<b>' + safe + '</b> <span style="color:#9ca3af;font-size:11px">(' + count + ' siswa)</span>'+
+            '</label>' +
+            '<span style="color:#9ca3af;font-size:12px;flex:0 0 auto">→ naik ke</span>' +
+            '<input class="promKelasTarget" data-from="' + safe + '" value="' + sug + '"'+
+              ' placeholder="Kelas tujuan" style="flex:1;min-width:60px;font-size:13px">' +
+            '<button type="button" onclick="_toggleAlumniRow_(this)"'+
+              ' style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;flex-shrink:0">Alumni</button>' +
           '</div>';
         }).join('');
     })
-    .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal memuat kelas: ' + (err.message || err) + '</p>'; })
-    .getKelasListForPeriod(fromYear, fromSem);
+    .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal: ' + (err.message || err) + '</p>'; })
+    .getAcademicHistorySummary(fromYear, fromSem);
 }
 
 function _suggestNextKelas_(kelas) {
   const m = String(kelas || '').match(/^(\d+)(.*)/);
   if(m) return (parseInt(m[1], 10) + 1) + m[2];
   return '';
+}
+
+function _onPromRowChange_(cb){
+  const row = cb.closest('.prom-row');
+  if(!row) return;
+  const isAlumni = row.getAttribute('data-alumni') === '1';
+  row.style.borderColor = cb.checked ? (isAlumni ? '#f59e0b' : '#6366f1') : '#e5e7eb';
+  row.style.background  = cb.checked ? (isAlumni ? '#fffbeb' : '#f5f3ff') : '#fafafa';
+}
+
+function _toggleAlumniRow_(btn){
+  const row = btn.closest('.prom-row');
+  if(!row) return;
+  const isAlumni = row.getAttribute('data-alumni') === '1';
+  const cb    = row.querySelector('.promKelasCheck');
+  const input = row.querySelector('.promKelasTarget');
+  if(!isAlumni){
+    row.setAttribute('data-alumni','1');
+    row.style.borderColor = '#f59e0b'; row.style.background = '#fffbeb';
+    if(cb) cb.checked = true;
+    if(input){ input.value = 'ALUMNI'; input.disabled = true; }
+    btn.textContent = '↩ Batal'; btn.style.background = '#fef3c7'; btn.style.color = '#92400e';
+  } else {
+    row.setAttribute('data-alumni','0');
+    row.style.borderColor = '#6366f1'; row.style.background = '#f5f3ff';
+    const from = (cb && cb.getAttribute('data-from')) || '';
+    if(input){ input.value = _suggestNextKelas_(from); input.disabled = false; }
+    if(cb) cb.checked = true;
+    btn.textContent = 'Alumni'; btn.style.background = '#fee2e2'; btn.style.color = '#991b1b';
+  }
 }
 
 function _togglePromTarget_(selectEl){
@@ -1132,11 +1170,10 @@ function runPromosiWizard(){
   const toSem    = (document.getElementById('wizPromToSem')    || {}).value || '';
 
   const mapping = [];
-  document.querySelectorAll('.promKelasAction').forEach(function(sel){
-    const from = sel.getAttribute('data-from');
-    if(sel.value === 'stop') return;
-    if(sel.value === 'alumni'){ mapping.push({ from: from, to: 'ALUMNI' }); return; }
-    const row   = sel.closest('div');
+  document.querySelectorAll('.promKelasCheck').forEach(function(cb){
+    if(!cb.checked) return;
+    const from  = cb.getAttribute('data-from');
+    const row   = cb.closest('.prom-row');
     const input = row ? row.querySelector('.promKelasTarget') : null;
     const to    = input ? input.value.trim() : '';
     if(to) mapping.push({ from: from, to: to });
@@ -1151,7 +1188,7 @@ function runPromosiWizard(){
   const mapelBaru = mapelRaw ? mapelRaw.split(',').map(function(m){ return m.trim(); }).filter(Boolean) : null;
 
   if(!fromYear || !fromSem || !toYear || !toSem || (mapping.length === 0 && newKelas.length === 0)){
-    return showAcademicToast('Lengkapi tahun/semester dan isi minimal satu kelas untuk dipromosikan atau ditambahkan', 'warning');
+    return showAcademicToast('Pilih minimal satu kelas yang dicentang atau tambahkan kelas baru', 'warning');
   }
   if(!confirm('Proses ini akan:\n• Memindahkan siswa sesuai pemetaan kelas di atas\n• Memperbarui daftar kelas yang Anda ajar di tahun baru\n\nJurnal/absensi lama TIDAK dihapus.\nLanjutkan?')) return;
 
