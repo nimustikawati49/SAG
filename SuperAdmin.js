@@ -1389,16 +1389,11 @@ function saveResourceMapEntry(obj) {
 }
 
 /**
- * _autoProvisionUserSpreadsheet_(email)
- * Sekali per guru: kalau storage mode = per_guru dan guru ini belum
- * punya spreadsheet pribadi terdaftar di RESOURCE_MAP, buatkan satu
- * Google Spreadsheet baru langsung di Drive milik guru tsb (skrip
- * berjalan sebagai USER_ACCESSING, jadi file ini otomatis dimiliki
- * oleh akun guru yang login, bukan akun developer/superadmin).
- *
- * Dipanggil dari getAuth() — fail-soft total: setiap kegagalan hanya
- * dicatat ke logError_ dan sesi guru tetap lanjut memakai spreadsheet
- * central sebagai fallback (lihat getSpreadsheet_ di Code.js).
+ * _hasExistingCentralTeacherData_(email)
+ * True kalau email ini sudah punya baris di SETTING spreadsheet central —
+ * dipakai _autoProvisionUserSpreadsheet_() (Code.js) untuk membedakan guru
+ * lama (jangan diprovisioning ulang) dari guru baru yang benar-benar belum
+ * pernah pakai aplikasi.
  */
 function _hasExistingCentralTeacherData_(email) {
   var targetEmail = String(email || '').toLowerCase().trim();
@@ -1418,93 +1413,11 @@ function _hasExistingCentralTeacherData_(email) {
   return false;
 }
 
-function _autoProvisionUserSpreadsheet_(email) {
-  if (typeof getStorageMode_ !== 'function' || getStorageMode_() !== 'per_guru') return null;
-  var targetEmail = String(email || '').toLowerCase().trim();
-  if (!targetEmail) return null;
-
-  var cache = CacheService.getScriptCache();
-  var cacheKey = 'USER_PROVISIONED_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
-  if (cache.get(cacheKey)) return null;
-
-  if (resolveSpreadsheetIdForUser_(targetEmail)) {
-    try { cache.put(cacheKey, '1', 21600); } catch (e) {}
-    return null;
-  }
-
-  try {
-    if (!_readSchoolLicense_().isActive) return null;
-  } catch (e) {
-    return null;
-  }
-
-  // Jangan provisioning kalau guru ini SUDAH punya riwayat data di
-  // spreadsheet central (SETTING/JURNAL) — itu tandanya akun lama, bukan
-  // guru baru. Memindahkannya diam-diam ke spreadsheet pribadi yang
-  // kosong bikin seolah-olah semua datanya hilang (padahal masih ada di
-  // central, cuma tidak lagi dibaca dari sana). Auto-provision hanya
-  // untuk akun yang BENAR-BENAR belum pernah punya data central.
-  try {
-    if (_hasExistingCentralTeacherData_(targetEmail)) {
-      try { cache.put(cacheKey, '1', 21600); } catch (e2) {}
-      try { logError_('AUTO_PROVISION_SKIPPED_EXISTING_DATA', new Error(targetEmail + ' sudah punya data central, provisioning dilewati')); } catch (e3) {}
-      return null;
-    }
-  } catch (e) { /* kalau cek gagal, lebih aman skip provisioning daripada salah pindah */ return null; }
-
-  // Pakai claim ringan berbasis cache (per-email), BUKAN LockService.getScriptLock()
-  // global. Membuat 1 spreadsheet+folder baru di Drive genuinely lambat (bisa
-  // >10 detik); kalau pakai lock GLOBAL, setiap guru LAIN yang kebetulan
-  // butuh lock yang sama di request lain (mis. ensureAcademicSchema_) ikut
-  // macet total menunggu proses provisioning guru ini selesai. Race super
-  // jarang di claim ini paling banter bikin 1 spreadsheet dobel, yang gampang
-  // dibersihkan lewat panel Resource Map SuperAdmin — jauh lebih aman
-  // daripada memblokir semua orang.
-  var claimKey = 'USER_PROVISIONING_CLAIM_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
-  try {
-    if (cache.get(claimKey)) return null; // proses lain sedang mengerjakan, jangan ikut nunggu
-    cache.put(claimKey, '1', 60);
-  } catch (e) {}
-
-  try {
-    // Cek ulang setelah klaim, siapa tahu sudah diselesaikan proses lain barusan.
-    if (resolveSpreadsheetIdForUser_(targetEmail)) {
-      try { cache.put(cacheKey, '1', 21600); } catch (e) {}
-      return null;
-    }
-
-    _ensureCentralRegistrySchema_();
-
-    var rootFolder = _getOrCreateFolderByName_('SAG_Data_' + targetEmail, null);
-    var ss = SpreadsheetApp.create('Data Akademik - ' + targetEmail);
-    try {
-      var ssFile = DriveApp.getFileById(ss.getId());
-      rootFolder.addFile(ssFile);
-      DriveApp.getRootFolder().removeFile(ssFile);
-    } catch (e) {}
-
-    var deployment = _getDeploymentEntryForUser_(targetEmail);
-    _upsertResourceMapEntry_({
-      deployment_id: deployment ? deployment.id : '',
-      email_guru: targetEmail,
-      resource_type: 'data_spreadsheet',
-      resource_id: ss.getId(),
-      resource_name: ss.getName(),
-      owner_email: targetEmail,
-      status: 'active',
-      catatan: 'auto-provisioned saat login'
-    });
-
-    cache.put(cacheKey, '1', 21600);
-    logAudit('AUTO_PROVISION_USER_SPREADSHEET', targetEmail, ss.getId());
-    return { spreadsheetId: ss.getId() };
-  } catch (e) {
-    try { logError_('AUTO_PROVISION_USER_SPREADSHEET', e); } catch (e2) {}
-    return null;
-  } finally {
-    try { cache.remove(claimKey); } catch (e) {}
-  }
-}
+// NOTE: _autoProvisionUserSpreadsheet_() dulu terduplikasi di sini DAN di
+// Code.js dengan guard yang berbeda-beda (di Apps Script semua file berbagi
+// satu namespace global, jadi cuma salah satu yang benar-benar jalan — yang
+// lain ke-shadow diam-diam). Sudah digabung jadi SATU definisi di Code.js
+// yang memakai semua guard dari kedua versi. Jangan tambahkan lagi di sini.
 
 function deleteResourceMapEntry(id) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');

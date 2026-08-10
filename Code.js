@@ -283,9 +283,21 @@ var _GURU_OPERATIONAL_SHEETS_ = [
 /**
  * _autoProvisionUserSpreadsheet_(email)
  * Buat spreadsheet pribadi untuk guru jika belum ada di RESOURCE_MAP.
- * Hanya berjalan saat storage mode = per_guru.
- * Idempoten & dilindungi LockService — aman dipanggil berkali-kali.
- * Spreadsheet dibuat di Drive script owner, bukan Drive guru.
+ * Hanya berjalan saat storage mode = per_guru. Idempoten — aman dipanggil
+ * berkali-kali. Spreadsheet dibuat di Drive script owner, bukan Drive guru.
+ *
+ * CATATAN: sebelumnya ada DUA definisi fungsi ini (satu di sini, satu di
+ * SuperAdmin.js) — di Apps Script semua file berbagi satu namespace
+ * global, jadi cuma salah satu yang benar-benar aktif (yang lain
+ * ke-shadow diam-diam) dan masing-masing punya guard yang beda. Sudah
+ * digabung jadi satu di sini dengan SEMUA guard:
+ *  - SuperAdmin selalu ke central (bukan spreadsheet baru).
+ *  - Lisensi sekolah harus aktif.
+ *  - Guru yang SUDAH punya data central dilewati, bukan diarahkan ke
+ *    spreadsheet baru yang kosong (root cause insiden dashboard kosong).
+ *  - Klaim ringan per-email lewat cache, bukan LockService global —
+ *    supaya proses provisioning satu guru (bisa >10 detik) tidak
+ *    memblokir guru lain yang kebetulan butuh lock yang sama.
  */
 function _autoProvisionUserSpreadsheet_(email) {
   if (getStorageMode_() !== 'per_guru') return;
@@ -293,74 +305,97 @@ function _autoProvisionUserSpreadsheet_(email) {
   var targetEmail = String(email || '').toLowerCase().trim();
   if (!targetEmail) return;
 
-  // Guard cache — hindari provisioning berulang dalam satu sesi
   var cache = CacheService.getScriptCache();
   var cacheKey = 'PROV_' + targetEmail.replace(/[^a-z0-9]/g, '_');
   if (cache.get(cacheKey)) return;
 
-  // Cek dulu tanpa lock supaya path happy sudah cepat
+  // Cek dulu tanpa klaim supaya path yang sudah ter-provisioning cepat.
   if (resolveSpreadsheetIdForUser_(targetEmail)) {
-    cache.put(cacheKey, '1', 600);
+    cache.put(cacheKey, '1', 21600);
     return;
   }
 
-  var lock = LockService.getScriptLock();
-  var gotLock = false;
-  try { gotLock = lock.tryLock(6000); } catch (e) { gotLock = false; }
-  if (!gotLock) return;
+  // SuperAdmin (pemilik script) selalu dipetakan ke spreadsheet CENTRAL —
+  // jangan pernah dibuatkan spreadsheet baru, supaya saat login untuk
+  // kelola/testing, data guru-guru lain di central tetap terlihat.
+  if (targetEmail === getSuperAdminEmail_()) {
+    try {
+      if (typeof _upsertResourceMapEntry_ === 'function') {
+        _upsertResourceMapEntry_({
+          email_guru: targetEmail,
+          resource_type: 'data_spreadsheet',
+          resource_id: getCentralSpreadsheet_().getId(),
+          resource_name: 'Central (SuperAdmin)',
+          owner_email: targetEmail,
+          status: 'active',
+          catatan: 'SuperAdmin selalu memakai central'
+        });
+      }
+      cache.put(cacheKey, '1', 21600);
+    } catch (e) {}
+    return;
+  }
 
   try {
-    // Double-check setelah lock
+    if (!_readSchoolLicense_().isActive) return;
+  } catch (e) { return; }
+
+  // Jangan provisioning kalau email ini SUDAH punya riwayat data di
+  // spreadsheet central (SETTING) — itu tandanya akun lama, bukan guru
+  // baru. Memindahkannya diam-diam ke spreadsheet pribadi yang kosong
+  // bikin seolah semua datanya hilang (padahal masih ada di central,
+  // cuma tidak lagi dibaca dari sana).
+  try {
+    if (typeof _hasExistingCentralTeacherData_ === 'function' && _hasExistingCentralTeacherData_(targetEmail)) {
+      cache.put(cacheKey, '1', 21600);
+      try { logError_('AUTO_PROVISION_SKIPPED_EXISTING_DATA', new Error(targetEmail + ' sudah punya data central, provisioning dilewati')); } catch (e2) {}
+      return;
+    }
+  } catch (e) { return; }
+
+  var claimKey = 'PROV_CLAIM_' + targetEmail.replace(/[^a-z0-9]/gi, '_');
+  try {
+    if (cache.get(claimKey)) return; // proses lain sedang mengerjakan, jangan ikut nunggu
+    cache.put(claimKey, '1', 60);
+  } catch (e) {}
+
+  try {
+    // Cek ulang setelah klaim, siapa tahu sudah diselesaikan proses lain barusan.
     if (resolveSpreadsheetIdForUser_(targetEmail)) {
-      cache.put(cacheKey, '1', 600);
+      cache.put(cacheKey, '1', 21600);
       return;
     }
 
-    var ssId, resourceName;
+    var guruSlug = targetEmail.split('@')[0].replace(/[^a-z0-9]/gi, '_');
+    var ss = SpreadsheetApp.create('Data_Guru_' + guruSlug);
+    var ssId = ss.getId();
+    try {
+      var defaultSh = ss.getSheetByName('Sheet1') || ss.getSheetByName('Lembar1');
+      if (defaultSh && ss.getSheets().length > 1) ss.deleteSheet(defaultSh);
+    } catch (e) {}
+    _GURU_OPERATIONAL_SHEETS_.forEach(function(name) {
+      try { _ensureOperationalSheetFromCentral_(ss, name); } catch (e) {}
+    });
 
-    // SuperAdmin (script owner running 'execute as me') always maps to central
-    // spreadsheet so existing data remains accessible. Regular teachers get
-    // their own provisioned spreadsheet.
-    if (targetEmail === getSuperAdminEmail_()) {
-      ssId = getCentralSpreadsheet_().getId();
-      resourceName = 'Central (SuperAdmin)';
-    } else {
-      var guruSlug = targetEmail.split('@')[0].replace(/[^a-z0-9]/gi, '_');
-      var ss = SpreadsheetApp.create('Data_Guru_' + guruSlug);
-      ssId = ss.getId();
-      resourceName = 'Data_Guru_' + guruSlug;
-      try {
-        var defaultSh = ss.getSheetByName('Sheet1') || ss.getSheetByName('Lembar1');
-        if (defaultSh && ss.getSheets().length > 1) ss.deleteSheet(defaultSh);
-      } catch (e) {}
-      _GURU_OPERATIONAL_SHEETS_.forEach(function(name) {
-        try { _ensureOperationalSheetFromCentral_(ss, name); } catch (e) {}
+    if (typeof _upsertResourceMapEntry_ === 'function') {
+      _upsertResourceMapEntry_({
+        email_guru: targetEmail,
+        resource_type: 'data_spreadsheet',
+        resource_id: ssId,
+        resource_name: 'Data_Guru_' + guruSlug,
+        owner_email: getSuperAdminEmail_(),
+        status: 'active',
+        catatan: 'Auto-provisioned ' + new Date().toISOString()
       });
     }
 
-    // Daftarkan di RESOURCE_MAP central
-    var mapSh = _getCentralSheetByName_('RESOURCE_MAP');
-    if (mapSh) {
-      if (mapSh.getLastRow() < 1) {
-        mapSh.appendRow(['id','deployment_id','email_guru','resource_type',
-          'resource_id','resource_name','owner_email','status','catatan']);
-        mapSh.setFrozenRows(1);
-      }
-      var rmId = 'RM-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
-      mapSh.appendRow([
-        rmId, '', targetEmail, 'data_spreadsheet',
-        ssId, resourceName, getSuperAdminEmail_(), 'active',
-        'Auto-provisioned ' + new Date().toISOString()
-      ]);
-    }
-
     try { logAudit('AUTO_PROVISION_SPREADSHEET', targetEmail, ssId); } catch (e) {}
-    cache.put(cacheKey, '1', 600);
+    cache.put(cacheKey, '1', 21600);
 
   } catch (provErr) {
     try { logError_('AUTO_PROVISION_SPREADSHEET', provErr); } catch (e) {}
   } finally {
-    try { lock.releaseLock(); } catch (e) {}
+    try { cache.remove(claimKey); } catch (e) {}
   }
 }
 
