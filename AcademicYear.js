@@ -1024,10 +1024,18 @@ function promoteSiswaWizard(payload) {
 
   payload = payload || {};
   const fromYear = String(payload.from_tahun || '').trim();
-  const fromSem = String(payload.from_semester || '').trim();
-  const toYear = String(payload.to_tahun || '').trim();
-  const toSem = String(payload.to_semester || '').trim();
-  const mapping = Array.isArray(payload.mapping) ? payload.mapping : [];
+  const fromSem  = String(payload.from_semester || '').trim();
+  const toYear   = String(payload.to_tahun || '').trim();
+  const toSem    = String(payload.to_semester || '').trim();
+  const mapping  = Array.isArray(payload.mapping) ? payload.mapping : [];
+  // Kelas baru di tahun tujuan yang tidak berasal dari promosi (siswa angkatan baru)
+  const newKelas  = Array.isArray(payload.new_kelas)
+    ? payload.new_kelas.map(function(k){ return String(k||'').trim(); }).filter(Boolean)
+    : [];
+  // Mapel yang akan diajar di tahun baru (opsional; default: sama dengan tahun lama)
+  const mapelBaru = Array.isArray(payload.mapel_baru)
+    ? payload.mapel_baru.map(function(m){ return String(m||'').trim(); }).filter(Boolean)
+    : null;
 
   if (!fromYear || !fromSem || !toYear || !toSem) {
     throw new Error('Periode lama dan baru wajib diisi');
@@ -1036,28 +1044,95 @@ function promoteSiswaWizard(payload) {
   const mapObj = {};
   mapping.forEach(function(m) { mapObj[String(m.from || '').trim()] = String(m.to || '').trim(); });
 
+  // Batasi promosi hanya pada kelas yang diajar guru ini di periode lama
+  const guruKelasLama = new Set(
+    getGuruMengajarForPeriod_(auth.email, fromYear, fromSem)
+      .map(function(c){ return c.kelas; }).filter(Boolean)
+  );
+
   const riwayat = sheet('RiwayatKelas').getDataRange().getValues().slice(1).filter(function(r) {
-    return String(r[1] || '') === fromYear && String(r[2] || '').toLowerCase().trim() === fromSem.toLowerCase();
+    return String(r[1] || '') === fromYear &&
+           String(r[2] || '').toLowerCase().trim() === fromSem.toLowerCase() &&
+           guruKelasLama.has(String(r[4] || '').trim());
   });
 
   let processed = 0;
   riwayat.forEach(function(r) {
     const fromKelas = String(r[4] || '').trim();
-    const toKelas = mapObj[fromKelas];
+    const toKelas   = mapObj[fromKelas];
     if (!toKelas) return;
 
-    let status = 'AKTIF';
-    let kelasTujuan = toKelas;
+    var status = 'AKTIF';
+    var kelasTujuan = toKelas;
     if (String(toKelas).toUpperCase() === 'ALUMNI') {
       status = 'ALUMNI';
       kelasTujuan = 'ALUMNI';
     }
-
     if (addRiwayatKelas_(r[3], toYear, toSem, kelasTujuan, status)) processed++;
   });
 
-  logAudit('PROMOSI_SISWA', auth.email, fromYear + '/' + fromSem + ' -> ' + toYear + '/' + toSem + ' | ' + processed);
-  return { success: true, processed: processed };
+  // Pastikan tahun tujuan terdaftar di MasterTahunPelajaran
+  ensureAcademicYearExists_(toYear, toSem, false);
+
+  // Kumpulkan semua kelas yang akan diajar di tahun baru:
+  // - kelas tujuan dari mapping (yang bukan ALUMNI)
+  // - kelas baru yang disuplai guru (angkatan baru)
+  const destKelasSet = new Set();
+  mapping.forEach(function(m) {
+    const to = String(m.to || '').trim();
+    if (to && to.toUpperCase() !== 'ALUMNI') destKelasSet.add(to);
+  });
+  newKelas.forEach(function(k) { destKelasSet.add(k); });
+  const allNewKelas = Array.from(destKelasSet);
+
+  // Perbarui GuruMengajar untuk periode tujuan
+  var guruMengajarUpdated = 0;
+  if (allNewKelas.length) {
+    const oldCombos = getGuruMengajarForPeriod_(auth.email, fromYear, fromSem);
+    const mapelToUse = (mapelBaru !== null)
+      ? mapelBaru
+      : Array.from(new Set(oldCombos.map(function(c){ return c.mapel; }).filter(Boolean)));
+
+    const shGM = sheet('GuruMengajar');
+    const gmRows = shGM.getDataRange().getValues();
+    // Hapus entri guru ini di periode tujuan agar tidak duplikat
+    for (var i = gmRows.length; i >= 2; i--) {
+      const r = gmRows[i - 1];
+      if (String(r[1]||'').toLowerCase().trim() !== auth.email) continue;
+      if (String(r[2]||'') !== toYear) continue;
+      if (String(r[3]||'').toLowerCase().trim() !== toSem.toLowerCase()) continue;
+      shGM.deleteRow(i);
+    }
+
+    const now = new Date();
+    const rowsToWrite = [];
+    allNewKelas.forEach(function(k) {
+      if (mapelToUse.length) {
+        mapelToUse.forEach(function(m) {
+          rowsToWrite.push(['GM-' + Utilities.getUuid().slice(0,8).toUpperCase(), auth.email, toYear, toSem, k, m, now]);
+        });
+      } else {
+        rowsToWrite.push(['GM-' + Utilities.getUuid().slice(0,8).toUpperCase(), auth.email, toYear, toSem, k, '', now]);
+      }
+    });
+    if (rowsToWrite.length) {
+      shGM.getRange(shGM.getLastRow() + 1, 1, rowsToWrite.length, 7).setValues(rowsToWrite);
+      guruMengajarUpdated = rowsToWrite.length;
+    }
+  }
+
+  logAudit('PROMOSI_SISWA', auth.email,
+    fromYear + '/' + fromSem + ' -> ' + toYear + '/' + toSem +
+    ' | Siswa=' + processed + ' | GM=' + guruMengajarUpdated);
+  invalidateDashboardCache_();
+  trySyncGuruSummaryAfterMutation_(auth.email, 'PROMOSI_SISWA');
+  return {
+    success: true,
+    processed: processed,
+    guru_mengajar_updated: guruMengajarUpdated,
+    all_new_kelas: allNewKelas,
+    kelas_perlu_siswa_baru: newKelas
+  };
 }
 
 /**

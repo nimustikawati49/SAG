@@ -874,24 +874,49 @@ function openAcademicModal(mode){
     if(mode === 'promosi'){
       const pre = window._lastTransition || {};
       const fromTahun = pre.fromTahun || user.tahun_pelajaran || '';
-      const fromSem = pre.fromSemester || user.semester || 'Ganjil';
-      const toTahun = pre.toTahun || '';
-      const toSem = pre.toSemester || '';
-      t.textContent = 'Promosi Siswa';
+      const fromSem   = pre.fromSemester || user.semester || 'Ganjil';
+      const toTahun   = pre.toTahun   || '';
+      const toSem     = pre.toSemester || '';
+      t.textContent = 'Promosi Siswa & Atur Kelas Tahun Baru';
       b.innerHTML =
-        '<label>Tahun Lama</label><select id="wizPromFromYear" onchange="loadKelasForPromosi_()">' + _tahunOptionsHtml_(fromTahun) + '</select>' +
-        '<label>Semester Lama</label><select id="wizPromFromSem" onchange="loadKelasForPromosi_()">' +
-          '<option' + (fromSem === 'Ganjil' ? ' selected' : '') + '>Ganjil</option>' +
-          '<option' + (fromSem === 'Genap' ? ' selected' : '') + '>Genap</option>' +
-        '</select>' +
-        '<label>Tahun Baru</label><select id="wizPromToYear">' + _tahunOptionsHtml_(toTahun) + '</select>' +
-        '<label>Semester Baru</label><select id="wizPromToSem">' +
-          '<option' + (toSem === 'Ganjil' ? ' selected' : '') + '>Ganjil</option>' +
-          '<option' + (toSem === 'Genap' ? ' selected' : '') + '>Genap</option>' +
-        '</select>' +
-        '<p class="muted" style="font-size:12px;margin:10px 0 4px">Untuk setiap kelas di bawah, pilih: lanjut ke kelas baru (naik tingkat), Alumni/Lulus, atau tidak diajar lagi.</p>' +
-        '<div id="promKelasRows"><p class="muted">Memuat kelas...</p></div>';
-      a.innerHTML = '<button onclick="runPromosiWizard()">Proses Promosi</button>';
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:14px">' +
+          '<div><label style="font-size:12px;color:#6b7280">Tahun Lama</label>' +
+            '<select id="wizPromFromYear" onchange="loadKelasForPromosi_()">' + _tahunOptionsHtml_(fromTahun) + '</select></div>' +
+          '<div><label style="font-size:12px;color:#6b7280">Semester Lama</label>' +
+            '<select id="wizPromFromSem" onchange="loadKelasForPromosi_()">' +
+              '<option' + (fromSem==='Ganjil'?' selected':'') + '>Ganjil</option>' +
+              '<option' + (fromSem==='Genap'?' selected':'') + '>Genap</option>' +
+            '</select></div>' +
+          '<div><label style="font-size:12px;color:#6b7280">Tahun Baru</label>' +
+            '<select id="wizPromToYear">' + _tahunOptionsHtml_(toTahun) + '</select></div>' +
+          '<div><label style="font-size:12px;color:#6b7280">Semester Baru</label>' +
+            '<select id="wizPromToSem">' +
+              '<option' + (toSem==='Ganjil'?' selected':'') + '>Ganjil</option>' +
+              '<option' + (toSem==='Genap'?' selected':'') + '>Genap</option>' +
+            '</select></div>' +
+        '</div>' +
+
+        '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#166534">' +
+          '📌 <b>Petunjuk:</b> Di bawah, atur nasib setiap kelas lama — naik tingkat, lulus (Alumni), atau tidak lagi diajar. ' +
+          'Lalu tambahkan kelas yang <b>siswa barunya perlu diupload</b> (misal 7A–F angkatan baru) di bagian bawah.' +
+        '</div>' +
+
+        '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px">① Pemetaan Kelas Lama → Tahun Baru</div>' +
+        '<div id="promKelasRows"><p class="muted">Memuat kelas...</p></div>' +
+
+        '<div style="margin-top:14px;border-top:1px solid #e5e7eb;padding-top:12px">' +
+          '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:4px">② Kelas Baru (Siswa Angkatan Baru)</div>' +
+          '<div class="muted" style="font-size:12px;margin-bottom:6px">Kelas yang <b>tidak berasal dari promosi</b> — siswa baru perlu diupload setelah proses ini.</div>' +
+          '<input id="wizNewKelasInput" placeholder="Contoh: 7A, 7B, 7C, 7D, 7E, 7F" style="width:100%;box-sizing:border-box">' +
+        '</div>' +
+
+        '<div style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:10px">' +
+          '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:4px">③ Mata Pelajaran Tahun Baru</div>' +
+          '<div class="muted" style="font-size:12px;margin-bottom:6px">Kosongkan untuk memakai mapel yang sama dengan tahun lama.</div>' +
+          '<input id="wizNewMapelInput" placeholder="Opsional — contoh: Matematika, IPA (pisahkan koma)" style="width:100%;box-sizing:border-box">' +
+        '</div>';
+
+      a.innerHTML = '<button onclick="runPromosiWizard()">✅ Proses Promosi</button>';
       p.style.width = '85%';
       setTimeout(loadKelasForPromosi_, 50);
       return;
@@ -1048,7 +1073,7 @@ function runCloneAcademicWizard(){
  */
 function loadKelasForPromosi_(){
   const fromYear = (document.getElementById('wizPromFromYear') || {}).value || '';
-  const fromSem = (document.getElementById('wizPromFromSem') || {}).value || '';
+  const fromSem  = (document.getElementById('wizPromFromSem')  || {}).value || '';
   const box = document.getElementById('promKelasRows');
   if(!box || !fromYear || !fromSem) return;
   box.innerHTML = '<p class="muted">Memuat kelas...</p>';
@@ -1058,21 +1083,30 @@ function loadKelasForPromosi_(){
         box.innerHTML = '<p class="muted">Tidak ada Kelas Diampu tercatat di periode ini.</p>';
         return;
       }
-      box.innerHTML = kelasList.map(function(k){
-        const safe = _escSetting_(k);
-        return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
-          '<b style="min-width:90px">' + safe + '</b>' +
-          '<select class="promKelasAction" data-from="' + safe + '" onchange="_togglePromTarget_(this)" style="flex:1">' +
-            '<option value="lanjut">Lanjut sebagai kelas baru...</option>' +
-            '<option value="alumni">Alumni / Lulus</option>' +
-            '<option value="stop">Tidak diajar lagi</option>' +
-          '</select>' +
-          '<input class="promKelasTarget" data-from="' + safe + '" placeholder="mis. VIII A" style="flex:1">' +
-        '</div>';
-      }).join('');
+      box.innerHTML = '<div style="font-size:12px;color:#6b7280;margin-bottom:6px">Kelas di tahun lama → kelas di tahun baru</div>' +
+        kelasList.map(function(k){
+          const safe = _escSetting_(k);
+          const sug  = _escSetting_(_suggestNextKelas_(k));
+          return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
+            '<b style="min-width:80px;font-size:13px">' + safe + '</b>' +
+            '<span style="color:#9ca3af;font-size:16px">→</span>' +
+            '<select class="promKelasAction" data-from="' + safe + '" onchange="_togglePromTarget_(this)" style="flex:0 0 auto">' +
+              '<option value="lanjut">Naik tingkat ke...</option>' +
+              '<option value="alumni">Alumni / Lulus</option>' +
+              '<option value="stop">Tidak diajar lagi</option>' +
+            '</select>' +
+            '<input class="promKelasTarget" data-from="' + safe + '" value="' + sug + '" placeholder="Nama kelas baru, mis. 8A" style="flex:1;min-width:80px">' +
+          '</div>';
+        }).join('');
     })
     .withFailureHandler(function(err){ box.innerHTML = '<p style="color:red">Gagal memuat kelas: ' + (err.message || err) + '</p>'; })
     .getKelasListForPeriod(fromYear, fromSem);
+}
+
+function _suggestNextKelas_(kelas) {
+  const m = String(kelas || '').match(/^(\d+)(.*)/);
+  if(m) return (parseInt(m[1], 10) + 1) + m[2];
+  return '';
 }
 
 function _togglePromTarget_(selectEl){
@@ -1093,43 +1127,59 @@ function _togglePromTarget_(selectEl){
 
 function runPromosiWizard(){
   const fromYear = (document.getElementById('wizPromFromYear') || {}).value || '';
-  const fromSem = (document.getElementById('wizPromFromSem') || {}).value || '';
-  const toYear = (document.getElementById('wizPromToYear') || {}).value || '';
-  const toSem = (document.getElementById('wizPromToSem') || {}).value || '';
+  const fromSem  = (document.getElementById('wizPromFromSem')  || {}).value || '';
+  const toYear   = (document.getElementById('wizPromToYear')   || {}).value || '';
+  const toSem    = (document.getElementById('wizPromToSem')    || {}).value || '';
 
-  // "Tidak diajar lagi" sengaja TIDAK dikirim ke server sama sekali —
-  // promoteSiswaWizard() sudah otomatis skip kelas yang tidak ada di
-  // mapping (AcademicYear.js), jadi tidak perlu nilai sentinel khusus.
   const mapping = [];
   document.querySelectorAll('.promKelasAction').forEach(function(sel){
     const from = sel.getAttribute('data-from');
     if(sel.value === 'stop') return;
     if(sel.value === 'alumni'){ mapping.push({ from: from, to: 'ALUMNI' }); return; }
-    const row = sel.closest('div');
+    const row   = sel.closest('div');
     const input = row ? row.querySelector('.promKelasTarget') : null;
-    const to = input ? input.value.trim() : '';
+    const to    = input ? input.value.trim() : '';
     if(to) mapping.push({ from: from, to: to });
   });
 
-  if(!fromYear || !fromSem || !toYear || !toSem || mapping.length === 0){
-    return showAcademicToast('Lengkapi tahun/semester dan pilih minimal 1 kelas untuk dipromosikan', 'warning');
+  // Kelas baru (angkatan baru) dari input Section ②
+  const newKelasRaw = ((document.getElementById('wizNewKelasInput') || {}).value || '');
+  const newKelas = newKelasRaw.split(',').map(function(k){ return k.trim(); }).filter(Boolean);
+
+  // Mapel baru dari input Section ③
+  const mapelRaw = ((document.getElementById('wizNewMapelInput') || {}).value || '');
+  const mapelBaru = mapelRaw ? mapelRaw.split(',').map(function(m){ return m.trim(); }).filter(Boolean) : null;
+
+  if(!fromYear || !fromSem || !toYear || !toSem || (mapping.length === 0 && newKelas.length === 0)){
+    return showAcademicToast('Lengkapi tahun/semester dan isi minimal satu kelas untuk dipromosikan atau ditambahkan', 'warning');
   }
-  if(!confirm('Proses promosi akan menambah riwayat kelas siswa ke periode baru sesuai pilihan di atas. Lanjutkan?')) return;
+  if(!confirm('Proses ini akan:\n• Memindahkan siswa sesuai pemetaan kelas di atas\n• Memperbarui daftar kelas yang Anda ajar di tahun baru\n\nJurnal/absensi lama TIDAK dihapus.\nLanjutkan?')) return;
 
   startProgress();
   google.script.run
     .withSuccessHandler(function(res){
       endProgress();
       closeAcademicModal();
-      showAcademicToast('Promosi selesai. Diproses: ' + (res.processed || 0) + ' siswa', 'success');
+      refreshAcademicQuickInfo();
+      if(typeof loadSettingForm === 'function') loadSettingForm();
+      var msg = '✅ Promosi selesai. Siswa diproses: ' + (res.processed || 0) +
+        ' | Kelas baru disiapkan: ' + ((res.all_new_kelas || []).join(', ') || '-');
+      showAcademicToast(msg, 'success', 9000);
+      if((res.kelas_perlu_siswa_baru || []).length){
+        setTimeout(function(){
+          showAcademicToast('📂 Kelas ' + res.kelas_perlu_siswa_baru.join(', ') + ' memerlukan upload siswa baru. Gunakan tombol "Upload Siswa" di Setting.', 'info', 10000);
+        }, 1000);
+      }
     })
     .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal promosi: ' + err.message, 'error'); })
     .promoteSiswaWizard({
-      from_tahun: fromYear,
-      from_semester: fromSem,
-      to_tahun: toYear,
-      to_semester: toSem,
-      mapping: mapping
+      from_tahun    : fromYear,
+      from_semester : fromSem,
+      to_tahun      : toYear,
+      to_semester   : toSem,
+      mapping       : mapping,
+      new_kelas     : newKelas,
+      mapel_baru    : mapelBaru
     });
 }
 
