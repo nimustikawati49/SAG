@@ -316,20 +316,27 @@ function _autoProvisionUserSpreadsheet_(email) {
       return;
     }
 
-    var guruSlug = targetEmail.split('@')[0].replace(/[^a-z0-9]/gi, '_');
-    var ss = SpreadsheetApp.create('Data_Guru_' + guruSlug);
-    var ssId = ss.getId();
+    var ssId, resourceName;
 
-    // Hapus sheet default kosong
-    try {
-      var defaultSh = ss.getSheetByName('Sheet1') || ss.getSheetByName('Lembar1');
-      if (defaultSh && ss.getSheets().length > 1) ss.deleteSheet(defaultSh);
-    } catch (e) {}
-
-    // Salin header dari central untuk tiap sheet operasional
-    _GURU_OPERATIONAL_SHEETS_.forEach(function(name) {
-      try { _ensureOperationalSheetFromCentral_(ss, name); } catch (e) {}
-    });
+    // SuperAdmin (script owner running 'execute as me') always maps to central
+    // spreadsheet so existing data remains accessible. Regular teachers get
+    // their own provisioned spreadsheet.
+    if (targetEmail === getSuperAdminEmail_()) {
+      ssId = getCentralSpreadsheet_().getId();
+      resourceName = 'Central (SuperAdmin)';
+    } else {
+      var guruSlug = targetEmail.split('@')[0].replace(/[^a-z0-9]/gi, '_');
+      var ss = SpreadsheetApp.create('Data_Guru_' + guruSlug);
+      ssId = ss.getId();
+      resourceName = 'Data_Guru_' + guruSlug;
+      try {
+        var defaultSh = ss.getSheetByName('Sheet1') || ss.getSheetByName('Lembar1');
+        if (defaultSh && ss.getSheets().length > 1) ss.deleteSheet(defaultSh);
+      } catch (e) {}
+      _GURU_OPERATIONAL_SHEETS_.forEach(function(name) {
+        try { _ensureOperationalSheetFromCentral_(ss, name); } catch (e) {}
+      });
+    }
 
     // Daftarkan di RESOURCE_MAP central
     var mapSh = _getCentralSheetByName_('RESOURCE_MAP');
@@ -342,7 +349,7 @@ function _autoProvisionUserSpreadsheet_(email) {
       var rmId = 'RM-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
       mapSh.appendRow([
         rmId, '', targetEmail, 'data_spreadsheet',
-        ssId, 'Data_Guru_' + guruSlug, getSuperAdminEmail_(), 'active',
+        ssId, resourceName, getSuperAdminEmail_(), 'active',
         'Auto-provisioned ' + new Date().toISOString()
       ]);
     }

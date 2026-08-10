@@ -60,7 +60,7 @@ function importSiswa(rows){
   }
 
   const sh = sheet('SISWA');
-  if(!sh) throw new Error('Sheet SISWA tidak ditemukan');
+  if(!sh) return []; // belum ada data siswa, kembalikan kosong (bukan error)
 
   const setting = getSetting();
   const tahunAktif = setting.tahun_pelajaran || getLegacyDefaultYear_();

@@ -3,6 +3,20 @@
  * Backward-compatible multi-year academic data layer.
  */
 
+/**
+ * _getCalendarBasedPeriod_() — fallback terakhir jika setting belum ada.
+ * SMP/SMA Indonesia: Juli–Des = Ganjil, Jan–Jun = Genap.
+ */
+function _getCalendarBasedPeriod_() {
+  var now   = new Date();
+  var month = now.getMonth() + 1;
+  var year  = now.getFullYear();
+  return {
+    tahun_pelajaran: month >= 7 ? year + '/' + (year + 1) : (year - 1) + '/' + year,
+    semester: month >= 7 ? 'Ganjil' : 'Genap'
+  };
+}
+
 function ensureAcademicSchema_() {
   var cacheKey = 'ACADEMIC_SCHEMA_READY';
   try {

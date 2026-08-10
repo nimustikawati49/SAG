@@ -356,14 +356,13 @@ function _saveJadwalUIInner_(){
       endProgress();
       if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jadwal'; }
       var msg = (err && err.message) ? err.message : String(err);
-      if(msg.toLowerCase().includes('bentrok')){
-        _jadwalFeedback_('⚠️ ' + msg, 'warning');
-      } else if(msg.includes('Simpan setting') || msg.includes('belum valid') || msg.includes('terkunci')){
-        _jadwalFeedback_('⚠️ ' + msg + ' — Buka tab Setting → isi & simpan setting.', 'warning');
-      } else {
-        _jadwalFeedback_('❌ Gagal simpan jadwal: ' + msg, 'error');
-      }
-      if(typeof showToast==='function') showToast('❌ ' + msg, 'error', 8000);
+      var feedType = msg.toLowerCase().includes('bentrok') ? 'warning' : 'error';
+      var feedMsg  = feedType === 'warning'
+        ? '⚠️ ' + msg
+        : '❌ Gagal simpan jadwal: ' + msg;
+      _jadwalFeedback_(feedMsg, feedType);
+      // alert() sebagai fallback agar user pasti melihat error
+      alert(msg);
     })
     .saveJadwalSemester(data);
 }

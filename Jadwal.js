@@ -397,7 +397,10 @@ function saveJadwalSemester(data){
     throw new Error('Data jadwal belum lengkap');
   }
   if(!semesterAktif || !tahunAktif){
-    throw new Error('Tahun ajaran/semester aktif belum valid. Simpan setting terlebih dahulu.');
+    // Gunakan tahun ajaran berdasarkan kalender sebagai fallback
+    var cal = _getCalendarBasedPeriod_();
+    if(!semesterAktif) semesterAktif = cal.semester;
+    if(!tahunAktif)   tahunAktif   = cal.tahun_pelajaran;
   }
 
   if(data.jam_mulai >= data.jam_selesai){
