@@ -16,6 +16,12 @@ function closeSidebar_() {
  * auto-opens parent group if child tab, and auto-closes overlay on mobile.
  */
 function sbGo_(tabId, extra) {
+  try {
+    var btn = document.querySelector('#sbNav .sb-item[data-tab="' + tabId + '"]');
+    if (btn && typeof btn.scrollIntoView === 'function') {
+      btn.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+  } catch(e){}
   showTab(tabId);
   if (typeof extra === 'function') extra();
 

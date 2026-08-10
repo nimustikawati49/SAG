@@ -662,11 +662,15 @@ function getDashboardJadwal(){
     var tahunAktif = '';
     try {
       var period = getActiveJadwalPeriod_(email);
-      semesterAktif = normalizeSemesterLabel_(period.semester).toLowerCase();
+      semesterAktif = normalizeSemesterLabel_(period.semester).toLowerCase().trim();
       tahunAktif = String(period.tahun_pelajaran || '').trim();
     } catch(e) {
       semesterAktif = '';
       tahunAktif = '';
+    }
+
+    if(!semesterAktif || !tahunAktif){
+      return { _error: 'PERIODE_AKTIF_TIDAK_VALID' };
     }
 
     let grouped = {};
@@ -675,15 +679,11 @@ function getDashboardJadwal(){
       const rowEmail = String(values[i][0] || '').toLowerCase().trim();
       if(rowEmail !== email) continue;
 
-      if(semesterAktif){
-        const rowSemester = normalizeSemesterLabel_(values[i][1]).toLowerCase();
-        if(rowSemester !== semesterAktif) continue;
-      }
+      const rowSemester = normalizeSemesterLabel_(values[i][1]).toLowerCase().trim();
+      const rowTahun = tIdx > -1 ? String(values[i][tIdx] || '').trim() : '';
 
-      if(tIdx > -1 && tahunAktif){
-        const rowTahun = String(values[i][tIdx] || '').trim();
-        if(rowTahun !== tahunAktif) continue;
-      }
+      if(rowSemester !== semesterAktif) continue;
+      if(rowTahun !== tahunAktif) continue;
 
       const hari = String(values[i][2] || '').trim().toUpperCase();
       if(!hari) continue;

@@ -322,6 +322,21 @@ function initApp(){
 
   // 3. Baru hapus overlay auth-wait
   document.body.classList.remove('auth-wait');
+  document.body.classList.add('app-ready');
+
+  try {
+    var sidebar = document.getElementById('appSidebar');
+    if (sidebar) {
+      sidebar.classList.remove('sb-collapsed');
+      sidebar.style.visibility = 'visible';
+    }
+    var mainArea = document.getElementById('sbMain');
+    if (mainArea) {
+      mainArea.style.visibility = 'visible';
+    }
+    var menu = document.getElementById('mainMenu');
+    if (menu) menu.style.display = 'none';
+  } catch(e){}
 
   // Update greeting immediately (uses local clock, no backend needed)
   if (typeof updateGreeting_ === 'function') updateGreeting_();
@@ -352,6 +367,13 @@ function initApp(){
 
   // Sembunyikan landing page dengan animasi
   _hideLandingPage_();
+
+  try {
+    var onboarding = document.getElementById('onboardingModal');
+    if (onboarding) onboarding.style.display = 'none';
+    var helper = document.getElementById('helperModal');
+    if (helper) helper.style.display = 'none';
+  } catch(e){}
 
   // Mulai polling notifikasi
   if(typeof startNotifPoll === 'function'){

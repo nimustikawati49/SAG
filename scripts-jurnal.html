@@ -80,6 +80,12 @@ function endProgress(){
   if(ui.box) setTimeout(function(){ ui.box.style.display = 'none'; }, 600);
 }
 
+window.startProgress = startProgress;
+window.endProgress = endProgress;
+window._getJadwalSaveDebug = function(){
+  return window._jadwalSaveDebug || null;
+};
+
 /* ================= INIT ================= */
 /* ================= RIWAYAT STATE ================= */
 let riwayatData  = [];

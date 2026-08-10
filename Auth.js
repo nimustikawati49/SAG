@@ -128,6 +128,12 @@ function activateLicense(inputKey){
         }
       }
 
+      try {
+        if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
+          _autoProvisionUserSpreadsheet_(email);
+        }
+      } catch (e) {}
+
       logAudit('ACTIVATE_LICENSE', email, inputKey);
 
       return {

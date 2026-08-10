@@ -295,7 +295,14 @@ function simpanJurnal(data){
     });
   }
 
-  trySyncGuruSummaryAfterMutation_(email, 'SIMPAN_JURNAL');
+  try {
+    // Sinkron summary jangan memblokir status sukses save jurnal.
+    setTimeout(function(){
+      trySyncGuruSummaryAfterMutation_(email, 'SIMPAN_JURNAL');
+    }, 0);
+  } catch (syncErr) {
+    logError_('simpanJurnal/asyncSync', syncErr);
+  }
 
   return { status:true };
 }

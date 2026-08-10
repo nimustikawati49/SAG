@@ -252,12 +252,108 @@ function getSpreadsheet_(options) {
   if (!targetEmail) return getCentralSpreadsheet_();
 
   const userSpreadsheetId = resolveSpreadsheetIdForUser_(targetEmail);
-  if (!userSpreadsheetId) return getCentralSpreadsheet_();
+  if (!userSpreadsheetId) {
+    try {
+      if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
+        _autoProvisionUserSpreadsheet_(targetEmail);
+      }
+    } catch (e) {}
+  }
+
+  const refreshedSpreadsheetId = resolveSpreadsheetIdForUser_(targetEmail);
+  if (!refreshedSpreadsheetId) return getCentralSpreadsheet_();
 
   try {
-    return SpreadsheetApp.openById(userSpreadsheetId);
+    return SpreadsheetApp.openById(refreshedSpreadsheetId);
   } catch (e) {
     return getCentralSpreadsheet_();
+  }
+}
+
+// =========================================================
+// AUTO-PROVISIONING SPREADSHEET PER GURU
+// =========================================================
+
+// Sheet yang dibuat di spreadsheet pribadi guru (bukan sheet central).
+var _GURU_OPERATIONAL_SHEETS_ = [
+  'SETTING', 'JURNAL', 'ABSENSI', 'SISWA', 'NILAI_SISWA',
+  'SETTING_NILAI', 'MasterSiswa', 'MasterTahunPelajaran', 'RiwayatKelas'
+];
+
+/**
+ * _autoProvisionUserSpreadsheet_(email)
+ * Buat spreadsheet pribadi untuk guru jika belum ada di RESOURCE_MAP.
+ * Hanya berjalan saat storage mode = per_guru.
+ * Idempoten & dilindungi LockService — aman dipanggil berkali-kali.
+ * Spreadsheet dibuat di Drive script owner, bukan Drive guru.
+ */
+function _autoProvisionUserSpreadsheet_(email) {
+  if (getStorageMode_() !== 'per_guru') return;
+
+  var targetEmail = String(email || '').toLowerCase().trim();
+  if (!targetEmail) return;
+
+  // Guard cache — hindari provisioning berulang dalam satu sesi
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'PROV_' + targetEmail.replace(/[^a-z0-9]/g, '_');
+  if (cache.get(cacheKey)) return;
+
+  // Cek dulu tanpa lock supaya path happy sudah cepat
+  if (resolveSpreadsheetIdForUser_(targetEmail)) {
+    cache.put(cacheKey, '1', 600);
+    return;
+  }
+
+  var lock = LockService.getScriptLock();
+  var gotLock = false;
+  try { gotLock = lock.tryLock(6000); } catch (e) { gotLock = false; }
+  if (!gotLock) return;
+
+  try {
+    // Double-check setelah lock
+    if (resolveSpreadsheetIdForUser_(targetEmail)) {
+      cache.put(cacheKey, '1', 600);
+      return;
+    }
+
+    var guruSlug = targetEmail.split('@')[0].replace(/[^a-z0-9]/gi, '_');
+    var ss = SpreadsheetApp.create('Data_Guru_' + guruSlug);
+    var ssId = ss.getId();
+
+    // Hapus sheet default kosong
+    try {
+      var defaultSh = ss.getSheetByName('Sheet1') || ss.getSheetByName('Lembar1');
+      if (defaultSh && ss.getSheets().length > 1) ss.deleteSheet(defaultSh);
+    } catch (e) {}
+
+    // Salin header dari central untuk tiap sheet operasional
+    _GURU_OPERATIONAL_SHEETS_.forEach(function(name) {
+      try { _ensureOperationalSheetFromCentral_(ss, name); } catch (e) {}
+    });
+
+    // Daftarkan di RESOURCE_MAP central
+    var mapSh = _getCentralSheetByName_('RESOURCE_MAP');
+    if (mapSh) {
+      if (mapSh.getLastRow() < 1) {
+        mapSh.appendRow(['id','deployment_id','email_guru','resource_type',
+          'resource_id','resource_name','owner_email','status','catatan']);
+        mapSh.setFrozenRows(1);
+      }
+      var rmId = 'RM-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
+      mapSh.appendRow([
+        rmId, '', targetEmail, 'data_spreadsheet',
+        ssId, 'Data_Guru_' + guruSlug, getSuperAdminEmail_(), 'active',
+        'Auto-provisioned ' + new Date().toISOString()
+      ]);
+    }
+
+    try { logAudit('AUTO_PROVISION_SPREADSHEET', targetEmail, ssId); } catch (e) {}
+    cache.put(cacheKey, '1', 600);
+
+  } catch (provErr) {
+    try { logError_('AUTO_PROVISION_SPREADSHEET', provErr); } catch (e) {}
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
   }
 }
 

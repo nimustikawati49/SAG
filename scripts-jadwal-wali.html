@@ -9,7 +9,10 @@ try { console.log('[BUILD-CHECK] scripts-jadwal-wali.html loaded, saveJadwalUI w
 // lewat kode statis saja. Dipasang sekali saat script ini dimuat.
 document.addEventListener('click', function(e){
   var btn = e.target && e.target.closest && e.target.closest('#btnSimpanJadwal');
-  if(btn) saveJadwalUI();
+  if(btn){
+    try { window._jadwalSaveDebug = { clickedAt: new Date().toISOString(), source: 'document-click' }; } catch(e){}
+    saveJadwalUI();
+  }
 });
 
 /**
@@ -274,8 +277,16 @@ function saveJadwalUI(){
   // TIDAK muncul saat tombol diklik, berarti onclick tidak terpasang/tidak
   // ke-trigger sama sekali (bukan error di dalam logic simpan), beda
   // penyebab dan penanganannya. Hapus setelah root cause ketemu.
-  try { console.log('[DEBUG] saveJadwalUI() dipanggil, waktu:', new Date().toISOString()); } catch(e){}
-  try { if (typeof showToast === 'function') showToast('🖱️ [DEBUG] Tombol Simpan Jadwal terklik, memproses...', 'info', 3000); } catch(e){}
+  try {
+    window._jadwalSaveDebug = {
+      handler: 'saveJadwalUI',
+      clickedAt: window._jadwalSaveDebug && window._jadwalSaveDebug.clickedAt || null,
+      enteredAt: new Date().toISOString()
+    };
+    console.log('[DEBUG] saveJadwalUI() dipanggil, waktu:', new Date().toISOString());
+    try { localStorage.setItem('jadwalSaveDebug', JSON.stringify(window._jadwalSaveDebug)); } catch(e){}
+  } catch(e){}
+  try { if (typeof showToast === 'function') showToast('🖱️ Simpan Jadwal diproses...', 'info', 3000); } catch(e){}
 
   // Jaring pengaman: kalau ADA error sinkron apa pun di bawah (mis. field
   // input tidak ketemu di DOM), tetap tampilkan sesuatu ke user alih-alih
@@ -330,6 +341,11 @@ function _saveJadwalUIInner_(){
     return;
   }
 
+  try {
+    console.log('[JADWAL] payload save', JSON.stringify(data));
+    try { localStorage.setItem('jadwalSavePayload', JSON.stringify(data)); } catch(e){}
+  } catch(e){}
+
   // 🔒 disable tombol + animasi loading — tahap 1: cek bentrok
   if(btn){
     btn.disabled = true;
@@ -357,6 +373,10 @@ function _saveJadwalUIInner_(){
 
   startProgress(); // ✅ aktifkan progress bar (top bar + widget pojok kanan bawah)
 
+  if (typeof showToast === 'function') {
+    showToast('⏳ Memproses simpan jadwal ke sheet...', 'info', 2500);
+  }
+
   google.script.run
     .withFailureHandler(err=>{
       clearTimeout(_jadwalWatchdog);
@@ -366,7 +386,9 @@ function _saveJadwalUIInner_(){
         btn.classList.remove("btn-saving");
         btn.innerText = "💾 Simpan Jadwal";
       }
-      showToast('❌ Gagal simpan jadwal: ' + err.message, 'error');
+      console.error('[JADWAL] save bentrok check failed:', err);
+      try { localStorage.setItem('jadwalSaveError', 'preview:' + (err && err.message ? err.message : String(err))); } catch(e){}
+      showToast('❌ Gagal cek jadwal: ' + err.message, 'error');
     })
     .withSuccessHandler(res=>{
 
@@ -395,7 +417,9 @@ function _saveJadwalUIInner_(){
             btn.classList.remove("btn-saving");
             btn.innerText = "💾 Simpan Jadwal";
           }
-          showToast('❌ Gagal simpan jadwal: ' + err.message, 'error');
+          console.error('[JADWAL] save jadwal failed:', err);
+          try { localStorage.setItem('jadwalSaveError', 'save:' + (err && err.message ? err.message : String(err))); } catch(e){}
+          showToast('❌ Gagal simpan jadwal: ' + err.message, 'error', 9000);
         })
         .withSuccessHandler(()=>{
 
@@ -430,8 +454,16 @@ function _saveJadwalUIInner_(){
             elSelesai.value = '';
 
             // 🔄 reload data
-            loadJadwalSetting();
-            loadJadwalMengajar();
+            if (typeof loadJadwalSetting === 'function') loadJadwalSetting();
+            if (typeof loadJadwalMengajar === 'function') loadJadwalMengajar();
+            if (typeof loadJadwalDashboard_ === 'function') loadJadwalDashboard_();
+            try {
+              localStorage.setItem('jadwalSaveResult', JSON.stringify({
+                ok: true,
+                at: new Date().toISOString(),
+                data: data
+              }));
+            } catch(e){}
           } catch(renderErr){
             console.error('[JADWAL] post-save refresh gagal:', renderErr);
           }
@@ -489,7 +521,6 @@ function __loadJadwalSettingImpl(){
       });
 
       html += "</table>";
-
       document.getElementById("jadwalList").innerHTML = html;
 
     })

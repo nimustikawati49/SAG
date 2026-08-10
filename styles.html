@@ -142,6 +142,21 @@ footer .copy{
       background:linear-gradient(180deg,#f5f6fb,#eef1ff);
       color:var(--text);
     }
+    body.auth-wait #appSidebar,
+    body.auth-wait #sbMain{
+      visibility:visible;
+    }
+    #appSidebar{
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    #sbMain{
+      overflow-x:hidden;
+      min-height:100vh;
+    }
+    body.auth-wait #mainMenu{
+      display:none !important;
+    }
     .container{max-width:1600px;margin:auto}
     h2,h3{margin:0 0 6px;font-weight:700}
     .muted{color:var(--muted);font-size:13px}
@@ -164,6 +179,19 @@ footer .copy{
       transition:.25s;
     }
     button:hover{transform:translateY(-1px)}
+    #sbNav button,
+    #sbFooter button,
+    #sbCollapseBtn,
+    #sbHamburger{
+      min-height:44px;
+    }
+    #sbNav .sb-item,
+    #sbNav .sb-group-hd{
+      width:100%;
+    }
+    #sbNav .sb-group{
+      scroll-margin-top:90px;
+    }
     button.ghost{
       background:#eef0ff;
       color:#333;
@@ -535,6 +563,9 @@ footer .copy{
   }
 }
 @media (max-width:768px){
+      #appSidebar{z-index:10000}
+      #sbMain{padding-top:0}
+      #sbHamburger{z-index:10001}
   body.dark .mobile-bottom-nav{
     background:#020617;
     border-top:1px solid #1e293b;
@@ -2055,6 +2086,7 @@ body.dark .nav-mobile{
     button { min-height: 44px; }
     input, select { min-height: 44px; }
     .mobile-bottom-nav button { min-height: 56px; }
+      #appSidebar{max-height:100vh}
     .card { border-radius: 14px; }
     table { font-size: 12px; }
     th, td { padding: 8px 6px; }

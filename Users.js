@@ -79,9 +79,18 @@ function getGuruActivationList() {
       role: role,
       status: status,
       dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
+      license_status: null,
+      license_expired: null,
       days_left: null,
       expired: false
     };
+    try {
+      var lic = getLicenseByEmail(email);
+      if (lic) {
+        entry.license_status = lic.status || null;
+        entry.license_expired = lic.expired ? Utilities.formatDate(new Date(lic.expired), Session.getScriptTimeZone(), 'yyyy-MM-dd') : null;
+      }
+    } catch (e) {}
     if (status === 'trial') {
       var info = _computeTrialInfo_(data[i][3]);
       entry.days_left = info.daysLeft;
@@ -127,6 +136,12 @@ function approveTrialAccount(email) {
     break;
   }
   if (!found) throw new Error('Akun tidak ditemukan');
+
+  try {
+    if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
+      _autoProvisionUserSpreadsheet_(email);
+    }
+  } catch (e) {}
 
   var shLic = sheet('LICENSES');
   var lics = shLic.getDataRange().getValues();
@@ -174,6 +189,13 @@ function updateUser(email, payload){
         if(!licFound && (payload.status === 'active' || payload.status === 'inactive')){
           const key = 'JGD-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
           licSheet.appendRow([key, email, payload.status === 'active' ? '' : '', payload.status, new Date(), '', '']);
+        }
+        if (payload.status === 'active') {
+          try {
+            if (typeof _autoProvisionUserSpreadsheet_ === 'function') {
+              _autoProvisionUserSpreadsheet_(email);
+            }
+          } catch (e) {}
         }
         logAudit('UPDATE_STATUS', email, payload.status);
       }
