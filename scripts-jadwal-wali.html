@@ -273,35 +273,20 @@ function loadJadwalDashboard_(){
 }
 
 function saveJadwalUI(){
-  // [DEBUG] Bukti klik benar-benar sampai ke handler ini — kalau alert ini
-  // TIDAK muncul saat tombol diklik, berarti onclick tidak terpasang/tidak
-  // ke-trigger sama sekali (bukan error di dalam logic simpan), beda
-  // penyebab dan penanganannya. Hapus setelah root cause ketemu.
-  try {
-    window._jadwalSaveDebug = {
-      handler: 'saveJadwalUI',
-      clickedAt: window._jadwalSaveDebug && window._jadwalSaveDebug.clickedAt || null,
-      enteredAt: new Date().toISOString()
-    };
-    console.log('[DEBUG] saveJadwalUI() dipanggil, waktu:', new Date().toISOString());
-    try { localStorage.setItem('jadwalSaveDebug', JSON.stringify(window._jadwalSaveDebug)); } catch(e){}
-  } catch(e){}
-  try { if (typeof showToast === 'function') showToast('🖱️ Simpan Jadwal diproses...', 'info', 3000); } catch(e){}
-
-  // Jaring pengaman: kalau ADA error sinkron apa pun di bawah (mis. field
-  // input tidak ketemu di DOM), tetap tampilkan sesuatu ke user alih-alih
-  // gagal total tanpa notifikasi/progress bar sama sekali.
-  try {
-    _saveJadwalUIInner_();
-  } catch (fatalErr) {
-    console.error('[JADWAL] saveJadwalUI fatal error:', fatalErr);
-    if (typeof endProgress === 'function') endProgress();
-    if (typeof showToast === 'function') {
-      showToast('❌ Gagal menyimpan jadwal (error tak terduga): ' + (fatalErr && fatalErr.message ? fatalErr.message : fatalErr), 'error', 8000);
-    } else {
-      alert('Gagal menyimpan jadwal: ' + (fatalErr && fatalErr.message ? fatalErr.message : fatalErr));
-    }
+  try { _saveJadwalUIInner_(); }
+  catch(fatalErr){
+    if(typeof endProgress==='function') endProgress();
+    _jadwalFeedback_('❌ Error tak terduga: '+(fatalErr&&fatalErr.message?fatalErr.message:fatalErr),'error');
   }
+}
+
+function _jadwalFeedback_(msg, type){
+  var el = document.getElementById('jadwalSaveFeedback');
+  if(!el) return;
+  var palette = { info:'#dbeafe:#1e40af', success:'#dcfce7:#166534', error:'#fee2e2:#991b1b', warning:'#fef3c7:#92400e' };
+  var c = (palette[type]||palette.info).split(':');
+  el.innerHTML = '<div style="padding:10px 14px;border-radius:8px;margin:8px 0;background:'+c[0]+';color:'+c[1]+';font-size:13px;font-weight:600">'+msg+'</div>';
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 function _saveJadwalUIInner_(){
@@ -337,192 +322,101 @@ function _saveJadwalUIInner_(){
   }
 
   if(!data.tahun_pelajaran || !data.semester){
-    showToast('⚠️ Tahun ajaran dan semester aktif belum terbaca. Simpan setting terlebih dahulu lalu coba lagi.', 'warning', 7000);
+    _jadwalFeedback_('⚠️ Tahun ajaran / semester belum terbaca. Buka tab Setting → simpan setting terlebih dahulu.', 'warning');
     return;
   }
 
-  try {
-    console.log('[JADWAL] payload save', JSON.stringify(data));
-    try { localStorage.setItem('jadwalSavePayload', JSON.stringify(data)); } catch(e){}
-  } catch(e){}
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
+  _jadwalFeedback_('⏳ Mengirim data ke spreadsheet...', 'info');
+  startProgress();
 
-  // 🔒 disable tombol + animasi loading — tahap 1: cek bentrok
-  if(btn){
-    btn.disabled = true;
-    btn.classList.add("btn-saving");
-    btn.innerText = "⏳ Memeriksa jadwal...";
-  }
-
-  // 🛟 Safety watchdog — kalau request server-side benar-benar hang (tidak
-  // pernah memanggil success/failure handler sama sekali), tombol yang
-  // di-disable di atas akan STUCK SELAMANYA (klik berikutnya tidak akan
-  // memicu apa-apa sama sekali, bukan cuma lambat — browser tidak
-  // menjalankan onclick pada button yang disabled). Ini paksa aktifkan
-  // lagi tombolnya setelah 45 detik kalau belum juga selesai, supaya
-  // pengguna tidak permanen "diam" tanpa cara memulihkan diri sendiri
-  // selain refresh halaman.
-  const _jadwalWatchdog = setTimeout(function(){
+  const _watchdog = setTimeout(function(){
     if(btn && btn.disabled){
-      btn.disabled = false;
-      btn.classList.remove("btn-saving");
-      btn.innerText = "💾 Simpan Jadwal";
+      btn.disabled = false; btn.innerText = '💾 Simpan Jadwal';
       endProgress();
-      showToast('⏱️ Server tidak merespons dalam 45 detik, tombol diaktifkan lagi. Cek daftar jadwal di bawah untuk pastikan sudah tersimpan atau belum sebelum coba lagi.', 'warning', 10000);
+      _jadwalFeedback_('⏱️ Server tidak merespons (>40 detik). Cek daftar jadwal apakah sudah tersimpan.', 'warning');
     }
-  }, 45000);
-
-  startProgress(); // ✅ aktifkan progress bar (top bar + widget pojok kanan bawah)
-
-  if (typeof showToast === 'function') {
-    showToast('⏳ Memproses simpan jadwal ke sheet...', 'info', 2500);
-  }
+  }, 40000);
 
   google.script.run
-    .withFailureHandler(err=>{
-      clearTimeout(_jadwalWatchdog);
+    .withSuccessHandler(function(){
+      clearTimeout(_watchdog);
       endProgress();
-      if(btn){
-        btn.disabled = false;
-        btn.classList.remove("btn-saving");
-        btn.innerText = "💾 Simpan Jadwal";
-      }
-      console.error('[JADWAL] save bentrok check failed:', err);
-      try { localStorage.setItem('jadwalSaveError', 'preview:' + (err && err.message ? err.message : String(err))); } catch(e){}
-      showToast('❌ Gagal cek jadwal: ' + err.message, 'error');
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jadwal'; }
+      _jadwalFeedback_('✅ Jadwal berhasil disimpan!', 'success');
+      if(typeof showToast==='function') showToast('✅ Jadwal disimpan', 'success');
+      elKelas.value = ''; elMulai.value = ''; elSelesai.value = '';
+      if(typeof loadJadwalSetting==='function') loadJadwalSetting();
+      if(typeof loadJadwalMengajar==='function') loadJadwalMengajar();
+      if(typeof loadJadwalDashboard_==='function') loadJadwalDashboard_();
     })
-    .withSuccessHandler(res=>{
-
-      if(res.bentrok){
-        clearTimeout(_jadwalWatchdog);
-        endProgress();
-        if(btn){
-          btn.disabled = false;
-          btn.classList.remove("btn-saving");
-          btn.innerText = "💾 Simpan Jadwal";
-        }
-
-        showToast('⚠️ Jadwal bentrok dengan: ' + res.konflik.kelas + ' (' + res.konflik.jam + ')', 'warning', 6000);
-        return;
+    .withFailureHandler(function(err){
+      clearTimeout(_watchdog);
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jadwal'; }
+      var msg = (err && err.message) ? err.message : String(err);
+      if(msg.toLowerCase().includes('bentrok')){
+        _jadwalFeedback_('⚠️ ' + msg, 'warning');
+      } else if(msg.includes('Simpan setting') || msg.includes('belum valid') || msg.includes('terkunci')){
+        _jadwalFeedback_('⚠️ ' + msg + ' — Buka tab Setting → isi & simpan setting.', 'warning');
+      } else {
+        _jadwalFeedback_('❌ Gagal simpan jadwal: ' + msg, 'error');
       }
-
-      // 🔒 tahap 2: simpan ke sheet
-      if(btn) btn.innerText = "⏳ Menyimpan...";
-
-      google.script.run
-        .withFailureHandler(err=>{
-          clearTimeout(_jadwalWatchdog);
-          endProgress();
-          if(btn){
-            btn.disabled = false;
-            btn.classList.remove("btn-saving");
-            btn.innerText = "💾 Simpan Jadwal";
-          }
-          console.error('[JADWAL] save jadwal failed:', err);
-          try { localStorage.setItem('jadwalSaveError', 'save:' + (err && err.message ? err.message : String(err))); } catch(e){}
-          showToast('❌ Gagal simpan jadwal: ' + err.message, 'error', 9000);
-        })
-        .withSuccessHandler(()=>{
-
-          clearTimeout(_jadwalWatchdog);
-          endProgress(); // ✅ progress selesai
-
-          // ✅ Notifikasi sukses eksplisit — sebelumnya TIDAK ADA toast sama
-          // sekali di sini, cuma animasi CSS halus yang gampang terlewat.
-          showToast('✅ Jadwal berhasil disimpan', 'success');
-
-          // 🔓 aktifkan tombol kembali (selalu jalan meski render di bawah error)
-          if(btn){
-            btn.disabled = false;
-            btn.classList.remove("btn-saving");
-            btn.innerText = "💾 Simpan Jadwal";
-          }
-
-          try {
-            // 🎉 ANIMASI SUKSES
-            const list = document.getElementById("jadwalList");
-            if(list){
-              list.classList.add("save-success");
-              setTimeout(()=>{
-                list.classList.remove("save-success");
-              },600);
-            }
-
-            // 🔄 reset form
-            elKelas.value = '';
-            elMapel.value = '';
-            elMulai.value = '';
-            elSelesai.value = '';
-
-            // 🔄 reload data
-            if (typeof loadJadwalSetting === 'function') loadJadwalSetting();
-            if (typeof loadJadwalMengajar === 'function') loadJadwalMengajar();
-            if (typeof loadJadwalDashboard_ === 'function') loadJadwalDashboard_();
-            try {
-              localStorage.setItem('jadwalSaveResult', JSON.stringify({
-                ok: true,
-                at: new Date().toISOString(),
-                data: data
-              }));
-            } catch(e){}
-          } catch(renderErr){
-            console.error('[JADWAL] post-save refresh gagal:', renderErr);
-          }
-
-        })
-        .saveJadwalSemester(data);
-
+      if(typeof showToast==='function') showToast('❌ ' + msg, 'error', 8000);
     })
-    .previewBentrokJadwal(data);
+    .saveJadwalSemester(data);
 }
 function loadJadwalSetting(){
   return __loadJadwalSettingImpl();
 }
 
 window.loadJadwalSetting = loadJadwalSetting;
-
 window.saveJadwalUI = saveJadwalUI;
 
 function __loadJadwalSettingImpl(){
+  var listEl = document.getElementById('jadwalList');
+  if(listEl) listEl.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;padding:16px 0;color:#6b7280;font-size:13px">'+
+    '<div style="width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0"></div>'+
+    'Memuat jadwal...</div>';
 
   google.script.run
-    .withSuccessHandler(data=>{
-
+    .withSuccessHandler(function(data){
       if(!data || data.length === 0){
-        document.getElementById("jadwalList").innerHTML =
-          '<p class="muted">📭 Belum ada jadwal.</p>';
+        listEl.innerHTML = '<p class="muted">📭 Belum ada jadwal.</p>';
         return;
       }
 
-      let html = `
-        <table class="jadwal-table">
-          <tr>
-            <th>Hari</th>
-            <th>Kelas</th>
-            <th>Mapel</th>
-            <th>Jam</th>
-            <th>Aksi</th>
-          </tr>
-      `;
+      var html =
+        '<table class="jadwal-table" style="width:100%;border-collapse:collapse;margin-top:8px">'+
+        '<thead><tr style="background:#f3f4f6">'+
+        '<th style="padding:8px 10px;text-align:left">Hari</th>'+
+        '<th style="padding:8px 10px;text-align:left">Kelas</th>'+
+        '<th style="padding:8px 10px;text-align:left">Mapel</th>'+
+        '<th style="padding:8px 10px;text-align:left">Jam</th>'+
+        '<th style="padding:8px 10px;text-align:center">Aksi</th>'+
+        '</tr></thead><tbody>';
 
-      data.forEach(j=>{
-
-        html += `
-          <tr id="row-${j.row}">
-            <td>${j.hari}</td>
-            <td>${j.kelas}</td>
-            <td>${j.mapel}</td>
-            <td>${j.jam_mulai} - ${j.jam_selesai}</td>
-            <td>
-              <button onclick="editInline(${j.row})">✏️</button>
-              <button onclick="deleteJadwalAdvanced(${j.row})">🗑️</button>
-            </td>
-          </tr>
-        `;
+      data.forEach(function(j){
+        var esc = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+        html += '<tr id="row-'+j.row+'" style="border-bottom:1px solid #f3f4f6">'+
+          '<td style="padding:7px 10px">'+esc(j.hari)+'</td>'+
+          '<td style="padding:7px 10px">'+esc(j.kelas)+'</td>'+
+          '<td style="padding:7px 10px">'+esc(j.mapel)+'</td>'+
+          '<td style="padding:7px 10px;white-space:nowrap">'+esc(j.jam_mulai)+' – '+esc(j.jam_selesai)+'</td>'+
+          '<td style="padding:4px 10px;text-align:center;white-space:nowrap">'+
+            '<button onclick="editInline('+j.row+')" style="margin-right:4px">✏️</button>'+
+            '<button onclick="deleteJadwalAdvanced('+j.row+')">🗑️</button>'+
+          '</td>'+
+          '</tr>';
       });
 
-      html += "</table>";
-      document.getElementById("jadwalList").innerHTML = html;
+      html += '</tbody></table>';
+      listEl.innerHTML = html;
 
+    })
+    .withFailureHandler(function(err){
+      if(listEl) listEl.innerHTML = '<p style="color:#ef4444;font-size:13px">❌ Gagal memuat jadwal: '+(err&&err.message?err.message:err)+'</p>';
     })
     .getJadwalForSetting();
 }
@@ -537,23 +431,14 @@ function editInline(row){
   const mapel = tr.children[2].innerText;
   const jam   = tr.children[3].innerText.split(" - ");
 
-  tr.innerHTML = `
-    <td>
-      <select id="edit_hari_${row}">
-        ${['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU']
-          .map(h=>`<option ${h===hari?'selected':''}>${h}</option>`)
-          .join('')}
-      </select>
-    </td>
-
-    <td><input id="edit_kelas_${row}" value="${kelas}"></td>
-    <td><input id="edit_mapel_${row}" value="${mapel}"></td>
-
-    <td>
-      <input type="time" id="edit_mulai_${row}" value="${jam[0]}">
-      -
-      <input type="time" id="edit_selesai_${row}" value="${jam[1]}">
-    </td>
+  tr.innerHTML =
+    '<td><select id="edit_hari_'+row+'">'+
+    ['SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'].map(function(h){ return '<option'+(h===hari?' selected':'')+'>'+h+'</option>'; }).join('')+
+    '</select></td>'+
+    '<td><input id="edit_kelas_'+row+'" value="'+kelas+'"></td>'+
+    '<td><input id="edit_mapel_'+row+'" value="'+mapel+'"></td>'+
+    '<td><input type="time" id="edit_mulai_'+row+'" value="'+jam[0]+'"> – <input type="time" id="edit_selesai_'+row+'" value="'+jam[1]+'"></td>'+
+    '<td><button id="btnSave_'+row+'" onclick="saveInlineAdvanced('+row+')">✔️</button> <button onclick="loadJadwalSetting()">✖️</button></td>';
 
     <td>
       <button id="btnSave_${row}" onclick="saveInlineAdvanced(${row})">✔️</button>

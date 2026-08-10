@@ -427,9 +427,6 @@ function saveJadwalSemester(data){
       );
     }
   }
-  if(!isSettingLocked()){
-    throw new Error('Setting harus disimpan & terkunci sebelum membuat jadwal');
-  }
 
   sh.appendRow([
     email,
@@ -538,7 +535,7 @@ function saveBulkJadwalSemester(list){
       const endNew   = toMinutes_(item.jam_selesai);
 
       if(startNew < endOld && endNew > startOld){
-        throw new Error('Bentrok dengan jadwal lama hari ' + item.hari);
+        throw new Error('Bentrok di hari ' + item.hari + ' ' + item.jam_mulai + '-' + item.jam_selesai);
       }
     }
   }
