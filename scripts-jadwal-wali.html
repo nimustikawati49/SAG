@@ -439,12 +439,6 @@ function editInline(row){
     '<td><input id="edit_mapel_'+row+'" value="'+mapel+'"></td>'+
     '<td><input type="time" id="edit_mulai_'+row+'" value="'+jam[0]+'"> – <input type="time" id="edit_selesai_'+row+'" value="'+jam[1]+'"></td>'+
     '<td><button id="btnSave_'+row+'" onclick="saveInlineAdvanced('+row+')">✔️</button> <button onclick="loadJadwalSetting()">✖️</button></td>';
-
-    <td>
-      <button id="btnSave_${row}" onclick="saveInlineAdvanced(${row})">✔️</button>
-      <button onclick="loadJadwalSetting()">✖️</button>
-    </td>
-  `;
 }
 
 function saveInlineAdvanced(row){
