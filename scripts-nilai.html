@@ -1244,39 +1244,39 @@ function doCetakNilai(mode = 'print') {
       const rows = allData[k] || [];
       if (!rows.length) { return; } // skip empty
       const tbl = buildNilaiTableHtml_(k, rows, { type, sc, isGenap, kkm });
-      pagesHtml += `
-        ${ ki > 0 ? '<div class="pb"></div>' : '' }
-        <div class="page">
-          ${namaSekolah ? `<p class="sekolah">${namaSekolah}</p>` : ''}
-          <h1>DAFTAR NILAI ${type === 'katrol' ? 'KATROL' : 'MURNI'}</h1>
-          <table class="info">
-            <tr><td colspan="2" class="info-title">DAFTAR NILAI ${mapel.toUpperCase()}</td></tr>
-            <tr>
-              <td class="info-left">
-                <b>Mata Pelajaran</b> : ${mapel}<br>
-                <b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${k}<br>
-                <b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${kkm}
-              </td>
-              <td class="info-right">
-                <b>Tahun Pelajaran</b> : ${tahun}<br>
-                <b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ${semester}
-              </td>
-            </tr>
-          </table>
-          <table class="nilai">${tbl}</table>
-          <div class="ttd">
-            <div class="box">
-              <p>${tanggal}</p>
-              <p>Guru Mata Pelajaran</p>
-              <div class="garis"></div>
-              <p><b>${namaGuru}</b></p>
-              <p>NIP. ${nip}</p>
-            </div>
-          </div>
-          <p class="ket" style="margin-top:6px;font-size:10px;color:#555">
-            Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas
-          </p>
-        </div>`;
+      pagesHtml +=
+        (ki > 0 ? '<div class="pb"></div>' : '') +
+        '<div class="page">' +
+          (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '') +
+          '<h1>DAFTAR NILAI ' + (type === 'katrol' ? 'KATROL' : 'MURNI') + '</h1>' +
+          '<table class="info">' +
+            '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
+            '<tr>' +
+              '<td class="info-left">' +
+                '<b>Mata Pelajaran</b> : ' + mapel + '<br>' +
+                '<b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + k + '<br>' +
+                '<b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kkm +
+              '</td>' +
+              '<td class="info-right">' +
+                '<b>Tahun Pelajaran</b> : ' + tahun + '<br>' +
+                '<b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + semester +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+          '<table class="nilai">' + tbl + '</table>' +
+          '<div class="ttd">' +
+            '<div class="box">' +
+              '<p>' + tanggal + '</p>' +
+              '<p>Guru Mata Pelajaran</p>' +
+              '<div class="garis"></div>' +
+              '<p><b>' + namaGuru + '</b></p>' +
+              '<p>NIP. ' + nip + '</p>' +
+            '</div>' +
+          '</div>' +
+          '<p class="ket" style="margin-top:6px;font-size:10px;color:#555">' +
+            'Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas' +
+          '</p>' +
+        '</div>';
     });
 
     if (!pagesHtml) {
@@ -1285,51 +1285,52 @@ function doCetakNilai(mode = 'print') {
       return;
     }
 
-    const html = `<!DOCTYPE html><html lang="id"><head>
-<meta charset="UTF-8">
-<title>${isPreview ? 'Preview Daftar Nilai' : 'Daftar Nilai'} – ${mapel}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;font-size:11px;background:#fff;color:#000}
-.page{padding:18px 22px;max-width:960px;margin:0 auto}
-.preview-note{max-width:960px;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;
-  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}
-h1{display:none}
-.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}
-.info{width:100%;border:1px solid #333;border-collapse:collapse}
-.info-title{text-align:center;font-size:14px;font-weight:700;font-variant:small-caps;
-  background:#e8e8f4;border-bottom:1px solid #333;padding:6px;text-transform:uppercase
-  ;letter-spacing:1px}
-.info-left{width:50%;padding:5px 10px;vertical-align:top;border-right:1px solid #333}
-.info-right{width:50%;padding:5px 10px;vertical-align:top}
-.nilai{width:100%;border-collapse:collapse;margin-top:10px;font-size:11px}
-.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center}
-.nilai th{background:#dde0f0;font-weight:700}
-.nilai .tl{text-align:left;min-width:120px}
-.nilai .blt td{background:#ffeeee}
-.note-missing{color:#dc2626;font-weight:700}
-.note-low{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-weight:700}
-.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px}
-.box{text-align:center;width:200px}
-.garis{border-bottom:1px solid #000;margin:44px 0 4px}
-.pb{page-break-after:always;height:0}
-.no-print{margin:20px auto;text-align:center;display:block}
-.btn-pr{padding:10px 28px;background:#6C63FF;color:#fff;border:none;border-radius:8px;
-  cursor:pointer;font-size:14px;font-weight:600}
-@media print{
-  .no-print{display:none!important}
-  .preview-note{display:none!important}
-  .pb{height:0}
-  body{font-size:10px}
-  .page{padding:10px 14px}
-}
-</style></head><body>
-${isPreview ? `<div class="preview-note no-print"><b>Mode Preview</b> — Periksa data sebelum dibagikan ke siswa.</div>` : ''}
-${pagesHtml}
-<div class="no-print">
-  <button class="btn-pr" onclick="window.print()">🖨️ ${isPreview ? 'Konfirmasi Cetak / Simpan PDF' : 'Cetak / Simpan sebagai PDF'}</button>
-</div>
-</body></html>`;
+    const cetakStyle =
+      '*{margin:0;padding:0;box-sizing:border-box}' +
+      'body{font-family:Arial,sans-serif;font-size:11px;background:#fff;color:#000}' +
+      '.page{padding:18px 22px;max-width:960px;margin:0 auto}' +
+      '.preview-note{max-width:960px;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;' +
+      '  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}' +
+      'h1{display:none}' +
+      '.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}' +
+      '.info{width:100%;border:1px solid #333;border-collapse:collapse}' +
+      '.info-title{text-align:center;font-size:14px;font-weight:700;font-variant:small-caps;' +
+      '  background:#e8e8f4;border-bottom:1px solid #333;padding:6px;text-transform:uppercase' +
+      '  ;letter-spacing:1px}' +
+      '.info-left{width:50%;padding:5px 10px;vertical-align:top;border-right:1px solid #333}' +
+      '.info-right{width:50%;padding:5px 10px;vertical-align:top}' +
+      '.nilai{width:100%;border-collapse:collapse;margin-top:10px;font-size:11px}' +
+      '.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center}' +
+      '.nilai th{background:#dde0f0;font-weight:700}' +
+      '.nilai .tl{text-align:left;min-width:120px}' +
+      '.nilai .blt td{background:#ffeeee}' +
+      '.note-missing{color:#dc2626;font-weight:700}' +
+      '.note-low{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-weight:700}' +
+      '.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px}' +
+      '.box{text-align:center;width:200px}' +
+      '.garis{border-bottom:1px solid #000;margin:44px 0 4px}' +
+      '.pb{page-break-after:always;height:0}' +
+      '.no-print{margin:20px auto;text-align:center;display:block}' +
+      '.btn-pr{padding:10px 28px;background:#6C63FF;color:#fff;border:none;border-radius:8px;' +
+      '  cursor:pointer;font-size:14px;font-weight:600}' +
+      '@media print{' +
+      '  .no-print{display:none!important}' +
+      '  .preview-note{display:none!important}' +
+      '  .pb{height:0}' +
+      '  body{font-size:10px}' +
+      '  .page{padding:10px 14px}' +
+      '}';
+
+    const html = '<!DOCTYPE html><html lang="id"><head>' +
+      '<meta charset="UTF-8">' +
+      '<title>' + (isPreview ? 'Preview Daftar Nilai' : 'Daftar Nilai') + ' – ' + mapel + '</title>' +
+      '<style>' + cetakStyle + '</style></head><body>' +
+      (isPreview ? '<div class="preview-note no-print"><b>Mode Preview</b> — Periksa data sebelum dibagikan ke siswa.</div>' : '') +
+      pagesHtml +
+      '<div class="no-print">' +
+        '<button class="btn-pr" onclick="window.print()">🖨️ ' + (isPreview ? 'Konfirmasi Cetak / Simpan PDF' : 'Cetak / Simpan sebagai PDF') + '</button>' +
+      '</div>' +
+      '</body></html>';
 
     if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
     const w = window.open('', '_blank', 'width=1000,height=750');
