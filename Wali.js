@@ -289,6 +289,22 @@ function hapusJurnalGuruWali(id){
   throw new Error('Jurnal tidak ditemukan');
 }
 
+function _arsipWaliCacheKey_(email, tahun) {
+  return 'ARSIP_WALI_' + String(email || '').replace(/[^a-z0-9]/gi, '_') + '_' + String(tahun || '').replace(/[^a-z0-9]/gi, '_');
+}
+
+/**
+ * getStatusArsipJurnalWali()
+ * Pengecekan "sudah diarsip?" ini butuh 2-3 panggilan DriveApp berantai
+ * (getFoldersByName -> getFoldersByName -> getFilesByName) — pencarian
+ * berbasis nama di Drive jauh lebih lambat dibanding baca Sheets, dan
+ * kalau ini nyangkut di kartu Arsip Jurnal Pendampingan setiap kali tab
+ * Guru Wali dibuka (sering dipanggil bersamaan dengan beberapa google.
+ * script.run lain), terasa seperti macet lama padahal cuma lambat.
+ * Status ini jarang berubah (cuma berubah begitu guru benar-benar
+ * mengarsip), jadi di-cache 5 menit — arsipJurnalGuruWali() membersihkan
+ * cache-nya begitu berhasil supaya statusnya langsung update.
+ */
 function getStatusArsipJurnalWali(){
   const auth        = getAuth();
   const setting     = getSetting();
@@ -307,17 +323,26 @@ function getStatusArsipJurnalWali(){
   }
 
   let sudahArsip = false;
-  try{
-    const rootIt = DriveApp.getFoldersByName('JURNAL_ARSIP');
-    if(activeTahun && rootIt.hasNext()){
-      const guruIt = rootIt.next().getFoldersByName(safeEmail);
-      if(guruIt.hasNext()){
-        const safeTahun = activeTahun.replace(/[\/\\:*?\[\]]/g,'-');
-        const f = guruIt.next().getFilesByName('JURNAL_WALI_'+safeTahun+'.xlsx');
-        if(f.hasNext()) sudahArsip = true;
+  const cache = CacheService.getScriptCache();
+  const cacheKey = _arsipWaliCacheKey_(email, activeTahun);
+  const cached = activeTahun ? cache.get(cacheKey) : null;
+
+  if (cached !== null) {
+    sudahArsip = cached === '1';
+  } else {
+    try{
+      const rootIt = DriveApp.getFoldersByName('JURNAL_ARSIP');
+      if(activeTahun && rootIt.hasNext()){
+        const guruIt = rootIt.next().getFoldersByName(safeEmail);
+        if(guruIt.hasNext()){
+          const safeTahun = activeTahun.replace(/[\/\\:*?\[\]]/g,'-');
+          const f = guruIt.next().getFilesByName('JURNAL_WALI_'+safeTahun+'.xlsx');
+          if(f.hasNext()) sudahArsip = true;
+        }
       }
-    }
-  }catch(e){ console.error('[JGD] cek arsip wali:', e.message||e); }
+    }catch(e){ console.error('[JGD] cek arsip wali:', e.message||e); }
+    if (activeTahun) cache.put(cacheKey, sudahArsip ? '1' : '0', 300);
+  }
 
   const tahunList = Array.from(tahunSet).sort();
   return {
@@ -403,6 +428,8 @@ function arsipJurnalGuruWali(){
   for(let i = toArchive.length - 1; i >= 0; i--){
     sh.deleteRow(toArchive[i].rowIdx + 1);
   }
+
+  try { CacheService.getScriptCache().remove(_arsipWaliCacheKey_(email, tahun)); } catch(e) {}
 
   logAudit('ARSIP_JURNAL_WALI', email, tahun + ' | ' + toArchive.length + ' entri');
   return { success: true, tahun, jumlah: toArchive.length };

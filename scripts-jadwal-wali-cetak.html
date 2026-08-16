@@ -186,8 +186,21 @@ function loadStatusArsipWali(){
   const warn = document.getElementById('warningArsipWali');
   const btn  = document.getElementById('btnArsipWali');
   if(!el) return;
+
+  // Pengecekan ini butuh cari folder/file di Drive (lebih lambat dari baca
+  // Sheets biasa). Kalau lebih dari 8 detik belum juga selesai, kasih tahu
+  // user itu masih diproses (bukan macet) — daripada teks "Mengecek..."
+  // diam saja tanpa kabar sampai entah kapan.
+  let resolved = false;
+  const stallTimer = setTimeout(() => {
+    if (resolved) return;
+    el.innerHTML = '⏳ Masih mengecek status arsip (folder Drive), mohon tunggu sebentar lagi...';
+  }, 8000);
+
   google.script.run
     .withSuccessHandler(res => {
+      resolved = true;
+      clearTimeout(stallTimer);
       if(!res.activeTahun){
         el.innerHTML = '❌ Tahun pelajaran belum diset di pengaturan.';
         return;
@@ -202,7 +215,9 @@ function loadStatusArsipWali(){
       if(btn) btn.disabled = false;
     })
     .withFailureHandler(err => {
-      if(el) el.innerHTML = `<span class="muted">❌ ${err.message}</span>`;
+      resolved = true;
+      clearTimeout(stallTimer);
+      if(el) el.innerHTML = `<span class="muted">❌ ${err.message} — <a href="#" onclick="loadStatusArsipWali();return false;">Coba lagi</a></span>`;
     })
     .getStatusArsipJurnalWali();
 }
