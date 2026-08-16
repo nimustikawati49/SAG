@@ -3,6 +3,11 @@
  * Dipecah dari Code.js untuk kemudahan pemeliharaan.
  */
 
+// Kolom opsional tambahan supaya template Siswa Binaan sejajar dengan
+// template Data Siswa (kolom wajib nama_siswa/nis/kelas/tahun_masuk/status
+// tetap seperti semula, ini murni tambahan di akhir).
+const SISWA_BINAAN_OPTIONAL_COLS_ = ['no_absen', 'jk', 'ttl', 'alamat', 'orang_tua', 'kontak'];
+
 function ensureSiswaBinaanSheet_(){
   const ss = getSpreadsheet_();
   let sh = ss.getSheetByName('SISWA_BINAAN');
@@ -11,36 +16,45 @@ function ensureSiswaBinaanSheet_(){
     sh.appendRow([
       'id','nama_siswa','nis','kelas',
       'guru_wali','tahun_masuk','status','tahun_pelajaran'
-    ]);
+    ].concat(SISWA_BINAAN_OPTIONAL_COLS_));
   } else {
-    // Migrasi: sheet lama tidak punya kolom tahun_pelajaran sama sekali,
-    // jadi kelas siswa binaan tidak pernah dibedakan per tahun ajaran —
-    // setiap import ulang menimpa/menghapus semua riwayat lama. Tambahkan
-    // kolom ini di akhir (index kolom lama tidak berubah).
-    const lastCol = sh.getLastColumn();
-    const header = lastCol > 0
+    // Migrasi idempoten: tambahkan kolom yang belum ada di akhir sheet
+    // (index kolom lama tidak berubah) — baik tahun_pelajaran (migrasi
+    // sebelumnya) maupun kolom opsional baru ini.
+    let lastCol = sh.getLastColumn();
+    let header = lastCol > 0
       ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
       : [];
-    if (header.indexOf('tahun_pelajaran') === -1) {
-      sh.getRange(1, lastCol + 1).setValue('tahun_pelajaran');
-    }
+    ['tahun_pelajaran'].concat(SISWA_BINAAN_OPTIONAL_COLS_).forEach(function(col){
+      if (header.indexOf(col) === -1) {
+        lastCol = sh.getLastColumn();
+        sh.getRange(1, lastCol + 1).setValue(col);
+        header.push(col);
+      }
+    });
   }
   return sh;
 }
 
 /**
- * _siswaBinaanTahunColIdx_(sh)
- * Index (0-based) kolom tahun_pelajaran di SISWA_BINAAN — dicari lewat
- * header, bukan hardcode, supaya tahan kalau kolomnya sudah pernah
- * dimigrasi ke posisi manapun.
+ * _siswaBinaanColIdx_(sh)
+ * Peta nama kolom -> index (0-based) di SISWA_BINAAN, dicari lewat header
+ * (bukan hardcode) supaya tahan terhadap migrasi kolom baru.
  */
-function _siswaBinaanTahunColIdx_(sh){
+function _siswaBinaanColIdx_(sh){
   const lastCol = sh.getLastColumn();
   const header = lastCol > 0
     ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
     : [];
-  const idx = header.indexOf('tahun_pelajaran');
-  return idx === -1 ? 7 : idx;
+  const idx = {};
+  header.forEach(function(h, i){ if(h) idx[h] = i; });
+  return idx;
+}
+
+/** Index kolom tahun_pelajaran — dipertahankan untuk kompatibilitas kode lama. */
+function _siswaBinaanTahunColIdx_(sh){
+  const idx = _siswaBinaanColIdx_(sh).tahun_pelajaran;
+  return idx === undefined ? 7 : idx;
 }
 
 function ensureJurnalGuruWaliSheet_(){
@@ -458,9 +472,11 @@ function getSiswaUntukImportBinaan(kelas){
     if(owner !== email) continue;
     if(String(data[i][0] || '').trim() !== String(kelas || '').trim()) continue;
     const item = {
-      nis  : String(data[i][2] || ''),
-      nama : String(data[i][3] || ''),
-      kelas: String(data[i][0] || '')
+      nis     : String(data[i][2] || ''),
+      nama    : String(data[i][3] || ''),
+      kelas   : String(data[i][0] || ''),
+      no_absen: String(data[i][1] || ''),
+      jk      : String(data[i][4] || '')
     };
     scopedSemua.push(item);
     if(_siswaRowMatchesPeriode_(data[i], tahunAktif)) scopedPeriode.push(item);
@@ -499,7 +515,9 @@ function importSiswaBinaan(rows){
   }
 
   const sh    = ensureSiswaBinaanSheet_();
-  const tIdx  = _siswaBinaanTahunColIdx_(sh);
+  const colIdx= _siswaBinaanColIdx_(sh);
+  const tIdx  = colIdx.tahun_pelajaran;
+  const numCols = sh.getLastColumn();
   const data  = sh.getDataRange().getValues();
   const email = auth.email;
   const tahunAktif = getSetting().tahun_pelajaran || '';
@@ -518,19 +536,27 @@ function importSiswaBinaan(rows){
   }
 
   const now = new Date();
-  valid.forEach((r, idx) => {
+  const newRows = valid.map((r, idx) => {
     const id = now.getTime().toString() + idx;
-    sh.appendRow([
-      id,
-      String(r.nama_siswa || '').trim(),
-      String(r.nis        || '').trim(),
-      String(r.kelas      || '').trim(),
-      email,
-      String(r.tahun_masuk || '').trim(),
-      String(r.status     || 'aktif').trim().toLowerCase()
-    ]);
-    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(tahunAktif);
+    const row = new Array(numCols).fill('');
+    row[colIdx.id]           = id;
+    row[colIdx.nama_siswa]   = String(r.nama_siswa || '').trim();
+    row[colIdx.nis]          = String(r.nis || '').trim();
+    row[colIdx.kelas]        = String(r.kelas || '').trim();
+    row[colIdx.guru_wali]    = email;
+    row[colIdx.tahun_masuk]  = String(r.tahun_masuk || '').trim();
+    row[colIdx.status]       = String(r.status || 'aktif').trim().toLowerCase();
+    row[tIdx]                = tahunAktif;
+    // Kolom opsional tambahan — sejajar dengan Data Siswa, boleh kosong.
+    SISWA_BINAAN_OPTIONAL_COLS_.forEach(function(col){
+      if (colIdx[col] !== undefined) row[colIdx[col]] = String(r[col] || '').trim();
+    });
+    return row;
   });
+
+  if (newRows.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, newRows.length, numCols).setValues(newRows);
+  }
 
   logAudit('IMPORT_SISWA_BINAAN', email, valid.length + ' siswa | tahun=' + tahunAktif);
   invalidateCache_('SISWA_BINAAN');
@@ -568,9 +594,11 @@ function promoteSiswaBinaan(payload){
     if(from && to) mapObj[from] = to;
   });
 
-  const email = String(auth.email || '').toLowerCase().trim();
-  const sh    = ensureSiswaBinaanSheet_();
-  const tIdx  = _siswaBinaanTahunColIdx_(sh);
+  const email   = String(auth.email || '').toLowerCase().trim();
+  const sh      = ensureSiswaBinaanSheet_();
+  const colIdx  = _siswaBinaanColIdx_(sh);
+  const tIdx    = colIdx.tahun_pelajaran;
+  const numCols = sh.getLastColumn();
 
   // Hapus dulu baris guru ini di tahun TUJUAN — idempoten kalau promosi
   // ini sampai dijalankan dua kali untuk periode yang sama.
@@ -585,6 +613,7 @@ function promoteSiswaBinaan(payload){
   const now = new Date();
   let processed = 0;
   let lulus = 0;
+  const newRows = [];
   for(let i = 1; i < data.length; i++){
     if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
     if(String(data[i][tIdx] || '').trim() !== fromTahun) continue;
@@ -599,18 +628,21 @@ function promoteSiswaBinaan(payload){
       continue; // lulus — tidak dibawa ke tahun baru, riwayat lama tetap ada
     }
 
-    const id = now.getTime().toString() + processed;
-    sh.appendRow([
-      id,
-      String(data[i][1] || ''), // nama_siswa
-      String(data[i][2] || ''), // nis
-      kelasBaru,
-      email,
-      String(data[i][5] || ''), // tahun_masuk tetap sama
-      'aktif',
-      toTahun
-    ]);
+    // Salin baris lama apa adanya (termasuk kolom opsional: jk, ttl,
+    // alamat, orang_tua, kontak — data ini tidak berubah antar tahun),
+    // lalu timpa field yang memang berubah saat naik kelas.
+    const row = data[i].slice(0, numCols);
+    while (row.length < numCols) row.push('');
+    row[colIdx.id]     = now.getTime().toString() + processed;
+    row[colIdx.kelas]  = kelasBaru;
+    row[colIdx.status] = 'aktif';
+    row[tIdx]           = toTahun;
+    newRows.push(row);
     processed++;
+  }
+
+  if (newRows.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, newRows.length, numCols).setValues(newRows);
   }
 
   logAudit('PROMOSI_SISWA_BINAAN', email, fromTahun + ' -> ' + toTahun + ' | naik=' + processed + ' | lulus=' + lulus);

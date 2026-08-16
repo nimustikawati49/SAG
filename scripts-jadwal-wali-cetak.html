@@ -521,12 +521,15 @@ if(!window._jadwalLiveRefreshStarted){
 
 /**
  * downloadTemplateSiswaBinaan() — file Excel (.xlsx) siap isi, dengan
- * baris contoh, sama seperti Template Data Siswa utama di tab Setting.
+ * baris contoh. Kolom opsional (no_absen, jk, ttl, alamat, orang_tua,
+ * kontak) disejajarkan dengan Template Data Siswa utama di tab Setting —
+ * kolom wajib (nama_siswa, nis, kelas, tahun_masuk, status) tetap sama
+ * seperti sebelumnya.
  */
 function downloadTemplateSiswaBinaan(){
   if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
-  const header = ['nama_siswa','nis','kelas','tahun_masuk','status'];
-  const contoh  = ['Budi Santoso','1001','10A','2024','aktif'];
+  const header = ['nama_siswa','nis','kelas','tahun_masuk','status','no_absen','jk','ttl','alamat','orang_tua','kontak'];
+  const contoh  = ['Budi Santoso','1001','10A','2024','aktif','5','L','Jakarta, 01-01-2012','Jl. Contoh No. 1','Nama Orang Tua','081234567890'];
   const ws = XLSX.utils.aoa_to_sheet([header, contoh]);
   ws['!cols'] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
   const wb = XLSX.utils.book_new();
@@ -689,9 +692,12 @@ function loadSiswaUntukImportBinaan(){
         const checked = i < 20 ? 'checked' : '';
         const namaAttr = String(s.nama || '').replace(/"/g, '&quot;');
         const kelasAttr = String(s.kelas || '').replace(/"/g, '&quot;');
+        const noAbsenAttr = String(s.no_absen || '').replace(/"/g, '&quot;');
+        const jkAttr = String(s.jk || '').replace(/"/g, '&quot;');
         return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer">' +
             '<input type="checkbox" class="binaanImportCk" value="' + (s.nis || '') + '" ' +
-              'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' + checked +
+              'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' +
+              'data-no-absen="' + noAbsenAttr + '" data-jk="' + jkAttr + '" ' + checked +
               ' onchange="_updateBinaanImportCounter_()">' +
             (s.nama || '-') + ' <span class="muted">(' + (s.nis || '-') + ')</span>' +
           '</label>';
@@ -733,7 +739,9 @@ function ambilSiswaBinaanDariKelas(){
     nis        : el.value || '',
     kelas      : el.getAttribute('data-kelas') || '',
     tahun_masuk: '',
-    status     : 'aktif'
+    status     : 'aktif',
+    no_absen   : el.getAttribute('data-no-absen') || '',
+    jk         : el.getAttribute('data-jk') || ''
   }));
 
   const btn = document.getElementById('btnAmbilSiswaBinaan');
