@@ -2358,10 +2358,33 @@
   <!-- Main content -->
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;text-align:center;color:#fff;position:relative;z-index:1">
 
-    <!-- Logo area -->
+    <!-- Logo area — jurnal digital (fitur yang paling sering & paling membantu guru) -->
     <div class="lp-card-enter" style="position:relative;margin-bottom:20px">
-      <div style="position:absolute;inset:-8px;border-radius:50%;background:rgba(139,92,246,.4);animation:lp-pulse-ring 2.5s ease-out infinite"></div>
-      <div class="lp-hero-em" style="font-size:56px;line-height:1;position:relative;z-index:1;animation:lp-float 3.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 8px 24px rgba(139,92,246,.6))">🎓</div>
+      <div style="position:absolute;inset:-10px;border-radius:26px;background:rgba(139,92,246,.4);animation:lp-pulse-ring 2.5s ease-out infinite"></div>
+      <div class="lp-hero-em" style="position:relative;z-index:1;animation:lp-float 3.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 10px 26px rgba(99,102,241,.55))">
+        <svg width="72" height="72" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="lpLogoGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#a5b4fc"/>
+              <stop offset="55%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#4338ca"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#lpLogoGrad)"/>
+          <rect x="2.5" y="2.5" width="59" height="59" rx="16.5" fill="none" stroke="rgba(255,255,255,.25)"/>
+          <!-- buku/jurnal terbuka -->
+          <path d="M32 24c-3.6-2.7-9-3.6-13.5-2.6v20.4c4.5-1 9.9-.1 13.5 2.6 3.6-2.7 9-3.6 13.5-2.6V21.4C41 20.4 35.6 21.3 32 24z"
+                fill="#ffffff"/>
+          <path d="M32 24v20.8" stroke="#c7d2fe" stroke-width="1.4"/>
+          <path d="M21 25.5c2.6-.6 5.6-.3 8 .8M21 30c2.6-.6 5.6-.3 8 .8M21 34.5c2.6-.6 5.6-.3 8 .8"
+                stroke="#a5b4fc" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M43 25.5c-2.6-.6-5.6-.3-8 .8M43 30c-2.6-.6-5.6-.3-8 .8M43 34.5c-2.6-.6-5.6-.3-8 .8"
+                stroke="#a5b4fc" stroke-width="1.2" stroke-linecap="round"/>
+          <!-- badge centang: jurnal beres, tanpa ribet -->
+          <circle cx="46.5" cy="45.5" r="10.5" fill="#22c55e" stroke="#ffffff" stroke-width="2.5"/>
+          <path d="M42 45.5l3 3 6-6.5" stroke="#ffffff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
     </div>
 
     <!-- Title -->
