@@ -1212,6 +1212,17 @@ function runPromosiWizard(){
           showAcademicToast('📂 Kelas ' + res.kelas_perlu_siswa_baru.join(', ') + ' memerlukan upload siswa baru. Gunakan tombol "Upload Siswa" di Setting.', 'info', 10000);
         }, 1000);
       }
+      // Ikut naikkan siswa binaan (jurnal Guru Wali) dengan pemetaan yang sama,
+      // supaya riwayat kelas 7/8/9 siswa binaan ikut tercatat tanpa upload ulang.
+      // Best-effort: kalau guru ini tidak pakai fitur Guru Wali, cukup diabaikan.
+      if(mapping.length && typeof google !== 'undefined'){
+        google.script.run
+          .withSuccessHandler(function(rb){
+            if(rb && rb.processed) showAcademicToast('👨‍👩‍👧 Siswa binaan (Guru Wali) ikut naik kelas: ' + rb.processed + (rb.lulus ? ' | Lulus: ' + rb.lulus : ''), 'info', 8000);
+          })
+          .withFailureHandler(function(){ /* silent — fitur Guru Wali opsional */ })
+          .promoteSiswaBinaan({ from_tahun: fromYear, to_tahun: toYear, mapping: mapping });
+      }
     })
     .withFailureHandler(function(err){ endProgress(); showAcademicToast('Gagal promosi: ' + err.message, 'error'); })
     .promoteSiswaWizard({

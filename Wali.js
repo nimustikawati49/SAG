@@ -10,10 +10,37 @@ function ensureSiswaBinaanSheet_(){
     sh = ss.insertSheet('SISWA_BINAAN');
     sh.appendRow([
       'id','nama_siswa','nis','kelas',
-      'guru_wali','tahun_masuk','status'
+      'guru_wali','tahun_masuk','status','tahun_pelajaran'
     ]);
+  } else {
+    // Migrasi: sheet lama tidak punya kolom tahun_pelajaran sama sekali,
+    // jadi kelas siswa binaan tidak pernah dibedakan per tahun ajaran —
+    // setiap import ulang menimpa/menghapus semua riwayat lama. Tambahkan
+    // kolom ini di akhir (index kolom lama tidak berubah).
+    const lastCol = sh.getLastColumn();
+    const header = lastCol > 0
+      ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
+      : [];
+    if (header.indexOf('tahun_pelajaran') === -1) {
+      sh.getRange(1, lastCol + 1).setValue('tahun_pelajaran');
+    }
   }
   return sh;
+}
+
+/**
+ * _siswaBinaanTahunColIdx_(sh)
+ * Index (0-based) kolom tahun_pelajaran di SISWA_BINAAN — dicari lewat
+ * header, bukan hardcode, supaya tahan kalau kolomnya sudah pernah
+ * dimigrasi ke posisi manapun.
+ */
+function _siswaBinaanTahunColIdx_(sh){
+  const lastCol = sh.getLastColumn();
+  const header = lastCol > 0
+    ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
+    : [];
+  const idx = header.indexOf('tahun_pelajaran');
+  return idx === -1 ? 7 : idx;
 }
 
 function ensureJurnalGuruWaliSheet_(){
@@ -35,14 +62,19 @@ function getInfoGuruWali(){
   const auth    = getAuth();
   const setting = getSetting();
   const sh      = ensureSiswaBinaanSheet_();
+  const tIdx    = _siswaBinaanTahunColIdx_(sh);
   const data    = sh.getDataRange().getValues();
   const email   = auth.email;
+  const tahunAktif = setting.tahun_pelajaran || '';
 
   let jumlah = 0;
   for(let i = 1; i < data.length; i++){
     const guruWali = String(data[i][4] || '').toLowerCase().trim();
     const status   = String(data[i][6] || '').toLowerCase().trim();
-    if(guruWali === email && status !== 'nonaktif') jumlah++;
+    if(guruWali !== email || status === 'nonaktif') continue;
+    const rowTahun = String(data[i][tIdx] || '').trim();
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
+    jumlah++;
   }
 
   return {
@@ -55,8 +87,10 @@ function getInfoGuruWali(){
 function getSiswaBinaan(page, pageSize){
   const auth  = getAuth();
   const sh    = ensureSiswaBinaanSheet_();
+  const tIdx  = _siswaBinaanTahunColIdx_(sh);
   const data  = sh.getDataRange().getValues();
   const email = auth.email;
+  const tahunAktif = getSetting().tahun_pelajaran || '';
 
   const PAGE_SIZE = Number(pageSize) || 20;
   const PAGE      = Math.max(1, Number(page) || 1);
@@ -67,6 +101,11 @@ function getSiswaBinaan(page, pageSize){
     const status   = String(data[i][6] || '').toLowerCase().trim();
     if(guruWali !== email) continue;
     if(status === 'nonaktif') continue;
+    // Baris lama (sebelum kolom tahun_pelajaran ada) dianggap cocok ke
+    // periode manapun — baris baru yang sudah punya tahun WAJIB cocok,
+    // supaya siswa binaan tahun ajaran lalu tidak nyangkut tampil lagi.
+    const rowTahun = String(data[i][tIdx] || '').trim();
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
     all.push({
       nama_siswa: String(data[i][1] || '-'),
       nis       : String(data[i][2] || '-'),
@@ -381,14 +420,22 @@ function importSiswaBinaan(rows){
   }
 
   const sh    = ensureSiswaBinaanSheet_();
+  const tIdx  = _siswaBinaanTahunColIdx_(sh);
   const data  = sh.getDataRange().getValues();
   const email = auth.email;
+  const tahunAktif = getSetting().tahun_pelajaran || '';
 
+  // Hanya hapus baris guru ini di TAHUN AJARAN AKTIF yang sama — riwayat
+  // siswa binaan tahun-tahun sebelumnya (mis. saat siswa masih kelas 7/8)
+  // tetap utuh, tidak ikut terhapus setiap kali import ulang/tahun baru.
+  // Baris lama tanpa tahun_pelajaran (sebelum migrasi ini) dianggap milik
+  // periode manapun sehingga tetap ikut ter-replace seperti perilaku lama.
   for(let i = data.length - 1; i >= 1; i--){
     const guruWali = String(data[i][4] || '').toLowerCase().trim();
-    if(guruWali === email){
-      sh.deleteRow(i + 1);
-    }
+    if(guruWali !== email) continue;
+    const rowTahun = String(data[i][tIdx] || '').trim();
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
+    sh.deleteRow(i + 1);
   }
 
   const now = new Date();
@@ -403,27 +450,144 @@ function importSiswaBinaan(rows){
       String(r.tahun_masuk || '').trim(),
       String(r.status     || 'aktif').trim().toLowerCase()
     ]);
+    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(tahunAktif);
   });
 
-  logAudit('IMPORT_SISWA_BINAAN', email, valid.length + ' siswa');
+  logAudit('IMPORT_SISWA_BINAAN', email, valid.length + ' siswa | tahun=' + tahunAktif);
   invalidateCache_('SISWA_BINAAN');
 
   return { status: true, imported: valid.length };
 }
 
 /**
- * getKelasSiswaBinaan() — Ambil daftar kelas unik dari siswa binaan guru ini.
- * Dipakai di tab Catatan Siswa agar hanya menampilkan kelas siswa binaan.
+ * promoteSiswaBinaan(payload)
+ * Naikkan kelas siswa binaan ke tahun ajaran baru TANPA upload ulang dan
+ * TANPA menghapus riwayat tahun-tahun sebelumnya — setiap tahun ajaran
+ * punya barisnya sendiri (dibedakan kolom tahun_pelajaran), jadi histori
+ * "siswa ini kelas 7 di tahun X, kelas 8 di tahun Y, kelas 9 di tahun Z"
+ * tetap tersimpan dan bisa dilihat lewat getRiwayatKelasSiswaBinaan().
+ */
+function promoteSiswaBinaan(payload){
+  assertLicenseActive();
+  const auth = getAuth();
+  if(auth.role !== 'admin' && auth.role !== 'superadmin'){
+    throw new Error('AKSES_DITOLAK');
+  }
+
+  payload = payload || {};
+  const fromTahun = String(payload.from_tahun || '').trim();
+  const toTahun   = String(payload.to_tahun || '').trim();
+  const mapping   = Array.isArray(payload.mapping) ? payload.mapping : [];
+  if(!fromTahun || !toTahun) throw new Error('Tahun lama dan tahun baru wajib diisi');
+  if(fromTahun === toTahun) throw new Error('Tahun lama dan tahun baru tidak boleh sama');
+  if(!mapping.length) return { success: true, processed: 0 };
+
+  const mapObj = {};
+  mapping.forEach(function(m){
+    const from = String(m.from || '').trim();
+    const to   = String(m.to || '').trim();
+    if(from && to) mapObj[from] = to;
+  });
+
+  const email = String(auth.email || '').toLowerCase().trim();
+  const sh    = ensureSiswaBinaanSheet_();
+  const tIdx  = _siswaBinaanTahunColIdx_(sh);
+
+  // Hapus dulu baris guru ini di tahun TUJUAN — idempoten kalau promosi
+  // ini sampai dijalankan dua kali untuk periode yang sama.
+  let data = sh.getDataRange().getValues();
+  for(let i = data.length - 1; i >= 1; i--){
+    if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
+    if(String(data[i][tIdx] || '').trim() !== toTahun) continue;
+    sh.deleteRow(i + 1);
+  }
+
+  data = sh.getDataRange().getValues();
+  const now = new Date();
+  let processed = 0;
+  let lulus = 0;
+  for(let i = 1; i < data.length; i++){
+    if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
+    if(String(data[i][tIdx] || '').trim() !== fromTahun) continue;
+    if(String(data[i][6] || '').toLowerCase().trim() === 'nonaktif') continue;
+
+    const kelasLama = String(data[i][3] || '').trim();
+    const kelasBaru = mapObj[kelasLama];
+    if(!kelasBaru) continue;
+
+    if(String(kelasBaru).toUpperCase() === 'ALUMNI'){
+      lulus++;
+      continue; // lulus — tidak dibawa ke tahun baru, riwayat lama tetap ada
+    }
+
+    const id = now.getTime().toString() + processed;
+    sh.appendRow([
+      id,
+      String(data[i][1] || ''), // nama_siswa
+      String(data[i][2] || ''), // nis
+      kelasBaru,
+      email,
+      String(data[i][5] || ''), // tahun_masuk tetap sama
+      'aktif',
+      toTahun
+    ]);
+    processed++;
+  }
+
+  logAudit('PROMOSI_SISWA_BINAAN', email, fromTahun + ' -> ' + toTahun + ' | naik=' + processed + ' | lulus=' + lulus);
+  invalidateCache_('SISWA_BINAAN');
+  return { success: true, processed: processed, lulus: lulus };
+}
+
+/**
+ * getRiwayatKelasSiswaBinaan(nis)
+ * Riwayat kelas SATU siswa binaan di semua tahun ajaran yang tercatat
+ * (guru wali yang login) — mis. "kelas 7 (2024/2025) → kelas 8
+ * (2025/2026) → kelas 9 (2026/2027)". Berlaku untuk jenjang manapun
+ * (SD/SMP/SMA/SMK) karena nilai kelas murni teks bebas.
+ */
+function getRiwayatKelasSiswaBinaan(nis){
+  const auth  = getAuth();
+  const email = String(auth.email || '').toLowerCase().trim();
+  const nisNorm = String(nis || '').trim();
+  if(!nisNorm) return [];
+
+  const sh   = ensureSiswaBinaanSheet_();
+  const tIdx = _siswaBinaanTahunColIdx_(sh);
+  const data = sh.getDataRange().getValues();
+
+  const result = [];
+  for(let i = 1; i < data.length; i++){
+    if(String(data[i][2] || '').trim() !== nisNorm) continue;
+    if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
+    result.push({
+      tahun_pelajaran: String(data[i][tIdx] || '').trim() || '-',
+      kelas: String(data[i][3] || ''),
+      status: String(data[i][6] || 'aktif')
+    });
+  }
+  result.sort(function(a, b){ return String(a.tahun_pelajaran).localeCompare(String(b.tahun_pelajaran)); });
+  return result;
+}
+
+/**
+ * getKelasSiswaBinaan() — Ambil daftar kelas unik dari siswa binaan guru ini
+ * di tahun ajaran AKTIF. Dipakai di tab Catatan Siswa agar hanya menampilkan
+ * kelas siswa binaan.
  */
 function getKelasSiswaBinaan(){
   const auth  = getAuth();
   const email = String(auth.email || '').toLowerCase().trim();
   const sh    = ensureSiswaBinaanSheet_();
+  const tIdx  = _siswaBinaanTahunColIdx_(sh);
   const data  = sh.getDataRange().getValues();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
   const kelasSet = {};
   for(let i = 1; i < data.length; i++){
     if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
     if(String(data[i][6] || '').toLowerCase().trim() === 'nonaktif') continue;
+    const rowTahun = String(data[i][tIdx] || '').trim();
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
     const k = String(data[i][3] || '').trim();
     if(k) kelasSet[k] = true;
   }
@@ -431,19 +595,24 @@ function getKelasSiswaBinaan(){
 }
 
 /**
- * getSiswaBinaanByKelas(kelas) — Ambil daftar siswa binaan untuk kelas tertentu.
- * Dipakai di form Catatan Siswa (menggantikan getSiswaByKelas untuk guru wali).
+ * getSiswaBinaanByKelas(kelas) — Ambil daftar siswa binaan untuk kelas
+ * tertentu di tahun ajaran AKTIF. Dipakai di form Catatan Siswa (menggantikan
+ * getSiswaByKelas untuk guru wali).
  */
 function getSiswaBinaanByKelas(kelas){
   const auth  = getAuth();
   const email = String(auth.email || '').toLowerCase().trim();
   const sh    = ensureSiswaBinaanSheet_();
+  const tIdx  = _siswaBinaanTahunColIdx_(sh);
   const data  = sh.getDataRange().getValues();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
   const result = [];
   for(let i = 1; i < data.length; i++){
     if(String(data[i][4] || '').toLowerCase().trim() !== email) continue;
     if(String(data[i][6] || '').toLowerCase().trim() === 'nonaktif') continue;
     if(kelas && String(data[i][3] || '').trim() !== String(kelas)) continue;
+    const rowTahun = String(data[i][tIdx] || '').trim();
+    if(rowTahun && tahunAktif && rowTahun !== tahunAktif) continue;
     result.push({
       nis  : String(data[i][2] || ''),
       nama : String(data[i][1] || ''),

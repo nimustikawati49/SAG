@@ -795,20 +795,26 @@ function loadSiswaBinaan(page){
   var tbody = document.getElementById('siswaBinaanBody');
   if(!tbody) return;
   var p = Number(page) || 1;
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:12px">⏳ Memuat...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:12px">⏳ Memuat...</td></tr>';
   google.script.run
     .withSuccessHandler(function(res){
       var data = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
       if(!data.length){
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:16px">📭 Belum ada siswa binaan. Upload via template CSV.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:16px">📭 Belum ada siswa binaan. Upload via template CSV.</td></tr>';
         return;
       }
       tbody.innerHTML = data.map(function(s){
+        var nisSafe = String(s.nis || '').replace(/'/g, "\\'");
+        var namaSafe = String(s.nama_siswa || '').replace(/'/g, "\\'");
         return '<tr>' +
           '<td style="text-align:center">' + (s.no || '') + '</td>' +
           '<td class="left">' + (s.nama_siswa || '-') + '</td>' +
           '<td style="text-align:center">' + (s.nis || '-') + '</td>' +
           '<td style="text-align:center">' + (s.kelas || '-') + '</td>' +
+          '<td style="text-align:center">' +
+            '<button type="button" onclick="showRiwayatSiswaBinaan_(\'' + nisSafe + '\',\'' + namaSafe + '\')" ' +
+              'style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">📜 Riwayat</button>' +
+          '</td>' +
           '</tr>';
       }).join('');
       var ctrl = document.getElementById('siswaBinaanPager');
@@ -827,9 +833,56 @@ function loadSiswaBinaan(page){
       }
     })
     .withFailureHandler(function(err){
-      if(tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:12px">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</td></tr>';
+      if(tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:12px">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</td></tr>';
     })
     .getSiswaBinaan(p, 20);
+}
+
+/**
+ * showRiwayatSiswaBinaan_(nis, nama)
+ * Tampilkan riwayat kelas satu siswa binaan lintas tahun ajaran (mis. kelas 7
+ * di 2024/2025, kelas 8 di 2025/2026, dst) memakai modal wizard akademik yang
+ * sudah ada supaya tidak perlu bikin modal baru.
+ */
+function showRiwayatSiswaBinaan_(nis, nama){
+  var m = document.getElementById('academicWizardModal');
+  var t = document.getElementById('academicWizardTitle');
+  var b = document.getElementById('academicWizardBody');
+  var a = document.getElementById('academicWizardActions');
+  var p = document.getElementById('academicWizardProgress');
+  if(!m || !t || !b || !a || !p) return;
+
+  t.textContent = 'Riwayat Kelas — ' + (nama || nis);
+  b.innerHTML = '<p class="muted">Memuat riwayat...</p>';
+  a.innerHTML = '';
+  p.style.width = '100%';
+  m.style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(function(rows){
+      if(!rows || !rows.length){
+        b.innerHTML = '<p class="muted">Belum ada riwayat kelas tercatat untuk siswa ini.</p>';
+        return;
+      }
+      b.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #e5e7eb">Tahun Ajaran</th>' +
+          '<th style="text-align:center;padding:6px;border-bottom:1px solid #e5e7eb">Kelas</th>' +
+          '<th style="text-align:center;padding:6px;border-bottom:1px solid #e5e7eb">Status</th>' +
+        '</tr></thead><tbody>' +
+        rows.map(function(r){
+          return '<tr>' +
+            '<td style="padding:6px;border-bottom:1px solid #f3f4f6">' + (r.tahun_pelajaran || '-') + '</td>' +
+            '<td style="text-align:center;padding:6px;border-bottom:1px solid #f3f4f6">' + (r.kelas || '-') + '</td>' +
+            '<td style="text-align:center;padding:6px;border-bottom:1px solid #f3f4f6">' + (r.status || '-') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    })
+    .withFailureHandler(function(err){
+      b.innerHTML = '<p style="color:red">Gagal memuat riwayat: ' + (err && err.message ? err.message : err) + '</p>';
+    })
+    .getRiwayatKelasSiswaBinaan(nis);
 }
 
 function loadJurnalGuruWali(){
