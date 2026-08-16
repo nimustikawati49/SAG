@@ -177,20 +177,37 @@ function loadSiswaUntukImportBinaan(){
       }
       // Kelas <=20 siswa otomatis semua tercentang; kalau lebih dari 20,
       // hanya 20 pertama yang tercentang duluan - user bisa ganti pilihan.
-      box.innerHTML = siswa.map((s, i) => {
+      // Checkbox diberi style eksplisit (width/height/margin) karena CSS
+      // global "input{width:100%}" di styles.html berlaku untuk SEMUA
+      // <input> termasuk checkbox — tanpa override ini checkbox melebar
+      // penuh dan tata letaknya berantakan.
+      const rows = siswa.map((s, i) => {
         const checked = i < 20 ? 'checked' : '';
         const namaAttr = String(s.nama || '').replace(/"/g, '&quot;');
         const kelasAttr = String(s.kelas || '').replace(/"/g, '&quot;');
         const noAbsenAttr = String(s.no_absen || '').replace(/"/g, '&quot;');
         const jkAttr = String(s.jk || '').replace(/"/g, '&quot;');
-        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer">' +
-            '<input type="checkbox" class="binaanImportCk" value="' + (s.nis || '') + '" ' +
-              'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' +
-              'data-no-absen="' + noAbsenAttr + '" data-jk="' + jkAttr + '" ' + checked +
-              ' onchange="_updateBinaanImportCounter_()">' +
-            (s.nama || '-') + ' <span class="muted">(' + (s.nis || '-') + ')</span>' +
-          '</label>';
+        const rowBg = i % 2 === 1 ? 'background:#fafafe;' : '';
+        return '<tr style="' + rowBg + '">' +
+            '<td style="width:36px;text-align:center;padding:6px 4px;border-bottom:1px solid #f1f2f6">' +
+              '<input type="checkbox" class="binaanImportCk" value="' + (s.nis || '') + '" ' +
+                'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' +
+                'data-no-absen="' + noAbsenAttr + '" data-jk="' + jkAttr + '" ' + checked +
+                ' onchange="_updateBinaanImportCounter_()" ' +
+                'style="width:16px;height:16px;margin:0;padding:0;vertical-align:middle;cursor:pointer">' +
+            '</td>' +
+            '<td style="text-align:left;padding:6px 8px;border-bottom:1px solid #f1f2f6">' + (s.nama || '-') + '</td>' +
+            '<td style="width:90px;padding:6px 8px;color:#6b7280;border-bottom:1px solid #f1f2f6">' + (s.nis || '-') + '</td>' +
+          '</tr>';
       }).join('');
+      box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="background:#f1f3ff;position:sticky;top:0">' +
+          '<th style="padding:6px 4px;text-align:center;width:36px"></th>' +
+          '<th style="padding:6px 8px;text-align:left">Nama Siswa</th>' +
+          '<th style="padding:6px 8px;text-align:left;width:90px">NIS</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
       _updateBinaanImportCounter_();
     })
     .withFailureHandler(err => {
