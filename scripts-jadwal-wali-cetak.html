@@ -1,0 +1,606 @@
+<script>
+/* =====================================================
+   JURNAL GURU WALI – FRONTEND JS v1.0
+   (loadJurnalGuruWali, loadInfoGuruWali, loadSiswaBinaan
+    didefinisikan di scripts-dashboard.html agar always-available)
+   ===================================================== */
+
+function autoFillHariWali(dateStr){
+  if(!dateStr) return;
+  const hariMap = {
+    0:'MINGGU', 1:'SENIN', 2:'SELASA', 3:'RABU',
+    4:'KAMIS',  5:'JUMAT', 6:'SABTU'
+  };
+  const d = new Date(dateStr + 'T00:00:00');
+  const el = document.getElementById('gwHari');
+  if(el) el.value = hariMap[d.getDay()] || '';
+}
+
+let isSavingJurnalWali = false;
+
+/* ── Photo pick + compress helpers ── */
+var _gwFotos = { 1: null, 2: null }; // stored compressed data URLs
+
+function gwPickFoto_(slot, input){
+  const file = input.files[0];
+  if(!file) return;
+  _gwCompressFoto_(file, function(dataUrl){
+    _gwFotos[slot] = { data: dataUrl, type: 'image/jpeg', name: file.name };
+    const preview = document.getElementById('gwFotoPreview'+slot);
+    const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+    const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+    if(preview){ preview.src = dataUrl; preview.style.display = 'block'; }
+    if(placeholder) placeholder.style.display = 'none';
+    if(removeBtn) removeBtn.style.display = 'block';
+  });
+}
+
+function gwRemoveFoto_(slot){
+  _gwFotos[slot] = null;
+  const input  = document.getElementById('gwFotoInput'+slot);
+  const preview= document.getElementById('gwFotoPreview'+slot);
+  const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+  const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+  if(input)  { input.value = ''; }
+  if(preview){ preview.src = ''; preview.style.display = 'none'; }
+  if(placeholder) placeholder.style.display = 'block';
+  if(removeBtn) removeBtn.style.display = 'none';
+}
+
+function gwOpenLightbox_(url){
+  const lb  = document.getElementById('gwLightbox');
+  const img = document.getElementById('gwLightboxImg');
+  if(!lb || !img) return;
+  // Use full-res Drive URL, not thumbnail
+  const match = url.match(/[?&]id=([\/\w-]+)/);
+  img.src = match ? 'https://drive.google.com/uc?export=view&id='+match[1] : url;
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function gwCloseLightbox_(){
+  const lb = document.getElementById('gwLightbox');
+  if(lb) lb.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function gwResetFilter_(){
+  const b = document.getElementById('gwFilterBulan');
+  const f = document.getElementById('gwFilterFokus');
+  if(b) b.value = '';
+  if(f) f.selectedIndex = 0;
+  renderRiwayatGuruWali();
+}
+
+/**
+ * Client-side image compression using Canvas.
+ * Target: ≤500KB, max 1200px wide, JPEG quality 0.75
+ */
+function _gwCompressFoto_(file, callback){
+  const MAX_W = 1200;
+  const QUALITY = 0.75;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      let w = img.width, h = img.height;
+      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', QUALITY));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function simpanJurnalWali(){
+  if(isSavingJurnalWali) return;
+
+  const tgl    = document.getElementById('gwTanggal').value;
+  const hari   = document.getElementById('gwHari').value.trim();
+  const mulai  = document.getElementById('gwWaktuMulai').value;
+  const selesai= document.getElementById('gwWaktuSelesai').value;
+  const fokus  = document.getElementById('gwFokus').value;
+  const topik  = document.getElementById('gwTopik').value.trim();
+  const catatan= document.getElementById('gwCatatan').value.trim();
+  const tindak = document.getElementById('gwTindakLanjut').value.trim();
+
+  if(!tgl || !mulai || !selesai || !fokus || !topik){
+    alert('⚠️ Lengkapi semua field yang bertanda *');
+    return;
+  }
+  if(mulai >= selesai){
+    alert('⚠️ Waktu selesai harus lebih besar dari waktu mulai');
+    return;
+  }
+
+  isSavingJurnalWali = true;
+  const btn = document.getElementById('btnSimpanJurnalWali');
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
+  startProgress();
+
+  // Collect compressed photos
+  const fotos = [_gwFotos[1], _gwFotos[2]].filter(Boolean);
+
+  const payload = {
+    tanggal           : tgl,
+    hari              : hari.toUpperCase(),
+    waktu_mulai       : mulai,
+    waktu_selesai     : selesai,
+    fokus_pendampingan: fokus,
+    topik_pendampingan: topik,
+    catatan           : catatan  || '-',
+    tindak_lanjut     : tindak   || '-',
+    fotos             : fotos
+  };
+
+  google.script.run
+    .withSuccessHandler(res=>{
+      endProgress();
+      isSavingJurnalWali = false;
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
+      if(res && res.status){
+        showToast('✅ Jurnal berhasil disimpan', 'success');
+        resetFormGuruWali();
+        loadRiwayatGuruWali();
+      }else{
+        showToast('❌ Gagal menyimpan jurnal', 'error');
+      }
+    })
+    .withFailureHandler(err=>{
+      endProgress();
+      isSavingJurnalWali = false;
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
+      showToast('❌ ' + err.message, 'error');
+    })
+    .simpanJurnalGuruWali(payload);
+}
+
+function resetFormGuruWali(){
+  ['gwWaktuMulai','gwWaktuSelesai','gwTopik',
+   'gwCatatan','gwTindakLanjut']
+    .forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+  const fokus = document.getElementById('gwFokus');
+  if(fokus) fokus.selectedIndex = 0;
+  // reset ke hari ini
+  const tglEl = document.getElementById('gwTanggal');
+  if(tglEl){
+    tglEl.value = new Date().toISOString().slice(0,10);
+    autoFillHariWali(tglEl.value);
+  }
+  // reset photo slots
+  gwRemoveFoto_(1);
+  gwRemoveFoto_(2);
+}
+
+let riwayatGuruWaliData = [];
+
+function loadStatusArsipWali(){
+  const el   = document.getElementById('statusArsipWali');
+  const warn = document.getElementById('warningArsipWali');
+  const btn  = document.getElementById('btnArsipWali');
+  if(!el) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      if(!res.activeTahun){
+        el.innerHTML = '❌ Tahun pelajaran belum diset di pengaturan.';
+        return;
+      }
+      if(res.sudahArsip){
+        el.innerHTML = `🔒 Jurnal guru wali tahun <b>${res.activeTahun}</b> sudah diarsipkan.`;
+        if(btn) btn.disabled = true;
+        return;
+      }
+      el.innerHTML = `📅 Data tersimpan: <b>${res.totalTahun}</b> tahun pelajaran. Tahun aktif: <b>${res.activeTahun}</b>`;
+      if(warn && res.perluArsip) warn.style.display = 'block';
+      if(btn) btn.disabled = false;
+    })
+    .withFailureHandler(err => {
+      if(el) el.innerHTML = `<span class="muted">❌ ${err.message}</span>`;
+    })
+    .getStatusArsipJurnalWali();
+}
+
+function arsipJurnalWaliUI(){
+  if(!confirm('Arsip jurnal guru wali tahun aktif?\nData akan DIHAPUS dari sheet dan disimpan ke Google Drive.\n\nLanjutkan?')) return;
+  const btn = document.getElementById('btnArsipWali');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Mengarsipkan...'; }
+  google.script.run
+    .withSuccessHandler(res => {
+      alert(`✅ ${res.jumlah} entri jurnal guru wali tahun ${res.tahun} berhasil diarsipkan ke Google Drive.`);
+      if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
+      loadStatusArsipWali();
+      loadRiwayatGuruWali();
+    })
+    .withFailureHandler(err => {
+      alert('❌ Arsip gagal: ' + err.message);
+      if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
+    })
+    .arsipJurnalGuruWali();
+}
+
+function loadRiwayatGuruWali(){
+  const tbody = document.getElementById('riwayatGuruWaliBody');
+  if(!tbody) return;
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="muted">⏳ Memuat...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(data=>{
+      riwayatGuruWaliData = data || [];
+      renderRiwayatGuruWali();
+    })
+    .withFailureHandler(err=>{
+      const tbody2 = document.getElementById('riwayatGuruWaliBody');
+      if(tbody2)
+        tbody2.innerHTML =
+          `<tr><td colspan="8" class="muted">❌ ${err.message}</td></tr>`;
+    })
+    .getRiwayatJurnalGuruWali();
+}
+
+function renderRiwayatGuruWali(){
+  const tbody = document.getElementById('riwayatGuruWaliBody');
+  if(!tbody) return;
+
+  // --- filter values ---
+  const filterBulan = (document.getElementById('gwFilterBulan')  || {}).value || '';
+  const filterFokus = (document.getElementById('gwFilterFokus')  || {}).value || '';
+
+  // --- filter data ---
+  let filtered = (riwayatGuruWaliData || []).filter(r => {
+    if(filterBulan && !(r.iso_tanggal || '').startsWith(filterBulan)) return false;
+    if(filterFokus && r.fokus_pendampingan !== filterFokus) return false;
+    return true;
+  });
+
+  // --- update count badge ---
+  const countEl = document.getElementById('gwFilterCount');
+  if(countEl){
+    if(filterBulan || filterFokus){
+      countEl.textContent = filtered.length + ' entri';
+      countEl.style.display = 'inline';
+    } else {
+      countEl.textContent = '';
+      countEl.style.display = 'none';
+    }
+  }
+
+  // --- cek bulan berjalan (pakai data asli, bukan filtered) ---
+  const box = document.getElementById('gwPesanBulanIni');
+  if(box){
+    const nowYM = new Date().toISOString().slice(0,7);
+    const adaBulanIni = riwayatGuruWaliData.some(
+      r => r.iso_tanggal && r.iso_tanggal.slice(0,7) === nowYM
+    );
+    box.innerHTML = adaBulanIni ? '' : `
+      <div class="card"
+           style="background:#fff7ed;border-left:6px solid #f97316;
+                  padding:14px;margin-bottom:14px">
+        <b>⚠️ Belum ada kegiatan pendampingan bulan ini</b>
+      </div>`;
+  }
+
+  if(!filtered || filtered.length === 0){
+    tbody.innerHTML =
+      '<tr><td colspan="8" class="muted">📭 ' +
+      (filterBulan || filterFokus ? 'Tidak ada jurnal sesuai filter.' : 'Belum ada jurnal pendampingan.') +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((r, i)=>{
+    // Build thumbnail HTML from comma-separated Drive URLs
+    let dokHtml = '-';
+    if(r.dokumentasi && r.dokumentasi !== '-'){
+      const urls = r.dokumentasi.split(',').map(u=>u.trim()).filter(Boolean);
+      if(urls.length > 0){
+        dokHtml = urls.map(url=>{
+          // Extract file ID for thumbnail URL
+          const match = url.match(/[?&]id=([\w-]+)/);
+          const thumbUrl = match
+            ? 'https://drive.google.com/thumbnail?id='+match[1]+'&sz=w90'
+            : url;
+          return `<span onclick="gwOpenLightbox_('${url.replace(/'/g,"\\'")}')"\n            title="Lihat foto" style="cursor:zoom-in;display:inline-block;">
+            <img src="${thumbUrl}" alt="Foto" loading="lazy"
+              style="width:44px;height:36px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;transition:transform .15s"
+              onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''"
+              onerror="this.style.display='none'">
+          </span>`;
+        }).join('<span style="width:4px;display:inline-block"></span>');
+      }
+    }
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td class="left">${r.tanggal || '-'}</td>
+        <td style="white-space:nowrap">${r.waktu || '-'}</td>
+        <td><span class="badge">${r.fokus_pendampingan || '-'}</span></td>
+        <td class="left">${r.topik_pendampingan || '-'}</td>
+        <td class="left">${r.catatan || '-'}</td>
+        <td class="left">${r.tindak_lanjut || '-'}</td>
+        <td style="white-space:nowrap">${dokHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function cetakLaporanGuruWali(){
+  if(!riwayatGuruWaliData || riwayatGuruWaliData.length === 0){
+    alert('⚠️ Belum ada jurnal untuk dicetak');
+    return;
+  }
+
+  // Apply current filter so print matches what user sees
+  const filterBulan = (document.getElementById('gwFilterBulan') || {}).value || '';
+  const filterFokus = (document.getElementById('gwFilterFokus') || {}).value || '';
+  let dataCetak = riwayatGuruWaliData.filter(r => {
+    if(filterBulan && !(r.iso_tanggal || '').startsWith(filterBulan)) return false;
+    if(filterFokus && r.fokus_pendampingan !== filterFokus) return false;
+    return true;
+  });
+  if(dataCetak.length === 0){ dataCetak = riwayatGuruWaliData; }
+
+  const namaGuru = document.getElementById('gwNamaGuru').innerText || '-';
+  const nip      = document.getElementById('gwNip').innerText      || '-';
+
+  const baris = dataCetak.map((r, i)=>{
+    // Build photo thumbnails for print
+    let photoHtml = '-';
+    if(r.dokumentasi && r.dokumentasi !== '-'){
+      const imgs = r.dokumentasi.split(',').map(u => u.trim()).filter(Boolean).map(u => {
+        const m = u.match(/[?&]id=([\w-]+)/);
+        return m
+          ? `<img src="https://drive.google.com/thumbnail?id=${m[1]}&sz=w120" style="max-width:110px;max-height:90px;border-radius:4px;margin:2px;object-fit:cover" crossorigin="anonymous">`
+          : '';
+      }).join('');
+      if(imgs) photoHtml = `<div style="display:flex;flex-wrap:wrap;gap:4px">${imgs}</div>`;
+    }
+    return `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${r.tanggal || '-'}</td>
+      <td style="text-align:center;white-space:nowrap">${r.waktu || '-'}</td>
+      <td style="text-align:center">${r.fokus_pendampingan || '-'}</td>
+      <td>${r.topik_pendampingan || '-'}</td>
+      <td>${r.catatan || '-'}</td>
+      <td>${r.tindak_lanjut || '-'}</td>
+      <td>${photoHtml}</td>
+    </tr>
+  `}).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Jurnal Guru Wali</title>
+  <style>
+    *{ box-sizing:border-box; }
+    body{ font-family:Arial,sans-serif; font-size:12px;
+          margin:24px; color:#111; }
+    h2{ text-align:center; font-size:16px; margin-bottom:4px; }
+    p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }
+    table{ width:100%; border-collapse:collapse; margin-top:8px; }
+    th,td{ border:1px solid #bbb; padding:7px 6px;
+           vertical-align:top; font-size:11px; }
+    th{ background:#eef2ff; font-weight:700; text-align:center; }
+    .ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }
+    .ttd-box{ text-align:center; min-width:220px; }
+    .ttd-box p{ margin:2px 0; }
+    .garis-ttd{ margin-top:68px; border-top:1px solid #333;
+                padding-top:4px; font-weight:700; }
+    .btn-cetak{ display:block; margin:20px auto 0;
+                padding:10px 28px; background:#6C63FF;
+                color:#fff; border:none; border-radius:8px;
+                cursor:pointer; font-size:14px; }
+    @media print{
+      .btn-cetak{ display:none; }
+    }
+  </style>
+</head>
+<body>
+  <h2>JURNAL PENDAMPINGAN GURU WALI</h2>
+  <p class="sub">${namaGuru} &nbsp;&bull;&nbsp; NIP: ${nip}</p>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30px">No</th>
+        <th>Hari/Tanggal</th>
+        <th style="white-space:nowrap">Waktu</th>
+        <th>Fokus Pendampingan</th>
+        <th>Topik Pendampingan</th>
+        <th>Catatan</th>
+        <th>Tindak Lanjut</th>
+        <th>Dokumentasi</th>
+      </tr>
+    </thead>
+    <tbody>${baris}</tbody>
+  </table>
+  <div class="ttd-wrap">
+    <div class="ttd-box">
+      <p><b>Mengetahui</b></p>
+      <p>Guru Wali</p>
+      <div class="garis-ttd">
+        ${namaGuru}<br>
+        <span style="font-weight:normal">NIP. ${nip}</span>
+      </div>
+    </div>
+  </div>
+  <button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=960,height=720');
+  if(!win){
+    alert('Popup diblokir browser.\nAktifkan popup untuk halaman ini lalu coba lagi.');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+}
+
+/* ===== END JURNAL GURU WALI ===== */
+
+/* ===== JADWAL LIVE-REFRESH & BROWSER NOTIFICATIONS ===== */
+
+/**
+ * Request browser notification permission once when app loads.
+ * Called from loadJurnalGuruWali().
+ */
+function _requestNotifPermission_(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+}
+
+/**
+ * Schedule browser notifications 15 minutes before each class today.
+ * Re-scheduled every time jadwal is rendered (live-refresh).
+ */
+function _scheduleJadwalNotif_(jadwalObj){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  // Clear existing timers
+  if(window._jadwalNotifTimers){
+    window._jadwalNotifTimers.forEach(clearTimeout);
+  }
+  window._jadwalNotifTimers = [];
+  if(!jadwalObj) return;
+
+  var hariMap = {1:'SENIN',2:'SELASA',3:'RABU',4:'KAMIS',5:'JUMAT',6:'SABTU'};
+  var hariIni = hariMap[new Date().getDay()];
+  var items   = (jadwalObj && jadwalObj[hariIni]) || [];
+
+  items.forEach(function(item){
+    try{
+      var sp = (item.jam_mulai || '').split(':');
+      if(sp.length < 2) return;
+      var classDate = new Date();
+      classDate.setHours(Number(sp[0]), Number(sp[1]), 0, 0);
+      var notifTime = classDate.getTime() - 15 * 60 * 1000; // 15 min before
+      var delay     = notifTime - Date.now();
+      if(delay > 0 && delay < 86400000){ // only schedule future events today
+        var t = setTimeout(function(){
+          try{
+            new Notification('\uD83D\uDD14 Kelas Segera Dimulai!', {
+              body: (item.kelas || '') + ' \u2014 ' + (item.mapel || '') +
+                    '\n15 menit lagi pukul ' + item.jam_mulai,
+              icon: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/emoji.svg'
+            });
+          }catch(e){}
+        }, delay);
+        window._jadwalNotifTimers.push(t);
+      }
+    }catch(e){}
+  });
+}
+
+/**
+ * Live-refresh jadwal grid every 60 seconds so "SEKARANG" highlight stays current.
+ */
+if(!window._jadwalLiveRefreshStarted){
+  window._jadwalLiveRefreshStarted = true;
+  setInterval(function(){
+    var container = document.getElementById('jadwalGridContainer');
+    if(!container || !window._lastJadwalData) return;
+    _renderJadwalGrid_(window._lastJadwalData, container);
+  }, 60000);
+}
+
+/* ===== END LIVE-REFRESH & NOTIFICATIONS ===== */
+
+/* =====================================================
+   SISWA BINAAN – IMPORT / DOWNLOAD TEMPLATE
+   ===================================================== */
+
+function downloadTemplateSiswaBinaan(){
+  const csv = 'nama_siswa,nis,kelas,tahun_masuk,status\n' +
+              '(contoh) Budi Santoso,1001,10A,2024,aktif\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(
+    new Blob([csv], { type: 'text/csv' })
+  );
+  a.download = 'template_siswa_binaan.csv';
+  a.click();
+}
+
+function resetFileSiswaBinaan(){
+  const el = document.getElementById('fileSiswaBinaan');
+  if(el) el.value = '';
+}
+
+function uploadSiswaBinaan(){
+  const f = document.getElementById('fileSiswaBinaan').files[0];
+  if(!f){
+    alert('⚠️ Pilih file terlebih dahulu');
+    return;
+  }
+
+  const btn = document.getElementById('btnImportSiswaBinaan');
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Mengupload...'; }
+  startProgress();
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text   = e.target.result;
+    const lines  = text.trim().split('\n');
+    const header = lines[0].split(',').map(s => s.trim().toLowerCase());
+
+    // Validasi kolom
+    const required = ['nama_siswa','nis','kelas','tahun_masuk','status'];
+    const missing  = required.filter(c => !header.includes(c));
+    if(missing.length > 0){
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      alert('❌ Kolom tidak lengkap: ' + missing.join(', '));
+      return;
+    }
+
+    const rows = lines.slice(1)
+      .map(l => l.split(',').map(s => s.trim()))
+      .filter(r => r.length > 1 && r[0]); // skip baris kosong
+
+    if(rows.length === 0){
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      alert('⚠️ File tidak berisi data siswa');
+      return;
+    }
+
+    // kirim: [{nama_siswa, nis, kelas, tahun_masuk, status}, ...]
+    const payload = rows.map(r => {
+      const obj = {};
+      header.forEach((h, i) => { obj[h] = r[i] || ''; });
+      return obj;
+    });
+
+    google.script.run
+      .withSuccessHandler(res => {
+        endProgress();
+        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        if(res && res.status){
+          alert('✅ ' + res.imported + ' siswa berhasil diimport');
+          resetFileSiswaBinaan();
+          loadSiswaBinaan();
+          loadInfoGuruWali();
+        }else{
+          alert('❌ Gagal import: ' + (res ? res.msg : 'Unknown error'));
+        }
+      })
+      .withFailureHandler(err => {
+        endProgress();
+        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        alert('❌ ' + err.message);
+      })
+      .importSiswaBinaan(payload);
+  };
+  reader.readAsText(f);
+}
+
+</script>
