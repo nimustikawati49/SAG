@@ -641,11 +641,16 @@ function loadKelasUntukImportBinaan(){
   sel.innerHTML = '<option value="">Memuat...</option>';
   google.script.run
     .withSuccessHandler(list => {
+      const kelas = list || [];
+      if(!kelas.length){
+        sel.innerHTML = '<option value="">-- Belum ada Data Siswa --</option>';
+        return;
+      }
       sel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
-        (list || []).map(k => '<option value="' + k + '">' + k + '</option>').join('');
+        kelas.map(k => '<option value="' + k + '">' + k + '</option>').join('');
     })
     .withFailureHandler(err => {
-      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+      sel.innerHTML = '<option value="">-- Gagal memuat, coba lagi --</option>';
       console.error('[SiswaBinaan] getKelasUntukImportBinaan:', err && err.message);
     })
     .getKelasUntukImportBinaan();

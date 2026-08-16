@@ -412,15 +412,24 @@ function getKelasUntukImportBinaan(){
   const email = String(auth.email || '').toLowerCase().trim();
   const tahunAktif = getSetting().tahun_pelajaran || '';
   const data = sh.getDataRange().getValues();
-  const kelasSet = new Set();
+
+  const kelasPeriode = new Set();
+  const kelasSemua = new Set();
   for(let i = 1; i < data.length; i++){
     const owner = String(data[i][5] || '').toLowerCase().trim();
     if(owner !== email) continue;
-    if(!_siswaRowMatchesPeriode_(data[i], tahunAktif)) continue;
     const kelas = String(data[i][0] || '').trim();
-    if(kelas && kelas.toUpperCase() !== 'ALUMNI') kelasSet.add(kelas);
+    if(!kelas || kelas.toUpperCase() === 'ALUMNI') continue;
+    kelasSemua.add(kelas);
+    if(_siswaRowMatchesPeriode_(data[i], tahunAktif)) kelasPeriode.add(kelas);
   }
-  return Array.from(kelasSet).sort();
+
+  // Kalau tidak ada kelas yang cocok persis tahun ajaran aktif (mis. data
+  // sempat diimport saat tahun aktif berbeda dari sekarang), tetap
+  // tampilkan semua kelas milik guru ini — lebih baik guru bisa memilih
+  // daripada dropdown kosong tanpa penjelasan.
+  const result = kelasPeriode.size ? kelasPeriode : kelasSemua;
+  return Array.from(result).sort();
 }
 
 /**
@@ -441,18 +450,26 @@ function getSiswaUntukImportBinaan(kelas){
   const email = String(auth.email || '').toLowerCase().trim();
   const tahunAktif = getSetting().tahun_pelajaran || '';
   const data = sh.getDataRange().getValues();
-  const result = [];
+
+  const scopedPeriode = [];
+  const scopedSemua = [];
   for(let i = 1; i < data.length; i++){
     const owner = String(data[i][5] || '').toLowerCase().trim();
     if(owner !== email) continue;
     if(String(data[i][0] || '').trim() !== String(kelas || '').trim()) continue;
-    if(!_siswaRowMatchesPeriode_(data[i], tahunAktif)) continue;
-    result.push({
+    const item = {
       nis  : String(data[i][2] || ''),
       nama : String(data[i][3] || ''),
       kelas: String(data[i][0] || '')
-    });
+    };
+    scopedSemua.push(item);
+    if(_siswaRowMatchesPeriode_(data[i], tahunAktif)) scopedPeriode.push(item);
   }
+
+  // Sama seperti getKelasUntukImportBinaan() — kalau tidak ada yang cocok
+  // tahun aktif, tampilkan semua siswa di kelas ini milik guru daripada
+  // daftar kosong.
+  const result = scopedPeriode.length ? scopedPeriode : scopedSemua;
   return result.sort(function(a, b){ return String(a.nama).localeCompare(String(b.nama)); });
 }
 
