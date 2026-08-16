@@ -189,8 +189,11 @@ function getAllKelasUntukNilai() {
   if (!sh) return [];
 
   const email = auth.email.toLowerCase().trim();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
   const data  = sh.getDataRange().getValues().slice(1);
-  const filtered = data.filter(r => String(r[5]).toLowerCase().trim() === email);
+  const filtered = data.filter(r =>
+    String(r[5]).toLowerCase().trim() === email && _siswaRowMatchesPeriode_(r, tahunAktif)
+  );
   const kelas = [...new Set(filtered.map(r => String(r[0]).trim()).filter(Boolean))];
   return kelas.sort();
 }
@@ -206,11 +209,13 @@ function getDataSiswaUntukNilai(kelas) {
   if (!sh) return [];
 
   const email = auth.email.toLowerCase().trim();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
   const data  = sh.getDataRange().getValues().slice(1);
   return data
     .filter(r =>
       String(r[0]).trim() === String(kelas).trim()
       && String(r[5]).toLowerCase().trim() === email
+      && _siswaRowMatchesPeriode_(r, tahunAktif)
     )
     .map(r => ({
       no_absen: r[1],

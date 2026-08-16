@@ -3,6 +3,37 @@
  * Dipecah dari Code.js untuk kemudahan pemeliharaan.
  */
 
+/* ===================================================================
+   SISWA (legacy roster) — riwayat kelas per tahun ajaran
+   Kolom tetap (semua pembaca lain pakai indeks tetap, bukan header):
+   0=Kelas, 1=no_absen, 2=NIS, 3=nama_lengkap, 4=jk, 5=owner guru,
+   6=tahun_pelajaran (baru).
+   =================================================================== */
+const SISWA_TAHUN_COL_ = 6;
+
+/** Tambahkan kolom header 'tahun_pelajaran' kalau sheet SISWA sudah punya
+ * header lama tapi belum punya kolom ini (migrasi idempoten). */
+function ensureSiswaTahunKolom_() {
+  const sh = sheet('SISWA');
+  if (!sh) return;
+  const lastCol = sh.getLastColumn();
+  if (lastCol === 0) return;
+  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function(h) { return String(h || '').toLowerCase().trim(); });
+  if (header[0] !== 'kelas') return; // bukan sheet dengan header standar, jangan sentuh
+  if (header.indexOf('tahun_pelajaran') === -1) {
+    sh.getRange(1, lastCol + 1).setValue('tahun_pelajaran');
+  }
+}
+
+/** true jika baris SISWA cocok tahun ajaran aktif. Baris lama tanpa
+ * tahun_pelajaran (blank, sebelum migrasi ini) dianggap cocok periode
+ * manapun supaya data yang sudah ada tetap tampil seperti biasa. */
+function _siswaRowMatchesPeriode_(row, tahunAktif) {
+  const rowTahun = String(row[SISWA_TAHUN_COL_] || '').trim();
+  return !rowTahun || !tahunAktif || rowTahun === String(tahunAktif).trim();
+}
+
 function getKelas(){
   ensureAcademicSchema_();
   const auth = getAuth();
@@ -14,11 +45,14 @@ function getKelas(){
 
   if(!sheet('SISWA')) return [];
 
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+
   // Cache SISWA sheet (TTL 120s) — invalidated on upload siswa
   const data = getSheetCached('SISWA', 120).slice(1);
 
   const kelas = data
     .filter(r => String(r[5]).toLowerCase().trim() === auth.email)
+    .filter(r => _siswaRowMatchesPeriode_(r, tahunAktif))
     .map(r => r[0])
     .filter(Boolean)
     // Siswa yang sudah "lulus" lewat Promosi Siswa ditandai Kelas=ALUMNI —
@@ -38,13 +72,16 @@ function getSiswaByKelas(kelas){
 
   if(!sheet('SISWA')) return [];
 
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+
   // Cache SISWA sheet (TTL 120s)
   const data = getSheetCached('SISWA', 120).slice(1);
 
   return data
     .filter(r =>
       r[0] === kelas &&
-      String(r[5]).toLowerCase().trim() === auth.email
+      String(r[5]).toLowerCase().trim() === auth.email &&
+      _siswaRowMatchesPeriode_(r, tahunAktif)
     )
     .map(r => ({
       no_absen: r[1],
@@ -64,6 +101,8 @@ function importSiswa(rows){
 
   const sh = sheet('SISWA');
   if(!sh) return []; // belum ada data siswa, kembalikan kosong (bukan error)
+
+  ensureSiswaTahunKolom_();
 
   const setting = getSetting();
   const tahunAktif = setting.tahun_pelajaran || getLegacyDefaultYear_();
@@ -101,6 +140,23 @@ function importSiswa(rows){
     };
   }).filter(function(r){ return r.kelas && r.nama && (r.nis || r.nisn); });
 
+  // Hapus dulu baris LAMA milik guru ini untuk kelas yang sedang diupload
+  // ulang, TAPI hanya di tahun ajaran aktif — supaya CSV yang diupload
+  // ulang (mis. perbaiki typo) menggantikan data lama, tanpa duplikat, dan
+  // TANPA menghapus riwayat kelas siswa di tahun-tahun ajaran sebelumnya.
+  const kelasDiupload = new Set(normalized.map(function(r){ return r.kelas; }));
+  if (kelasDiupload.size) {
+    const emailNorm = String(auth.email).toLowerCase().trim();
+    const existing = sh.getDataRange().getValues();
+    for (let i = existing.length - 1; i >= 1; i--) {
+      const r = existing[i];
+      if (String(r[5] || '').toLowerCase().trim() !== emailNorm) continue;
+      if (!kelasDiupload.has(String(r[0] || '').trim())) continue;
+      if (!_siswaRowMatchesPeriode_(r, tahunAktif)) continue;
+      sh.deleteRow(i + 1);
+    }
+  }
+
   const rowsForMaster = [];
   normalized.forEach(r=>{
     sh.appendRow([
@@ -109,7 +165,8 @@ function importSiswa(rows){
       r.nis,
       r.nama,
       r.jk,
-      auth.email
+      auth.email,
+      tahunAktif
     ]);
 
     rowsForMaster.push({
@@ -850,9 +907,15 @@ function getLaporanAbsensiSiswa(mode, kelas, period) {
   const absData    = shAbs.getDataRange().getValues().slice(1);
   const siswaData  = shSiswa.getDataRange().getValues().slice(1);
 
-  // Filter siswa by kelas & owner email
+  // Filter jurnal by email, kelas, and period
+  const activeTahun = setting.tahun_pelajaran || '';
+
+  // Filter siswa by kelas, owner email & tahun ajaran aktif — tanpa filter
+  // tahun, nama kelas yang dipakai ulang tiap tahun (mis. "8A") akan
+  // menggabung siswa dari beberapa angkatan berbeda ke satu laporan.
   let siswaList = siswaData.filter(s =>
     s[0] == kelas && String(s[5] || '').toLowerCase().trim() === auth.email
+    && _siswaRowMatchesPeriode_(s, activeTahun)
   );
   if (!siswaList.length) {
     const fromRiwayat = getSiswaAktifByKelasForUser_(kelas, auth.email);
@@ -861,9 +924,6 @@ function getLaporanAbsensiSiswa(mode, kelas, period) {
     });
   }
   if (!siswaList.length) return [];
-
-  // Filter jurnal by email, kelas, and period
-  const activeTahun = setting.tahun_pelajaran || '';
   const filteredJurnal = jurnalData.filter(r => {
     if (String(r[12] || '').toLowerCase().trim() !== auth.email) return false;
     if (r[2] != kelas) return false;

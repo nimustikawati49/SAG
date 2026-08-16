@@ -1085,38 +1085,60 @@ function promoteSiswaWizard(payload) {
     if (addRiwayatKelas_(r[3], toYear, toSem, kelasTujuan, status)) processed++;
   });
 
-  // Fallback: promosi langsung di sheet SISWA lama, untuk guru yang
-  // rosternya belum pernah masuk RiwayatKelas (mis. SISWA sheet tanpa
-  // kolom tahun_pelajaran/semester — format lama yang masih dipakai).
-  // Update in-place kolom Kelas untuk baris yang cocok, konsisten dengan
-  // cara getKelas()/getSiswaByKelas() di Jurnal.js membaca roster dari
-  // SISWA saat RiwayatKelas kosong untuk guru ini. Siswa yang sama tetap
-  // 1 baris — cuma naik tingkat; kelas lama otomatis kosong lagi dan
-  // siap diisi angkatan baru lewat upload CSV.
+  // Fallback: promosi di sheet SISWA lama, untuk guru yang rosternya belum
+  // pernah masuk RiwayatKelas. Sejak kolom tahun_pelajaran ditambahkan,
+  // promosi TIDAK LAGI menimpa baris lama in-place — sebaliknya baris baru
+  // ditambahkan untuk tahun tujuan, supaya riwayat kelas 7/8/9 (atau
+  // jenjang lain) tiap siswa tetap tersimpan lengkap per tahun ajaran,
+  // sama seperti promoteSiswaBinaan() di Wali.js.
   let processedLegacy = 0;
   try {
     const shSiswaProm = sheet('SISWA');
     if (shSiswaProm && mapping.length) {
-      const lastRowProm = shSiswaProm.getLastRow();
-      if (lastRowProm > 1) {
-        const rangeProm = shSiswaProm.getRange(2, 1, lastRowProm - 1, 6);
-        const allRows = rangeProm.getValues();
-        const emailNormProm = String(auth.email).toLowerCase().trim();
-        let touched = false;
-        for (let i = 0; i < allRows.length; i++) {
-          const rowKelas = String(allRows[i][0] || '').trim();
-          const rowOwner = String(allRows[i][5] || '').toLowerCase().trim();
-          if (rowOwner !== emailNormProm) continue;
-          const target = mapObj[rowKelas];
-          if (!target) continue;
-          allRows[i][0] = String(target).toUpperCase() === 'ALUMNI' ? 'ALUMNI' : target;
-          touched = true;
-          processedLegacy++;
-        }
-        if (touched) {
-          rangeProm.setValues(allRows);
-          invalidateCache_('SISWA');
-        }
+      ensureSiswaTahunKolom_();
+      const emailNormProm = String(auth.email).toLowerCase().trim();
+
+      const targetKelasSet = new Set(
+        Object.keys(mapObj)
+          .map(function(k) { return mapObj[k]; })
+          .filter(function(t) { return String(t).toUpperCase() !== 'ALUMNI'; })
+      );
+
+      // Hapus dulu baris promosi LAMA guru ini di tahun TUJUAN (idempoten
+      // kalau wizard ini sampai dijalankan dua kali untuk periode yang
+      // sama) — hanya untuk kelas tujuan yang memang bagian dari mapping
+      // kali ini, supaya kelas lain di tahun yang sama tidak ikut terhapus.
+      let rows = shSiswaProm.getDataRange().getValues();
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const r = rows[i];
+        if (String(r[5] || '').toLowerCase().trim() !== emailNormProm) continue;
+        if (String(r[SISWA_TAHUN_COL_] || '').trim() !== toYear) continue;
+        if (!targetKelasSet.has(String(r[0] || '').trim())) continue;
+        shSiswaProm.deleteRow(i + 1);
+      }
+
+      // Baca ulang, lalu tambahkan baris baru untuk siswa di tahun ASAL
+      // yang kelasnya termasuk mapping. Baris lama TIDAK diubah/dihapus.
+      rows = shSiswaProm.getDataRange().getValues();
+      const newRows = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (String(r[5] || '').toLowerCase().trim() !== emailNormProm) continue;
+        // Baris lama tanpa tahun_pelajaran (sebelum migrasi ini) dianggap
+        // milik periode manapun, supaya tetap bisa dipromosikan.
+        const rowTahun = String(r[SISWA_TAHUN_COL_] || '').trim();
+        if (rowTahun && rowTahun !== fromYear) continue;
+
+        const target = mapObj[String(r[0] || '').trim()];
+        if (!target) continue;
+
+        const kelasTujuan = String(target).toUpperCase() === 'ALUMNI' ? 'ALUMNI' : target;
+        newRows.push([kelasTujuan, r[1], r[2], r[3], r[4], auth.email, toYear]);
+        processedLegacy++;
+      }
+      if (newRows.length) {
+        shSiswaProm.getRange(shSiswaProm.getLastRow() + 1, 1, newRows.length, 7).setValues(newRows);
+        invalidateCache_('SISWA');
       }
     }
   } catch (e) {
@@ -1250,10 +1272,14 @@ function getAcademicHistorySummary(tahun, semester) {
     const shSiswaHist = sheet('SISWA');
     if (shSiswaHist && shSiswaHist.getLastRow() > 1) {
       const emailNormHist = String(auth.email).toLowerCase().trim();
-      const siswaRows = shSiswaHist.getRange(2, 1, shSiswaHist.getLastRow() - 1, 6).getValues();
+      const siswaRows = shSiswaHist.getDataRange().getValues().slice(1);
       const counts = {};
       siswaRows.forEach(function(r) {
         if (String(r[5] || '').toLowerCase().trim() !== emailNormHist) return;
+        // Periode yang diminta di sini (tahun/semester parameter fungsi ini)
+        // bisa periode manapun, bukan cuma periode aktif — jadi dicocokkan
+        // ke kolom tahun_pelajaran baris ini, bukan setting global.
+        if (!_siswaRowMatchesPeriode_(r, tahun)) return;
         const k = String(r[0] || '').trim();
         if (!k) return;
         counts[k] = (counts[k] || 0) + 1;

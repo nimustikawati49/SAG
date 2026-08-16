@@ -208,12 +208,14 @@ function _computeDashboardMeta_(email, period, jurnalRows){
   if(shSiswa){
     const data = shSiswa.getDataRange().getValues();
     const kelasSet = new Set();
+    const tahunAktif = (period && period.tahun_pelajaran) || '';
 
     for(let i=1;i<data.length;i++){
       const kelas = data[i][0];
       const owner = String(data[i][5] || '').toLowerCase().trim();
 
       if(owner !== email) continue;
+      if(!_siswaRowMatchesPeriode_(data[i], tahunAktif)) continue;
 
       if(kelas){
         kelasSet.add(kelas);

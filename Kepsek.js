@@ -129,10 +129,11 @@ function getRekapSekolah() {
     }
   }
 
-  // Siswa & kelas per guru
+  // Siswa & kelas per guru (dibatasi tahun ajaran aktif sekolah, kalau ada)
   for (var ssi = 1; ssi < siswaRows.length; ssi++) {
     var sOwner = String(siswaRows[ssi][5] || '').toLowerCase().trim();
     if (!guruMap[sOwner]) continue;
+    if (!_siswaRowMatchesPeriode_(siswaRows[ssi], tahun_pelajaran)) continue;
     guruMap[sOwner].totalSiswa++;
   }
 
