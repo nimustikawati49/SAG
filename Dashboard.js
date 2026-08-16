@@ -205,13 +205,19 @@ function _computeDashboardMeta_(email, period, jurnalRows){
   let firstDate  = '';
   let lastDate   = '';
 
+  // Hitung dari SISWA (legacy, dikelola langsung via upload CSV) sekaligus
+  // per-kelas — dipakai baik untuk fallback maupun untuk dibandingkan
+  // dengan hitungan RiwayatKelas di bawah (yang sifatnya sinkronan
+  // otomatis dan bisa basi kalau siswa diupload ulang tanpa lewat alur
+  // yang mensinkronkan ke RiwayatKelas).
+  const legacyCountPerKelas = {};
   if(shSiswa){
     const data = shSiswa.getDataRange().getValues();
     const kelasSet = new Set();
     const tahunAktif = (period && period.tahun_pelajaran) || '';
 
     for(let i=1;i<data.length;i++){
-      const kelas = data[i][0];
+      const kelas = String(data[i][0] || '').trim();
       const owner = String(data[i][5] || '').toLowerCase().trim();
 
       if(owner !== email) continue;
@@ -220,6 +226,7 @@ function _computeDashboardMeta_(email, period, jurnalRows){
       if(kelas){
         kelasSet.add(kelas);
         totalSiswa++;
+        legacyCountPerKelas[kelas] = (legacyCountPerKelas[kelas] || 0) + 1;
       }
     }
 
@@ -233,7 +240,13 @@ function _computeDashboardMeta_(email, period, jurnalRows){
       totalKelas = kelasAktif.length;
       const counts = _countSiswaPerKelasBatch_(period.tahun_pelajaran, period.semester, kelasAktif);
       let sum = 0;
-      kelasAktif.forEach(function(k) { sum += (counts[k] || 0); });
+      kelasAktif.forEach(function(k) {
+        // Ambil yang lebih besar antara RiwayatKelas (sinkronan) dan SISWA
+        // (roster asli guru) — supaya kalau RiwayatKelas basi/telat sinkron,
+        // dashboard tidak melaporkan siswa lebih sedikit dari yang benar-benar
+        // ada di sheet SISWA milik guru ini.
+        sum += Math.max(counts[k] || 0, legacyCountPerKelas[k] || 0);
+      });
       totalSiswa = sum;
     }
   } catch(e) {}
