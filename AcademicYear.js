@@ -872,6 +872,17 @@ function addRiwayatKelas_(siswaId, tahun, semester, kelas, status) {
   return true;
 }
 
+/**
+ * importSiswaBaru(payload)
+ * Sinkronisasi batch import ke MasterSiswa + RiwayatKelas. Sengaja TIDAK
+ * memanggil getOrCreateMasterSiswa_()/addRiwayatKelas_() per baris di
+ * dalam loop — masing-masing fungsi itu baca ulang seluruh sheet SETIAP
+ * dipanggil, jadi untuk N siswa berarti O(N) full-sheet-read + O(N)
+ * appendRow terpisah (bisa ratusan panggilan Sheets API untuk satu kelas
+ * besar, itulah yang bikin upload data siswa terasa macet bermenit-menit).
+ * Di sini sheet dibaca sekali, dicocokkan di memori, lalu ditulis sekali
+ * lewat setValues() batch — sama seperti pola di migrateLegacyData_().
+ */
 function importSiswaBaru(payload) {
   ensureAcademicSchema_();
   const auth = getAuth();
@@ -882,29 +893,68 @@ function importSiswaBaru(payload) {
   const tahun = String(payload.tahun_pelajaran || getUserAcademicPeriod(auth.email).tahun_pelajaran || '').trim();
   const semester = String(payload.semester || getUserAcademicPeriod(auth.email).semester || '').trim();
 
+  if (!rows.length) return { success: true, created_master: 0, created_riwayat: 0 };
+
+  const shMaster = sheet('MasterSiswa');
+  const masterRows = shMaster.getDataRange().getValues();
+  const masterByKey = {};
+  for (let i = 1; i < masterRows.length; i++) {
+    const rNis = String(masterRows[i][1] || '').trim();
+    const rNisn = String(masterRows[i][2] || '').trim();
+    if (rNis) masterByKey['NIS:' + rNis] = masterRows[i][0];
+    if (rNisn) masterByKey['NISN:' + rNisn] = masterRows[i][0];
+  }
+
+  const shRiwayat = sheet('RiwayatKelas');
+  const riwayatRows = shRiwayat.getDataRange().getValues();
+  const riwayatKey = {};
+  for (let i = 1; i < riwayatRows.length; i++) {
+    const k = [riwayatRows[i][1], riwayatRows[i][2], riwayatRows[i][3], riwayatRows[i][4]].join('|');
+    riwayatKey[k] = true;
+  }
+
+  const now = new Date();
+  const newMasterRows = [];
+  const newRiwayatRows = [];
   let createdMaster = 0;
   let createdRiwayat = 0;
 
   rows.forEach(function(r) {
-    const m = getOrCreateMasterSiswa_({
-      nis: r.nis,
-      nisn: r.nisn,
-      nama: r.nama,
-      jk: r.jk,
-      ttl: r.ttl,
-      alamat: r.alamat,
-      orang_tua: r.orang_tua,
-      kontak: r.kontak,
-      status: r.status || 'AKTIF'
-    });
-    if (m.created) createdMaster++;
+    const nis = String(r.nis || '').trim();
+    const nisn = String(r.nisn || '').trim();
+
+    let siswaId = (nis && masterByKey['NIS:' + nis]) || (nisn && masterByKey['NISN:' + nisn]) || '';
+    if (!siswaId) {
+      siswaId = 'SIS-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+      newMasterRows.push([
+        siswaId, nis, nisn, r.nama || '', r.jk || '', r.ttl || '',
+        r.alamat || '', r.orang_tua || '', r.kontak || '', r.status || 'AKTIF', now, now
+      ]);
+      if (nis) masterByKey['NIS:' + nis] = siswaId;
+      if (nisn) masterByKey['NISN:' + nisn] = siswaId;
+      createdMaster++;
+    }
 
     if (r.kelas) {
-      if (addRiwayatKelas_(m.id, tahun, semester, r.kelas, r.status || 'AKTIF')) {
+      const status = String(r.status || 'AKTIF').toUpperCase();
+      const key = [tahun, semester, siswaId, r.kelas].join('|');
+      if (!riwayatKey[key]) {
+        newRiwayatRows.push([
+          'RK-' + Utilities.getUuid().slice(0, 8).toUpperCase(),
+          tahun, semester, siswaId, r.kelas, status, now, now
+        ]);
+        riwayatKey[key] = true;
         createdRiwayat++;
       }
     }
   });
+
+  if (newMasterRows.length) {
+    shMaster.getRange(shMaster.getLastRow() + 1, 1, newMasterRows.length, newMasterRows[0].length).setValues(newMasterRows);
+  }
+  if (newRiwayatRows.length) {
+    shRiwayat.getRange(shRiwayat.getLastRow() + 1, 1, newRiwayatRows.length, newRiwayatRows[0].length).setValues(newRiwayatRows);
+  }
 
   invalidateCache_('SISWA');
   return { success: true, created_master: createdMaster, created_riwayat: createdRiwayat };

@@ -144,31 +144,28 @@ function importSiswa(rows){
   // ulang, TAPI hanya di tahun ajaran aktif — supaya CSV yang diupload
   // ulang (mis. perbaiki typo) menggantikan data lama, tanpa duplikat, dan
   // TANPA menghapus riwayat kelas siswa di tahun-tahun ajaran sebelumnya.
+  //
+  // Ditulis sebagai SATU batch read + SATU batch write (bukan deleteRow/
+  // appendRow per baris di dalam loop) — dengan siswa yang banyak (30-40+),
+  // ratusan panggilan Sheets API satu-satu itulah yang bikin proses ini
+  // makan waktu sampai bermenit-menit dan progress bar di UI terlihat
+  // "macet" karena responsnya belum juga kembali ke browser.
   const kelasDiupload = new Set(normalized.map(function(r){ return r.kelas; }));
-  if (kelasDiupload.size) {
-    const emailNorm = String(auth.email).toLowerCase().trim();
-    const existing = sh.getDataRange().getValues();
-    for (let i = existing.length - 1; i >= 1; i--) {
-      const r = existing[i];
-      if (String(r[5] || '').toLowerCase().trim() !== emailNorm) continue;
-      if (!kelasDiupload.has(String(r[0] || '').trim())) continue;
-      if (!_siswaRowMatchesPeriode_(r, tahunAktif)) continue;
-      sh.deleteRow(i + 1);
-    }
-  }
+  const emailNorm = String(auth.email).toLowerCase().trim();
+  const numCols = Math.max(sh.getLastColumn(), SISWA_TAHUN_COL_ + 1);
+  const lastRowBefore = sh.getLastRow();
+  const allRows = lastRowBefore > 1 ? sh.getRange(2, 1, lastRowBefore - 1, numCols).getValues() : [];
+
+  const keepRows = allRows.filter(function(r){
+    const owner = String(r[5] || '').toLowerCase().trim();
+    if (owner !== emailNorm) return true;
+    if (!kelasDiupload.has(String(r[0] || '').trim())) return true;
+    if (!_siswaRowMatchesPeriode_(r, tahunAktif)) return true;
+    return false; // baris lama yang sedang diganti — buang
+  });
 
   const rowsForMaster = [];
-  normalized.forEach(r=>{
-    sh.appendRow([
-      r.kelas,
-      r.no_absen,
-      r.nis,
-      r.nama,
-      r.jk,
-      auth.email,
-      tahunAktif
-    ]);
-
+  const newSiswaRows = normalized.map(function(r){
     rowsForMaster.push({
       nis: r.nis,
       nisn: r.nisn,
@@ -181,7 +178,20 @@ function importSiswa(rows){
       kelas: r.kelas,
       status: r.status || 'AKTIF'
     });
+    return [r.kelas, r.no_absen, r.nis, r.nama, r.jk, auth.email, tahunAktif];
   });
+
+  const combined = keepRows.concat(newSiswaRows).map(function(r){
+    if (r.length >= numCols) return r.slice(0, numCols);
+    return r.concat(Array(numCols - r.length).fill(''));
+  });
+
+  if (lastRowBefore > 1) {
+    sh.getRange(2, 1, lastRowBefore - 1, numCols).clearContent();
+  }
+  if (combined.length) {
+    sh.getRange(2, 1, combined.length, numCols).setValues(combined);
+  }
 
   // Sinkronkan ke arsitektur baru (MasterSiswa + RiwayatKelas) tanpa merusak format lama.
   if (rowsForMaster.length) {

@@ -40,15 +40,25 @@ function uploadCsv(){
       return;
     }
 
+    const jumlahSiswa = Math.max(0, rows.length - 1); // baris 0 = header
+    const estimasiDetik = Math.max(5, Math.round((3 + jumlahSiswa * 0.1) / 5) * 5);
+    if (typeof showToast === 'function') {
+      showToast('⏳ Mengimpor ' + jumlahSiswa + ' siswa... estimasi ~' + estimasiDetik + ' detik', 'info', estimasiDetik * 1000);
+    }
+
     google.script.run
       .withSuccessHandler(()=>{
         finish();
-        alert('Upload berhasil');
+        const msg = '✅ Import data siswa sudah selesai! ' + jumlahSiswa + ' siswa berhasil diimport.';
+        if (typeof showToast === 'function') showToast(msg, 'success', 6000);
+        else alert(msg);
         checkAutoLockFrontend(); // 🔥 AUTO LOCK CEK
       })
       .withFailureHandler(err => {
         finish();
-        alert('Gagal upload: ' + (err && err.message ? err.message : err));
+        const msg = '❌ Gagal upload: ' + (err && err.message ? err.message : err);
+        if (typeof showToast === 'function') showToast(msg, 'error', 8000);
+        else alert(msg);
       })
       .importSiswa(rows);
   };
