@@ -391,6 +391,14 @@ footer .copy{
       gap:20px;
       margin-top:16px;
     }
+    /* Grid item tanpa min-width:0 tidak akan menyusut di bawah lebar
+       konten alaminya (mis. tabel lebar) — tanpa ini, tabel yang lebar
+       di dalam kolom malah mendorong SELURUH grid (dan halaman) melebar
+       ke luar viewport di zoom 100%, bukan discroll di dalam kolomnya
+       sendiri lewat .table-wrap. */
+    .grid-2 > *{
+      min-width:0;
+    }
     .box{
       background:#f9fafb;
       border-radius:14px;
