@@ -1782,7 +1782,7 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;align-items:flex-end;margin-top:12px">
       <div>
         <label>Kelas</label>
-        <select id="nilaiKelasSelect">
+        <select id="nilaiKelasSelect" onchange="refreshNilaiMapelDropdown_()">
           <option value="">-- Pilih Kelas --</option>
         </select>
       </div>
@@ -1794,15 +1794,15 @@
       </div>
       <div>
         <label>Tahun Pelajaran</label>
-        <input id="nilaiTahunInput" type="text" readonly
-          placeholder="Otomatis dari setting"
-          style="background:#f3f4f6;color:#374151;cursor:not-allowed">
+        <select id="nilaiTahunInput" onchange="onNilaiPeriodeChange_()">
+          <option value="">Memuat...</option>
+        </select>
       </div>
       <div>
         <label>Semester</label>
-        <input id="nilaiSemesterSelect" type="text" readonly
-          placeholder="Memuat dari setting..."
-          style="background:#f3f4f6;color:#374151;cursor:not-allowed">
+        <select id="nilaiSemesterSelect" onchange="onNilaiPeriodeChange_()">
+          <option value="">Memuat...</option>
+        </select>
       </div>
       <div>
         <button id="btnMuatNilai" onclick="muatDataNilai()">📂 Muat Data Siswa</button>
@@ -1880,8 +1880,8 @@
         <button class="nil-pill" data-key="uh2"   onclick="setFokusKomponen('uh2')">UH 2</button>
         <button class="nil-pill" data-key="uh3"   onclick="setFokusKomponen('uh3')">UH 3</button>
         <button class="nil-pill" data-key="pts"   onclick="setFokusKomponen('pts')">PTS</button>
-        <button class="nil-pill" data-key="pas"   onclick="setFokusKomponen('pas')">PAS</button>
-        <button class="nil-pill" data-key="pat"   onclick="setFokusKomponen('pat')">PAT</button>
+        <button class="nil-pill" data-key="pas"   onclick="setFokusKomponen('pas')">SAS</button>
+        <button class="nil-pill" data-key="pat"   onclick="setFokusKomponen('pat')">ASAT</button>
       </div>
     </div>
 
@@ -1908,7 +1908,7 @@
             <th colspan="3">Tugas</th>
             <th colspan="3">Ulangan Harian</th>
             <th rowspan="2" style="min-width:56px">PTS</th>
-            <th rowspan="2" style="min-width:56px">PAS</th>
+            <th rowspan="2" style="min-width:56px">SAS</th>
             <th rowspan="2">Rata Tugas</th>
             <th rowspan="2">Rata UH</th>
             <th rowspan="2">Rata Total</th>
@@ -2049,7 +2049,7 @@
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="cetakColPTS" checked> PTS</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColPAS" checked> PAS / PAT</label>
+          <input type="checkbox" id="cetakColPAS" checked> SAS / ASAT</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="cetakColRata" checked> Rata-rata</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">

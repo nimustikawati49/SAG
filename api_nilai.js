@@ -551,6 +551,133 @@ function getRankingNilai(kelas, mapel, tahun, semester) {
 }
 
 /**
+ * Daftar tahun ajaran + semester yang punya data nilai tersimpan milik user ini,
+ * digabung dengan periode aktif saat ini (walaupun belum ada data) supaya selalu
+ * bisa dipilih untuk mulai input nilai baru. Dipakai untuk mengisi dropdown
+ * Tahun Pelajaran/Semester di tab Nilai (tidak lagi terkunci ke periode aktif saja).
+ */
+function getRiwayatPeriodeNilai() {
+  const auth = authAdmin_();
+  const sh   = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  const h    = rows[0];
+  const idx  = (n) => h.indexOf(n);
+
+  const seen = {};
+  const periods = [];
+  rows.slice(1).forEach(r => {
+    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
+    if (!ownerOk) return;
+    const tahun    = String(r[idx('tahun')] || '').trim();
+    const semester = String(r[idx('semester')] || '').trim();
+    if (!tahun || !semester) return;
+    const key = tahun + '|' + semester;
+    if (seen[key]) return;
+    seen[key] = true;
+    periods.push({ tahun, semester });
+  });
+
+  let setting = {};
+  try { setting = getSetting() || {}; } catch (e) { setting = {}; }
+  const activeTahun = String(setting.tahun_pelajaran || '').trim();
+  const activeSem   = normalizeSemesterServer_(setting.semester);
+  if (activeTahun && activeSem) {
+    const key = activeTahun + '|' + activeSem;
+    if (!seen[key]) periods.push({ tahun: activeTahun, semester: activeSem });
+  }
+
+  periods.sort((a, b) => {
+    if (a.tahun !== b.tahun) return b.tahun.localeCompare(a.tahun);
+    return a.semester === 'Genap' && b.semester === 'Ganjil' ? -1 : (a.semester === b.semester ? 0 : 1);
+  });
+
+  return {
+    periods,
+    active: { tahun: activeTahun, semester: activeSem }
+  };
+}
+
+/** Versi server-side dari normalizeSemester_ di scripts-nilai.html */
+function normalizeSemesterServer_(raw) {
+  const s = String(raw || '').toLowerCase().trim();
+  if (s.includes('genap') || s.includes('ii') || s === '2' || s.endsWith(' 2')) return 'Genap';
+  if (s.includes('ganjil') || s.endsWith(' i') || s === 'i' || s === '1' || s.endsWith(' 1')) return 'Ganjil';
+  return raw || '';
+}
+
+/**
+ * Daftar kelas yang punya data nilai (mapel apa saja) untuk tahun/semester
+ * tertentu milik user ini. Kalau periode ini adalah periode aktif dan belum
+ * ada data nilai sama sekali, fallback ke daftar kelas hidup dari sheet SISWA
+ * supaya tetap bisa mulai input nilai baru.
+ */
+function getKelasNilaiUntukPeriode(tahun, semester) {
+  const auth = authAdmin_();
+  const sh   = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  const h    = rows[0];
+  const idx  = (n) => h.indexOf(n);
+
+  const kelasSet = new Set();
+  rows.slice(1).forEach(r => {
+    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
+    if (ownerOk
+      && String(r[idx('tahun')]).trim()    === String(tahun).trim()
+      && String(r[idx('semester')]).trim() === String(semester).trim()) {
+      kelasSet.add(String(r[idx('kelas')]).trim());
+    }
+  });
+
+  if (kelasSet.size === 0) {
+    let setting = {};
+    try { setting = getSetting() || {}; } catch (e) { setting = {}; }
+    const activeTahun = String(setting.tahun_pelajaran || '').trim();
+    const activeSem   = normalizeSemesterServer_(setting.semester);
+    if (activeTahun === String(tahun).trim() && activeSem === String(semester).trim()) {
+      return getAllKelasUntukNilai();
+    }
+  }
+
+  return [...kelasSet].filter(Boolean).sort();
+}
+
+/**
+ * Daftar mapel yang punya data nilai untuk kelas/tahun/semester tertentu
+ * milik user ini. Kalau periode ini adalah periode aktif dan belum ada data,
+ * fallback ke daftar mapel dari Setting (Mata Pelajaran Diampu).
+ */
+function getMapelNilaiUntukPeriode(kelas, tahun, semester) {
+  const auth = authAdmin_();
+  const sh   = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  const h    = rows[0];
+  const idx  = (n) => h.indexOf(n);
+
+  const mapelSet = new Set();
+  rows.slice(1).forEach(r => {
+    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
+    if (ownerOk
+      && String(r[idx('kelas')]).trim()    === String(kelas).trim()
+      && String(r[idx('tahun')]).trim()    === String(tahun).trim()
+      && String(r[idx('semester')]).trim() === String(semester).trim()) {
+      mapelSet.add(String(r[idx('mapel')]).trim());
+    }
+  });
+
+  if (mapelSet.size === 0) {
+    let setting = {};
+    try { setting = getSetting() || {}; } catch (e) { setting = {}; }
+    const activeTahun = String(setting.tahun_pelajaran || '').trim();
+    const activeSem   = normalizeSemesterServer_(setting.semester);
+    if (activeTahun === String(tahun).trim() && activeSem === String(semester).trim() && setting.mata_pelajaran) {
+      return String(setting.mata_pelajaran).split(/,\s*/).map(m => m.trim()).filter(Boolean);
+    }
+  }
+
+  return [...mapelSet].filter(Boolean).sort();
+}
+
+/**
  * Daftar kelas yang memiliki data nilai untuk mapel/tahun/semester tertentu.
  * Digunakan untuk multi-kelas cetak pada modal.
  */
