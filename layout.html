@@ -2498,13 +2498,38 @@
 
 <!-- ===== MODAL: CATATAN SISWA ===== -->
 <div id="catatanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
-  <div style="background:#fff;width:90%;max-width:420px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div style="background:#fff;width:90%;max-width:440px;border-radius:20px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <h3 id="catatanModalTitle" style="margin:0;font-size:15px">📝 Tambah Catatan</h3>
       <button onclick="closeCatatanModal()" style="background:#f3f4f6;color:#374151;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
     </div>
-    <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Siswa *</label>
-    <select id="catatanNisSel" style="width:100%;margin-bottom:12px"><option value="">-- Pilih Siswa --</option></select>
+
+    <!-- Mode: Individu (masalah serius/khusus) vs Grup (catatan sama untuk beberapa siswa) -->
+    <div id="catatanModeRow" style="display:flex;gap:8px;margin-bottom:6px">
+      <button type="button" id="catatanModeIndividuBtn" onclick="setCatatanMode_('individu')"
+        style="flex:1;padding:7px 10px;border-radius:10px;border:1.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;cursor:pointer">
+        👤 Individu</button>
+      <button type="button" id="catatanModeGrupBtn" onclick="setCatatanMode_('grup')"
+        style="flex:1;padding:7px 10px;border-radius:10px;border:1.5px solid #e5e7eb;background:#f9fafb;color:#6b7280;font-size:12px;font-weight:700;cursor:pointer">
+        👥 Grup</button>
+    </div>
+    <p id="catatanModeHint" class="muted" style="font-size:11px;margin:0 0 12px">
+      Mode individu: untuk siswa dengan masalah serius/khusus.
+    </p>
+
+    <div id="catatanIndividuBox">
+      <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Siswa *</label>
+      <select id="catatanNisSel" style="width:100%;margin-bottom:12px"><option value="">-- Pilih Siswa --</option></select>
+    </div>
+
+    <div id="catatanGrupBox" style="display:none;margin-bottom:12px">
+      <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">
+        Pilih Siswa (bisa lebih dari satu) *
+        <span id="catatanGrupCounter" class="muted" style="font-weight:400"></span>
+      </label>
+      <div id="catatanGrupList" style="max-height:180px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:4px"></div>
+    </div>
+
     <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">Catatan *</label>
     <textarea id="catatanTeks" rows="4" placeholder="Tulis catatan untuk siswa ini..." style="width:100%;box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">

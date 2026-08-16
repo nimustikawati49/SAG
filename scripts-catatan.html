@@ -6,6 +6,7 @@
 
 var _catatanKelasAktif = '';
 var _catatanSiswaList  = [];
+var _catatanMode       = 'individu'; // 'individu' | 'grup'
 
 /** Panggil saat tab catatan dibuka */
 function initCatatanSiswa() {
@@ -93,8 +94,15 @@ function _renderCatatanList_(items, kelas) {
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
   items.forEach(function(c) {
     var warna = '#fef9c3';
+    var isGrup = String(c.tipe || '').toLowerCase() === 'kelompok';
+    var badge = isGrup
+      ? '<span style="background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px">👥 Kelompok</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px">👤 Individu</span>';
     html += '<div style="background:' + warna + ';border:1.5px solid #fde68a;border-radius:14px;padding:14px 16px">' +
-      '<div style="font-weight:700;font-size:14px;margin-bottom:4px">🎓 ' + _escC(c.nama) + '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">' +
+        '<div style="font-weight:700;font-size:14px">🎓 ' + _escC(c.nama) + '</div>' +
+        badge +
+      '</div>' +
       '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">NIS: ' + _escC(c.nis) + '</div>' +
       '<div style="font-size:13px;white-space:pre-wrap;background:#fff;border-radius:8px;padding:8px 10px">' + _escC(c.catatan) + '</div>' +
       '<div style="font-size:11px;color:#9ca3af;margin-top:8px">📅 ' + _escC(c.tgl) + '</div>' +
@@ -108,21 +116,90 @@ function _renderCatatanList_(items, kelas) {
   container.innerHTML = html;
 }
 
+/**
+ * setCatatanMode_(mode)
+ * 'individu' — satu catatan untuk satu siswa (kasus serius/khusus).
+ * 'grup'     — satu catatan yang sama diterapkan ke beberapa siswa
+ * binaan sekaligus (guru tidak wajib menulis ulang per siswa).
+ */
+function setCatatanMode_(mode) {
+  _catatanMode = mode === 'grup' ? 'grup' : 'individu';
+
+  var indBtn  = document.getElementById('catatanModeIndividuBtn');
+  var grpBtn  = document.getElementById('catatanModeGrupBtn');
+  var indBox  = document.getElementById('catatanIndividuBox');
+  var grpBox  = document.getElementById('catatanGrupBox');
+  var hint    = document.getElementById('catatanModeHint');
+
+  var activeStyle   = 'flex:1;padding:7px 10px;border-radius:10px;border:1.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;cursor:pointer';
+  var inactiveStyle = 'flex:1;padding:7px 10px;border-radius:10px;border:1.5px solid #e5e7eb;background:#f9fafb;color:#6b7280;font-size:12px;font-weight:700;cursor:pointer';
+
+  if (_catatanMode === 'grup') {
+    if (indBtn) indBtn.style.cssText = inactiveStyle;
+    if (grpBtn) grpBtn.style.cssText = activeStyle;
+    if (indBox) indBox.style.display = 'none';
+    if (grpBox) grpBox.style.display = 'block';
+    if (hint) hint.textContent = 'Mode grup: satu catatan yang sama diterapkan ke semua siswa yang dicentang.';
+    _renderCatatanGrupList_();
+  } else {
+    if (indBtn) indBtn.style.cssText = activeStyle;
+    if (grpBtn) grpBtn.style.cssText = inactiveStyle;
+    if (indBox) indBox.style.display = 'block';
+    if (grpBox) grpBox.style.display = 'none';
+    if (hint) hint.textContent = 'Mode individu: untuk siswa dengan masalah serius/khusus.';
+  }
+}
+
+function _renderCatatanGrupList_() {
+  var box = document.getElementById('catatanGrupList');
+  if (!box) return;
+  if (!_catatanSiswaList.length) {
+    box.innerHTML = '<p class="muted" style="margin:6px;font-size:12px">Belum ada siswa binaan di kelas ini.</p>';
+    return;
+  }
+  var rows = _catatanSiswaList.map(function(s) {
+    var namaAttr = _escC(s.nama || '');
+    return '<tr>' +
+        '<td style="width:32px;text-align:center;padding:5px 4px;border-bottom:1px solid #f1f2f6">' +
+          '<input type="checkbox" class="catatanGrupCk" value="' + _escC(s.nis) + '" data-nama="' + namaAttr + '"' +
+            ' onchange="_updateCatatanGrupCounter_()">' +
+        '</td>' +
+        '<td style="text-align:left;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px">' + namaAttr + '</td>' +
+        '<td style="width:80px;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px;color:#6b7280">' + _escC(s.nis) + '</td>' +
+      '</tr>';
+  }).join('');
+  box.innerHTML = '<table style="width:100%;border-collapse:collapse">' +
+    '<tbody>' + rows + '</tbody></table>';
+  _updateCatatanGrupCounter_();
+}
+
+function _updateCatatanGrupCounter_() {
+  var checked = document.querySelectorAll('.catatanGrupCk:checked');
+  var counter = document.getElementById('catatanGrupCounter');
+  if (counter) counter.textContent = checked.length ? '(' + checked.length + ' dipilih)' : '';
+}
+
 function openCatatanModal(nis, nama, catatanTeks) {
   var m = document.getElementById('catatanModal');
   if (!m) return;
   m.style.display = 'flex';
 
-  var nisSel = document.getElementById('catatanNisSel');
-  var teksEl = document.getElementById('catatanTeks');
+  var nisSel   = document.getElementById('catatanNisSel');
+  var teksEl   = document.getElementById('catatanTeks');
+  var modeRow  = document.getElementById('catatanModeRow');
   if (nis && nisSel) {
     for (var i = 0; i < nisSel.options.length; i++) {
       if (nisSel.options[i].value === nis) { nisSel.selectedIndex = i; break; }
     }
     nisSel.disabled = true;
+    // Edit selalu untuk satu baris siswa tertentu — sembunyikan pilihan mode.
+    if (modeRow) modeRow.style.display = 'none';
+    setCatatanMode_('individu');
   } else if (nisSel) {
     nisSel.selectedIndex = 0;
     nisSel.disabled = false;
+    if (modeRow) modeRow.style.display = 'flex';
+    setCatatanMode_('individu');
   }
   if (teksEl) {
     teksEl.value = catatanTeks || '';
@@ -144,20 +221,11 @@ function closeCatatanModal() {
 
 function submitCatatan() {
   var kelas  = _catatanKelasAktif;
-  var nisSel = document.getElementById('catatanNisSel');
   var teksEl = document.getElementById('catatanTeks');
+  var teks   = teksEl ? teksEl.value.trim() : '';
 
   if (!kelas) {
     if (typeof showToast === 'function') showToast('⚠️ Pilih kelas terlebih dahulu', 'warning');
-    return;
-  }
-
-  var nis  = nisSel ? nisSel.value : '';
-  var nama = nisSel && nisSel.selectedOptions[0] ? nisSel.selectedOptions[0].getAttribute('data-nama') || '' : '';
-  var teks = teksEl ? teksEl.value.trim() : '';
-
-  if (!nis) {
-    if (typeof showToast === 'function') showToast('⚠️ Pilih siswa', 'warning');
     return;
   }
   if (!teks) {
@@ -166,6 +234,43 @@ function submitCatatan() {
   }
 
   var btn = document.getElementById('catatanSubmitBtn');
+
+  if (_catatanMode === 'grup') {
+    var checked = Array.from(document.querySelectorAll('.catatanGrupCk:checked'));
+    if (!checked.length) {
+      if (typeof showToast === 'function') showToast('⚠️ Pilih minimal satu siswa', 'warning');
+      return;
+    }
+    var siswa = checked.map(function(el) {
+      return { nis: el.value, nama: el.getAttribute('data-nama') || '' };
+    });
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+    google.script.run
+      .withSuccessHandler(function(res) {
+        closeCatatanModal();
+        var msg = '✅ Catatan grup disimpan untuk ' + (res && res.total ? res.total : siswa.length) + ' siswa';
+        if (typeof showToast === 'function') showToast(msg, 'success');
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+        loadCatatanByKelas();
+      })
+      .withFailureHandler(function(err) {
+        if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
+      })
+      .saveCatatanSiswaGrup({ kelas: kelas, siswa: siswa, catatan: teks });
+    return;
+  }
+
+  var nisSel = document.getElementById('catatanNisSel');
+  var nis  = nisSel ? nisSel.value : '';
+  var nama = nisSel && nisSel.selectedOptions[0] ? nisSel.selectedOptions[0].getAttribute('data-nama') || '' : '';
+
+  if (!nis) {
+    if (typeof showToast === 'function') showToast('⚠️ Pilih siswa', 'warning');
+    return;
+  }
+
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
 
   google.script.run
