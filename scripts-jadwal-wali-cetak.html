@@ -307,7 +307,8 @@ function renderRiwayatGuruWali(){
           const thumbUrl = match
             ? 'https://drive.google.com/thumbnail?id='+match[1]+'&sz=w90'
             : url;
-          return `<span onclick="gwOpenLightbox_('${url.replace(/'/g,"\\'")}')"\n            title="Lihat foto" style="cursor:zoom-in;display:inline-block;">
+          return `<span onclick="gwOpenLightbox_('${url.replace(/'/g,"\\'")}')"
+            title="Lihat foto" style="cursor:zoom-in;display:inline-block;">
             <img src="${thumbUrl}" alt="Foto" loading="lazy"
               style="width:44px;height:36px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;transition:transform .15s"
               onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''"
@@ -375,66 +376,47 @@ function cetakLaporanGuruWali(){
     </tr>
   `}).join('');
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Laporan Jurnal Guru Wali</title>
-  <style>
-    *{ box-sizing:border-box; }
-    body{ font-family:Arial,sans-serif; font-size:12px;
-          margin:24px; color:#111; }
-    h2{ text-align:center; font-size:16px; margin-bottom:4px; }
-    p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }
-    table{ width:100%; border-collapse:collapse; margin-top:8px; }
-    th,td{ border:1px solid #bbb; padding:7px 6px;
-           vertical-align:top; font-size:11px; }
-    th{ background:#eef2ff; font-weight:700; text-align:center; }
-    .ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }
-    .ttd-box{ text-align:center; min-width:220px; }
-    .ttd-box p{ margin:2px 0; }
-    .garis-ttd{ margin-top:68px; border-top:1px solid #333;
-                padding-top:4px; font-weight:700; }
-    .btn-cetak{ display:block; margin:20px auto 0;
-                padding:10px 28px; background:#6C63FF;
-                color:#fff; border:none; border-radius:8px;
-                cursor:pointer; font-size:14px; }
-    @media print{
-      .btn-cetak{ display:none; }
-    }
-  </style>
-</head>
-<body>
-  <h2>JURNAL PENDAMPINGAN GURU WALI</h2>
-  <p class="sub">${namaGuru} &nbsp;&bull;&nbsp; NIP: ${nip}</p>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:30px">No</th>
-        <th>Hari/Tanggal</th>
-        <th style="white-space:nowrap">Waktu</th>
-        <th>Fokus Pendampingan</th>
-        <th>Topik Pendampingan</th>
-        <th>Catatan</th>
-        <th>Tindak Lanjut</th>
-        <th>Dokumentasi</th>
-      </tr>
-    </thead>
-    <tbody>${baris}</tbody>
-  </table>
-  <div class="ttd-wrap">
-    <div class="ttd-box">
-      <p><b>Mengetahui</b></p>
-      <p>Guru Wali</p>
-      <div class="garis-ttd">
-        ${namaGuru}<br>
-        <span style="font-weight:normal">NIP. ${nip}</span>
-      </div>
-    </div>
-  </div>
-  <button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>
-</body>
-</html>`;
+  const html = '<!DOCTYPE html><html><head>' +
+    '<meta charset="UTF-8">' +
+    '<title>Laporan Jurnal Guru Wali</title>' +
+    '<style>' +
+      '*{ box-sizing:border-box; }' +
+      'body{ font-family:Arial,sans-serif; font-size:12px; margin:24px; color:#111; }' +
+      'h2{ text-align:center; font-size:16px; margin-bottom:4px; }' +
+      'p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }' +
+      'table{ width:100%; border-collapse:collapse; margin-top:8px; }' +
+      'th,td{ border:1px solid #bbb; padding:7px 6px; vertical-align:top; font-size:11px; }' +
+      'th{ background:#eef2ff; font-weight:700; text-align:center; }' +
+      '.ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }' +
+      '.ttd-box{ text-align:center; min-width:220px; }' +
+      '.ttd-box p{ margin:2px 0; }' +
+      '.garis-ttd{ margin-top:68px; border-top:1px solid #333; padding-top:4px; font-weight:700; }' +
+      '.btn-cetak{ display:block; margin:20px auto 0; padding:10px 28px; background:#6C63FF; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; }' +
+      '@media print{ .btn-cetak{ display:none; } }' +
+    '</style>' +
+    '</head><body>' +
+    '<h2>JURNAL PENDAMPINGAN GURU WALI</h2>' +
+    '<p class="sub">' + namaGuru + ' &nbsp;&bull;&nbsp; NIP: ' + nip + '</p>' +
+    '<table><thead><tr>' +
+      '<th style="width:30px">No</th>' +
+      '<th>Hari/Tanggal</th>' +
+      '<th style="white-space:nowrap">Waktu</th>' +
+      '<th>Fokus Pendampingan</th>' +
+      '<th>Topik Pendampingan</th>' +
+      '<th>Catatan</th>' +
+      '<th>Tindak Lanjut</th>' +
+      '<th>Dokumentasi</th>' +
+    '</tr></thead>' +
+    '<tbody>' + baris + '</tbody></table>' +
+    '<div class="ttd-wrap"><div class="ttd-box">' +
+      '<p><b>Mengetahui</b></p>' +
+      '<p>Guru Wali</p>' +
+      '<div class="garis-ttd">' + namaGuru + '<br>' +
+        '<span style="font-weight:normal">NIP. ' + nip + '</span>' +
+      '</div>' +
+    '</div></div>' +
+    '<button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>' +
+    '</body></html>';
 
   const win = window.open('', '_blank', 'width=960,height=720');
   if(!win){
@@ -488,8 +470,8 @@ function _scheduleJadwalNotif_(jadwalObj){
       if(delay > 0 && delay < 86400000){ // only schedule future events today
         var t = setTimeout(function(){
           try{
-            new Notification('\uD83D\uDD14 Kelas Segera Dimulai!', {
-              body: (item.kelas || '') + ' \u2014 ' + (item.mapel || '') +
+            new Notification('🔔 Kelas Segera Dimulai!', {
+              body: (item.kelas || '') + ' — ' + (item.mapel || '') +
                     '\n15 menit lagi pukul ' + item.jam_mulai,
               icon: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/emoji.svg'
             });
@@ -514,260 +496,4 @@ if(!window._jadwalLiveRefreshStarted){
 }
 
 /* ===== END LIVE-REFRESH & NOTIFICATIONS ===== */
-
-/* =====================================================
-   SISWA BINAAN – IMPORT / DOWNLOAD TEMPLATE
-   ===================================================== */
-
-/**
- * downloadTemplateSiswaBinaan() — file Excel (.xlsx) siap isi, dengan
- * baris contoh. Kolom opsional (no_absen, jk, ttl, alamat, orang_tua,
- * kontak) disejajarkan dengan Template Data Siswa utama di tab Setting —
- * kolom wajib (nama_siswa, nis, kelas, tahun_masuk, status) tetap sama
- * seperti sebelumnya.
- */
-function downloadTemplateSiswaBinaan(){
-  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
-  const header = ['nama_siswa','nis','kelas','tahun_masuk','status','no_absen','jk','ttl','alamat','orang_tua','kontak'];
-  const contoh  = ['Budi Santoso','1001','10A','2024','aktif','5','L','Jakarta, 01-01-2012','Jl. Contoh No. 1','Nama Orang Tua','081234567890'];
-  const ws = XLSX.utils.aoa_to_sheet([header, contoh]);
-  ws['!cols'] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Template Siswa Binaan');
-  XLSX.writeFile(wb, 'Template_Siswa_Binaan.xlsx');
-}
-
-function resetFileSiswaBinaan(){
-  const el = document.getElementById('fileSiswaBinaan');
-  if(el) el.value = '';
-}
-
-/**
- * uploadSiswaBinaan() — pakai SheetJS supaya CSV/XLS/XLSX benar-benar
- * kebaca (dulu cuma readAsText+split(','), jadi file .xlsx asli jadi
- * teks biner rusak). raw:false supaya NIS yang diketik sebagai teks
- * tidak kehilangan angka nol di depan.
- */
-function uploadSiswaBinaan(){
-  const fileInput = document.getElementById('fileSiswaBinaan');
-  const f = fileInput && fileInput.files[0];
-  if(!f){
-    alert('⚠️ Pilih file terlebih dahulu');
-    return;
-  }
-  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
-
-  const btn = document.getElementById('btnImportSiswaBinaan');
-  if(btn){ btn.disabled = true; btn.innerText = '⏳ Mengupload...'; }
-  startProgress();
-
-  const finish = () => {
-    endProgress();
-    if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
-  };
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    let aoa;
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
-        .filter(row => row.some(cell => String(cell || '').trim() !== ''));
-    } catch (err) {
-      finish();
-      alert('Gagal membaca file: ' + err.message);
-      return;
-    }
-    if (!aoa.length) {
-      finish();
-      alert('⚠️ File tidak berisi data siswa');
-      return;
-    }
-
-    const header = aoa[0].map(s => String(s || '').trim().toLowerCase());
-
-    // Validasi kolom
-    const required = ['nama_siswa','nis','kelas','tahun_masuk','status'];
-    const missing  = required.filter(c => !header.includes(c));
-    if(missing.length > 0){
-      finish();
-      alert('❌ Kolom tidak lengkap: ' + missing.join(', '));
-      return;
-    }
-
-    const rows = aoa.slice(1).filter(r => r[0]); // skip baris tanpa nama_siswa
-
-    if(rows.length === 0){
-      finish();
-      alert('⚠️ File tidak berisi data siswa');
-      return;
-    }
-
-    // kirim: [{nama_siswa, nis, kelas, tahun_masuk, status}, ...]
-    const payload = rows.map(r => {
-      const obj = {};
-      header.forEach((h, i) => { obj[h] = String(r[i] || '').trim(); });
-      return obj;
-    });
-
-    google.script.run
-      .withSuccessHandler(res => {
-        finish();
-        if(res && res.status){
-          alert('✅ ' + res.imported + ' siswa berhasil diimport');
-          resetFileSiswaBinaan();
-          loadSiswaBinaan();
-          loadInfoGuruWali();
-        }else{
-          alert('❌ Gagal import: ' + (res ? res.msg : 'Unknown error'));
-        }
-      })
-      .withFailureHandler(err => {
-        finish();
-        alert('❌ ' + err.message);
-      })
-      .importSiswaBinaan(payload);
-  };
-  reader.onerror = () => { finish(); alert('Gagal membaca file'); };
-  reader.readAsArrayBuffer(f);
-}
-
-/* =====================================================
-   SISWA BINAAN – AMBIL DARI DATA SISWA YANG SUDAH ADA
-   (kelas yang diampu di tab Setting), tanpa upload ulang CSV.
-   ===================================================== */
-
-function loadKelasUntukImportBinaan(){
-  const sel = document.getElementById('binaanImportKelasSelect');
-  if(!sel) return;
-  sel.innerHTML = '<option value="">Memuat...</option>';
-  google.script.run
-    .withSuccessHandler(list => {
-      const kelas = list || [];
-      if(!kelas.length){
-        sel.innerHTML = '<option value="">-- Belum ada Data Siswa --</option>';
-        return;
-      }
-      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
-        kelas.map(k => '<option value="' + k + '">' + k + '</option>').join('');
-    })
-    .withFailureHandler(err => {
-      sel.innerHTML = '<option value="">-- Gagal memuat, coba lagi --</option>';
-      console.error('[SiswaBinaan] getKelasUntukImportBinaan:', err && err.message);
-    })
-    .getKelasUntukImportBinaan();
-}
-
-function loadSiswaUntukImportBinaan(){
-  const kelas   = (document.getElementById('binaanImportKelasSelect') || {}).value || '';
-  const box     = document.getElementById('binaanImportSiswaList');
-  const counter = document.getElementById('binaanImportCounter');
-  const btn     = document.getElementById('btnAmbilSiswaBinaan');
-  if(!box) return;
-
-  if(!kelas){
-    box.style.display = 'none';
-    box.innerHTML = '';
-    if(btn) btn.disabled = true;
-    if(counter) counter.textContent = '';
-    return;
-  }
-
-  box.style.display = 'block';
-  box.innerHTML = '<p class="muted" style="margin:4px">Memuat siswa...</p>';
-  if(btn) btn.disabled = true;
-
-  google.script.run
-    .withSuccessHandler(list => {
-      const siswa = list || [];
-      if(!siswa.length){
-        box.innerHTML = '<p class="muted" style="margin:4px">Tidak ada siswa di kelas ini untuk tahun ajaran aktif.</p>';
-        if(counter) counter.textContent = '';
-        return;
-      }
-      // Kelas <=20 siswa otomatis semua tercentang; kalau lebih dari 20,
-      // hanya 20 pertama yang tercentang duluan — user bisa ganti pilihan.
-      box.innerHTML = siswa.map((s, i) => {
-        const checked = i < 20 ? 'checked' : '';
-        const namaAttr = String(s.nama || '').replace(/"/g, '&quot;');
-        const kelasAttr = String(s.kelas || '').replace(/"/g, '&quot;');
-        const noAbsenAttr = String(s.no_absen || '').replace(/"/g, '&quot;');
-        const jkAttr = String(s.jk || '').replace(/"/g, '&quot;');
-        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer">' +
-            '<input type="checkbox" class="binaanImportCk" value="' + (s.nis || '') + '" ' +
-              'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' +
-              'data-no-absen="' + noAbsenAttr + '" data-jk="' + jkAttr + '" ' + checked +
-              ' onchange="_updateBinaanImportCounter_()">' +
-            (s.nama || '-') + ' <span class="muted">(' + (s.nis || '-') + ')</span>' +
-          '</label>';
-      }).join('');
-      _updateBinaanImportCounter_();
-    })
-    .withFailureHandler(err => {
-      box.innerHTML = '<p style="color:red">Gagal memuat siswa: ' + (err && err.message ? err.message : err) + '</p>';
-    })
-    .getSiswaUntukImportBinaan(kelas);
-}
-
-function _updateBinaanImportCounter_(){
-  const all     = document.querySelectorAll('.binaanImportCk');
-  const checked = document.querySelectorAll('.binaanImportCk:checked');
-  const counter = document.getElementById('binaanImportCounter');
-  const btn     = document.getElementById('btnAmbilSiswaBinaan');
-
-  if(checked.length > 20){
-    // Defensif — batalkan centang paling akhir sampai kembali ke 20.
-    Array.from(checked).slice(20).forEach(el => { el.checked = false; });
-    return _updateBinaanImportCounter_();
-  }
-
-  if(counter){
-    counter.textContent = checked.length + '/20 siswa dipilih' +
-      (all.length ? ' (dari ' + all.length + ' siswa di kelas ini)' : '');
-  }
-  if(btn) btn.disabled = checked.length === 0;
-}
-
-function ambilSiswaBinaanDariKelas(){
-  const checked = Array.from(document.querySelectorAll('.binaanImportCk:checked'));
-  if(!checked.length){ alert('⚠️ Pilih minimal 1 siswa'); return; }
-  if(checked.length > 20){ alert('⚠️ Maksimal 20 siswa binaan'); return; }
-
-  const rows = checked.map(el => ({
-    nama_siswa : el.getAttribute('data-nama') || '',
-    nis        : el.value || '',
-    kelas      : el.getAttribute('data-kelas') || '',
-    tahun_masuk: '',
-    status     : 'aktif',
-    no_absen   : el.getAttribute('data-no-absen') || '',
-    jk         : el.getAttribute('data-jk') || ''
-  }));
-
-  const btn = document.getElementById('btnAmbilSiswaBinaan');
-  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
-  startProgress();
-
-  google.script.run
-    .withSuccessHandler(res => {
-      endProgress();
-      if(btn){ btn.disabled = false; btn.innerText = '📥 Ambil Siswa Terpilih'; }
-      if(res && res.status){
-        const msg = '✅ ' + res.imported + ' siswa binaan berhasil diambil dari Data Siswa';
-        if (typeof showToast === 'function') showToast(msg, 'success', 6000); else alert(msg);
-        loadSiswaBinaan();
-        loadInfoGuruWali();
-      }else{
-        alert('❌ Gagal: ' + (res ? res.msg : 'Unknown error'));
-      }
-    })
-    .withFailureHandler(err => {
-      endProgress();
-      if(btn){ btn.disabled = false; btn.innerText = '📥 Ambil Siswa Terpilih'; }
-      const msg = '❌ ' + (err && err.message ? err.message : err);
-      if (typeof showToast === 'function') showToast(msg, 'error', 8000); else alert(msg);
-    })
-    .importSiswaBinaan(rows);
-}
-
 </script>
