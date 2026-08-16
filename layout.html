@@ -714,6 +714,43 @@
             💾 Backup Semester Sekarang
           </button>
           <div id="backupSemesterInfo" style="margin-top:8px"></div>
+
+      <hr style="margin:28px 0">
+      <!-- ===== RIWAYAT & REKAP ABSENSI PER SISWA ===== -->
+      <h3>📋 Riwayat Absensi Per Kelas</h3>
+      <p class="muted">Rekap kehadiran setiap siswa dalam 1 kelas — pilih bulan (dalam tahun ajaran aktif), semester, atau satu tahun penuh.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+        <div>
+          <label style="font-size:12px">Kelas</label>
+          <select id="laporanKelas" style="min-width:120px">
+            <option value="">-- Pilih --</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px">Periode</label>
+          <select id="laporanMode" onchange="updateLaporanPeriodUI()" style="min-width:120px">
+            <option value="bulan">Per Bulan</option>
+            <option value="semester">Per Semester</option>
+            <option value="tahun">Tahun Pelajaran</option>
+          </select>
+        </div>
+        <div id="laporanPeriodWrap">
+          <label style="font-size:12px">Bulan</label>
+          <input type="month" id="laporanBulan" style="min-width:140px">
+        </div>
+        <div id="laporanSemesterWrap" style="display:none">
+          <label style="font-size:12px">Semester</label>
+          <select id="laporanSemester" style="min-width:120px">
+            <option value="ganjil">Ganjil</option>
+            <option value="genap">Genap</option>
+          </select>
+        </div>
+        <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
+        <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
+      </div>
+      <div id="laporanAbsensiWrap">
+        <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
+      </div>
     </div>
   </div>
 
@@ -1002,43 +1039,6 @@
         </thead>
         <tbody id="rekapBody"></tbody>
       </table>
-    </div>
-
-    <hr style="margin:28px 0">
-    <!-- ===== LAPORAN ABSENSI PER SISWA ===== -->
-    <h3>📋 Laporan Absensi Per Siswa</h3>
-    <p class="muted">Rekap kehadiran setiap siswa dalam 1 kelas — per bulan, semester, atau tahun pelajaran.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-      <div>
-        <label style="font-size:12px">Kelas</label>
-        <select id="laporanKelas" style="min-width:120px">
-          <option value="">-- Pilih --</option>
-        </select>
-      </div>
-      <div>
-        <label style="font-size:12px">Periode</label>
-        <select id="laporanMode" onchange="updateLaporanPeriodUI()" style="min-width:120px">
-          <option value="bulan">Per Bulan</option>
-          <option value="semester">Per Semester</option>
-          <option value="tahun">Tahun Pelajaran</option>
-        </select>
-      </div>
-      <div id="laporanPeriodWrap">
-        <label style="font-size:12px">Bulan</label>
-        <input type="month" id="laporanBulan" style="min-width:140px">
-      </div>
-      <div id="laporanSemesterWrap" style="display:none">
-        <label style="font-size:12px">Semester</label>
-        <select id="laporanSemester" style="min-width:120px">
-          <option value="ganjil">Ganjil</option>
-          <option value="genap">Genap</option>
-        </select>
-      </div>
-      <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
-      <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
-    </div>
-    <div id="laporanAbsensiWrap">
-      <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
     </div>
   </div>
 

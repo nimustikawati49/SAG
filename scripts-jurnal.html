@@ -174,11 +174,7 @@ function showTab(id){
     loadRiwayat();
     loadArsipRiwayat(); // tetap aman
     loadRiwayatFilterKelas(); // isi dropdown filter kelas
-  }
-
-  // 🔥 LOAD REKAP KELAS
-  if(id === 'rekap'){
-    initLaporanAbsensiKelas();
+    initLaporanAbsensiKelas(); // riwayat & rekap absensi per kelas (pindah dari tab Rekap)
   }
 
   // 🔥 AUTO LOAD SETTING + JADWAL
@@ -617,17 +613,44 @@ function doExportByBulan(){
 }
 
 /* ================= LAPORAN ABSENSI PER SISWA ================= */
+
+/**
+ * _batasBulanTahunAjaran_()
+ * Tahun ajaran Indonesia berjalan Juli s/d Juni tahun berikutnya. Dari
+ * format "2026/2027" hasilkan rentang bulan Juli 2026 - Juni 2027, dipakai
+ * sebagai min/max input#laporanBulan supaya guru cuma bisa pilih bulan di
+ * DALAM tahun ajaran aktif (sesuai permintaan), bukan bulan bebas kapan saja.
+ */
+function _batasBulanTahunAjaran_(tahunPelajaran){
+  const m = String(tahunPelajaran || '').match(/^(\d{4})\/(\d{4})$/);
+  if(!m) return null;
+  return { min: m[1] + '-07', max: m[2] + '-06' };
+}
+
 function initLaporanAbsensiKelas(){
   const sel = document.getElementById('laporanKelas');
+  const inp = document.getElementById('laporanBulan');
+
+  const batas = _batasBulanTahunAjaran_(window._settingCache && window._settingCache.tahun_pelajaran);
+  if(inp && batas){
+    inp.min = batas.min;
+    inp.max = batas.max;
+  }
+
   if(!sel || sel.options.length > 1) return;
   google.script.run.withSuccessHandler(d=>{
     d.forEach(k=> sel.innerHTML += `<option>${k}</option>`);
   }).getKelas();
-  // default bulan = current month
-  const inp = document.getElementById('laporanBulan');
+
+  // Default bulan = bulan sekarang, tapi tetap di dalam rentang tahun ajaran aktif
   if(inp && !inp.value){
     const now = new Date();
-    inp.value = now.getFullYear()+'-'+(now.getMonth()+1).toString().padStart(2,'0');
+    let ym = now.getFullYear()+'-'+(now.getMonth()+1).toString().padStart(2,'0');
+    if(batas){
+      if(ym < batas.min) ym = batas.min;
+      if(ym > batas.max) ym = batas.max;
+    }
+    inp.value = ym;
   }
 }
 
