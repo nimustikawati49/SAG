@@ -1082,12 +1082,17 @@ function loadKelasForPromosi_(){
       const kelasList  = (res && res.kelas_diampu) || [];
       const siswaCount = (res && res.siswa_per_kelas) || {};
       if(!kelasList.length){
-        box.innerHTML = '<p class="muted">Tidak ada Kelas Diampu tercatat di periode ini.</p>';
+        box.innerHTML = '<p class="muted">Tidak ada siswa/kelas tercatat untuk Anda di periode ini.</p>';
         return;
       }
+      const legacyNote = (res && res.from_legacy_siswa)
+        ? '<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px">'+
+            'ℹ️ Kelas diambil langsung dari data siswa yang sudah ada (belum pernah diisi lewat "Kelas Diampu").</div>'
+        : '';
       box.innerHTML =
+        legacyNote +
         '<div style="font-size:12px;color:#4b5563;margin-bottom:8px">'+
-          '✅ Centang kelas yang Anda ajar di tahun baru — siswa otomatis naik ke kelas tersebut.</div>' +
+          '✅ Centang kelas yang Anda ajar di tahun baru — siswa otomatis naik ke kelas tersebut, tanpa perlu upload ulang.</div>' +
         kelasList.map(function(k){
           const safe  = _escSetting_(k);
           const sug   = _escSetting_(_suggestNextKelas_(k));

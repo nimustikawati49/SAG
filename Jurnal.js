@@ -20,7 +20,10 @@ function getKelas(){
   const kelas = data
     .filter(r => String(r[5]).toLowerCase().trim() === auth.email)
     .map(r => r[0])
-    .filter(Boolean);
+    .filter(Boolean)
+    // Siswa yang sudah "lulus" lewat Promosi Siswa ditandai Kelas=ALUMNI —
+    // jangan tampil sebagai pilihan kelas aktif untuk isi jurnal baru.
+    .filter(k => String(k).toUpperCase() !== 'ALUMNI');
 
   return [...new Set(kelas)].sort();
 }

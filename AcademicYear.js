@@ -1085,6 +1085,44 @@ function promoteSiswaWizard(payload) {
     if (addRiwayatKelas_(r[3], toYear, toSem, kelasTujuan, status)) processed++;
   });
 
+  // Fallback: promosi langsung di sheet SISWA lama, untuk guru yang
+  // rosternya belum pernah masuk RiwayatKelas (mis. SISWA sheet tanpa
+  // kolom tahun_pelajaran/semester — format lama yang masih dipakai).
+  // Update in-place kolom Kelas untuk baris yang cocok, konsisten dengan
+  // cara getKelas()/getSiswaByKelas() di Jurnal.js membaca roster dari
+  // SISWA saat RiwayatKelas kosong untuk guru ini. Siswa yang sama tetap
+  // 1 baris — cuma naik tingkat; kelas lama otomatis kosong lagi dan
+  // siap diisi angkatan baru lewat upload CSV.
+  let processedLegacy = 0;
+  try {
+    const shSiswaProm = sheet('SISWA');
+    if (shSiswaProm && mapping.length) {
+      const lastRowProm = shSiswaProm.getLastRow();
+      if (lastRowProm > 1) {
+        const rangeProm = shSiswaProm.getRange(2, 1, lastRowProm - 1, 6);
+        const allRows = rangeProm.getValues();
+        const emailNormProm = String(auth.email).toLowerCase().trim();
+        let touched = false;
+        for (let i = 0; i < allRows.length; i++) {
+          const rowKelas = String(allRows[i][0] || '').trim();
+          const rowOwner = String(allRows[i][5] || '').toLowerCase().trim();
+          if (rowOwner !== emailNormProm) continue;
+          const target = mapObj[rowKelas];
+          if (!target) continue;
+          allRows[i][0] = String(target).toUpperCase() === 'ALUMNI' ? 'ALUMNI' : target;
+          touched = true;
+          processedLegacy++;
+        }
+        if (touched) {
+          rangeProm.setValues(allRows);
+          invalidateCache_('SISWA');
+        }
+      }
+    }
+  } catch (e) {
+    try { logError_('PROMOTE_SISWA_LEGACY', e); } catch (e2) {}
+  }
+
   // Pastikan tahun tujuan terdaftar di MasterTahunPelajaran
   ensureAcademicYearExists_(toYear, toSem, false);
 
@@ -1137,12 +1175,14 @@ function promoteSiswaWizard(payload) {
 
   logAudit('PROMOSI_SISWA', auth.email,
     fromYear + '/' + fromSem + ' -> ' + toYear + '/' + toSem +
-    ' | Siswa=' + processed + ' | GM=' + guruMengajarUpdated);
+    ' | Siswa(riwayat)=' + processed + ' | Siswa(legacy)=' + processedLegacy + ' | GM=' + guruMengajarUpdated);
   invalidateDashboardCache_();
   trySyncGuruSummaryAfterMutation_(auth.email, 'PROMOSI_SISWA');
   return {
     success: true,
-    processed: processed,
+    processed: processed + processedLegacy,
+    processed_riwayat: processed,
+    processed_legacy: processedLegacy,
     guru_mengajar_updated: guruMengajarUpdated,
     all_new_kelas: allNewKelas,
     kelas_perlu_siswa_baru: newKelas
@@ -1180,7 +1220,7 @@ function getAcademicHistorySummary(tahun, semester) {
   if (!tahun || !semester) throw new Error('Tahun & semester wajib diisi');
 
   const combos = getGuruMengajarForPeriod_(auth.email, tahun, semester);
-  const kelasList = Array.from(new Set(combos.map(function(c) { return c.kelas; }).filter(Boolean))).sort();
+  let kelasList = Array.from(new Set(combos.map(function(c) { return c.kelas; }).filter(Boolean))).sort();
   const mapelList = Array.from(new Set(combos.map(function(c) { return c.mapel; }).filter(Boolean))).sort();
   const jadwal = (typeof getJadwalSemesterForPeriod_ === 'function')
     ? getJadwalSemesterForPeriod_(auth.email, tahun, semester) : [];
@@ -1199,13 +1239,39 @@ function getAcademicHistorySummary(tahun, semester) {
     if (siswaPerKelas.hasOwnProperty(k)) siswaPerKelas[k]++;
   });
 
+  // Fallback: guru ini belum pernah isi "Kelas Diampu" (GuruMengajar) untuk
+  // periode ini — ambil langsung dari roster SISWA lama (sheet legacy tanpa
+  // kolom tahun_pelajaran/semester), sama seperti getKelas() di Jurnal.js
+  // saat GuruMengajar kosong. Tanpa ini, Promosi Siswa tampak "tidak ada
+  // kelas" walau guru punya siswa aktif, karena rosternya memang belum
+  // pernah dicatat lewat sistem multi-tahun.
+  let fromLegacySiswa = false;
+  if (kelasList.length === 0) {
+    const shSiswaHist = sheet('SISWA');
+    if (shSiswaHist && shSiswaHist.getLastRow() > 1) {
+      const emailNormHist = String(auth.email).toLowerCase().trim();
+      const siswaRows = shSiswaHist.getRange(2, 1, shSiswaHist.getLastRow() - 1, 6).getValues();
+      const counts = {};
+      siswaRows.forEach(function(r) {
+        if (String(r[5] || '').toLowerCase().trim() !== emailNormHist) return;
+        const k = String(r[0] || '').trim();
+        if (!k) return;
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      kelasList = Object.keys(counts).sort();
+      kelasList.forEach(function(k) { siswaPerKelas[k] = counts[k]; });
+      fromLegacySiswa = kelasList.length > 0;
+    }
+  }
+
   return {
     tahun_pelajaran: tahun,
     semester: semester,
     kelas_diampu: kelasList,
     mapel_diampu: mapelList,
     siswa_per_kelas: siswaPerKelas,
-    jadwal_count: jadwal.length
+    jadwal_count: jadwal.length,
+    from_legacy_siswa: fromLegacySiswa
   };
 }
 
