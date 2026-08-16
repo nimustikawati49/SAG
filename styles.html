@@ -212,6 +212,18 @@ footer .copy{
       border:1px solid var(--line);
       font-size:14px;
     }
+    /* input{width:100%} di atas tidak dibatasi per-type, jadi tanpa ini
+       SETIAP checkbox/radio di seluruh aplikasi ikut melebar penuh dan
+       tata letaknya berantakan (persis bug yang ditemukan di daftar
+       centang siswa binaan) — reset ke ukuran native supaya konsisten
+       di mana pun checkbox/radio dipakai, statis maupun dibuat dinamis. */
+    input[type=checkbox],input[type=radio]{
+      width:16px;
+      height:16px;
+      padding:0;
+      margin-top:0;
+      flex-shrink:0;
+    }
     textarea{min-height:70px}
     .sub-title{
       margin-top:16px;
