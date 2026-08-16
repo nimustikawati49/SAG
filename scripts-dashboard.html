@@ -900,6 +900,7 @@ function loadJurnalGuruWali(){
   // Panggil fungsi lain dari scripts-jadwal-wali.html jika tersedia
   if(typeof loadRiwayatGuruWali === 'function') loadRiwayatGuruWali();
   if(typeof loadStatusArsipWali === 'function') loadStatusArsipWali();
+  if(typeof loadKelasUntukImportBinaan === 'function') loadKelasUntukImportBinaan();
 
   // Set default tanggal hari ini
   var tglEl = document.getElementById('gwTanggal');

@@ -776,6 +776,31 @@
           💾 Simpan Data Siswa Binaan
         </button>
       </div>
+
+      <hr style="margin:20px 0;border:none;border-top:1px dashed #cbd5e1">
+
+      <!-- Ambil dari Data Siswa yang sudah ada, tanpa upload ulang -->
+      <div style="background:#fff;border:1px dashed #a5b4fc;border-radius:12px;padding:16px">
+        <h4 style="margin-top:0">🔁 Ambil dari Data Siswa yang Sudah Ada</h4>
+        <p class="muted" style="margin-top:0;font-size:13px">
+          Sudah upload roster kelas lewat <b>Data Siswa</b> di tab Setting? Pilih kelasnya di sini,
+          lalu centang siswa mana saja (maks. 20) yang mau dijadikan siswa binaan — tanpa perlu
+          download template & upload ulang.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <select id="binaanImportKelasSelect" style="min-width:160px" onchange="loadSiswaUntukImportBinaan()">
+            <option value="">-- Pilih Kelas --</option>
+          </select>
+          <button class="ghost" onclick="loadKelasUntukImportBinaan()">🔄 Muat Daftar Kelas</button>
+          <span id="binaanImportCounter" class="muted" style="font-size:12px"></span>
+        </div>
+        <div id="binaanImportSiswaList" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;display:none"></div>
+        <div class="action-row" style="margin-top:12px">
+          <button id="btnAmbilSiswaBinaan" onclick="ambilSiswaBinaanDariKelas()" disabled>
+            📥 Ambil Siswa Terpilih
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 2. DAFTAR SISWA BINAAN -->

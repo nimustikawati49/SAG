@@ -630,4 +630,131 @@ function uploadSiswaBinaan(){
   reader.readAsArrayBuffer(f);
 }
 
+/* =====================================================
+   SISWA BINAAN – AMBIL DARI DATA SISWA YANG SUDAH ADA
+   (kelas yang diampu di tab Setting), tanpa upload ulang CSV.
+   ===================================================== */
+
+function loadKelasUntukImportBinaan(){
+  const sel = document.getElementById('binaanImportKelasSelect');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">Memuat...</option>';
+  google.script.run
+    .withSuccessHandler(list => {
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
+        (list || []).map(k => '<option value="' + k + '">' + k + '</option>').join('');
+    })
+    .withFailureHandler(err => {
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+      console.error('[SiswaBinaan] getKelasUntukImportBinaan:', err && err.message);
+    })
+    .getKelasUntukImportBinaan();
+}
+
+function loadSiswaUntukImportBinaan(){
+  const kelas   = (document.getElementById('binaanImportKelasSelect') || {}).value || '';
+  const box     = document.getElementById('binaanImportSiswaList');
+  const counter = document.getElementById('binaanImportCounter');
+  const btn     = document.getElementById('btnAmbilSiswaBinaan');
+  if(!box) return;
+
+  if(!kelas){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    if(btn) btn.disabled = true;
+    if(counter) counter.textContent = '';
+    return;
+  }
+
+  box.style.display = 'block';
+  box.innerHTML = '<p class="muted" style="margin:4px">Memuat siswa...</p>';
+  if(btn) btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(list => {
+      const siswa = list || [];
+      if(!siswa.length){
+        box.innerHTML = '<p class="muted" style="margin:4px">Tidak ada siswa di kelas ini untuk tahun ajaran aktif.</p>';
+        if(counter) counter.textContent = '';
+        return;
+      }
+      // Kelas <=20 siswa otomatis semua tercentang; kalau lebih dari 20,
+      // hanya 20 pertama yang tercentang duluan — user bisa ganti pilihan.
+      box.innerHTML = siswa.map((s, i) => {
+        const checked = i < 20 ? 'checked' : '';
+        const namaAttr = String(s.nama || '').replace(/"/g, '&quot;');
+        const kelasAttr = String(s.kelas || '').replace(/"/g, '&quot;');
+        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer">' +
+            '<input type="checkbox" class="binaanImportCk" value="' + (s.nis || '') + '" ' +
+              'data-nama="' + namaAttr + '" data-kelas="' + kelasAttr + '" ' + checked +
+              ' onchange="_updateBinaanImportCounter_()">' +
+            (s.nama || '-') + ' <span class="muted">(' + (s.nis || '-') + ')</span>' +
+          '</label>';
+      }).join('');
+      _updateBinaanImportCounter_();
+    })
+    .withFailureHandler(err => {
+      box.innerHTML = '<p style="color:red">Gagal memuat siswa: ' + (err && err.message ? err.message : err) + '</p>';
+    })
+    .getSiswaUntukImportBinaan(kelas);
+}
+
+function _updateBinaanImportCounter_(){
+  const all     = document.querySelectorAll('.binaanImportCk');
+  const checked = document.querySelectorAll('.binaanImportCk:checked');
+  const counter = document.getElementById('binaanImportCounter');
+  const btn     = document.getElementById('btnAmbilSiswaBinaan');
+
+  if(checked.length > 20){
+    // Defensif — batalkan centang paling akhir sampai kembali ke 20.
+    Array.from(checked).slice(20).forEach(el => { el.checked = false; });
+    return _updateBinaanImportCounter_();
+  }
+
+  if(counter){
+    counter.textContent = checked.length + '/20 siswa dipilih' +
+      (all.length ? ' (dari ' + all.length + ' siswa di kelas ini)' : '');
+  }
+  if(btn) btn.disabled = checked.length === 0;
+}
+
+function ambilSiswaBinaanDariKelas(){
+  const checked = Array.from(document.querySelectorAll('.binaanImportCk:checked'));
+  if(!checked.length){ alert('⚠️ Pilih minimal 1 siswa'); return; }
+  if(checked.length > 20){ alert('⚠️ Maksimal 20 siswa binaan'); return; }
+
+  const rows = checked.map(el => ({
+    nama_siswa : el.getAttribute('data-nama') || '',
+    nis        : el.value || '',
+    kelas      : el.getAttribute('data-kelas') || '',
+    tahun_masuk: '',
+    status     : 'aktif'
+  }));
+
+  const btn = document.getElementById('btnAmbilSiswaBinaan');
+  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
+  startProgress();
+
+  google.script.run
+    .withSuccessHandler(res => {
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '📥 Ambil Siswa Terpilih'; }
+      if(res && res.status){
+        const msg = '✅ ' + res.imported + ' siswa binaan berhasil diambil dari Data Siswa';
+        if (typeof showToast === 'function') showToast(msg, 'success', 6000); else alert(msg);
+        loadSiswaBinaan();
+        loadInfoGuruWali();
+      }else{
+        alert('❌ Gagal: ' + (res ? res.msg : 'Unknown error'));
+      }
+    })
+    .withFailureHandler(err => {
+      endProgress();
+      if(btn){ btn.disabled = false; btn.innerText = '📥 Ambil Siswa Terpilih'; }
+      const msg = '❌ ' + (err && err.message ? err.message : err);
+      if (typeof showToast === 'function') showToast(msg, 'error', 8000); else alert(msg);
+    })
+    .importSiswaBinaan(rows);
+}
+
 </script>

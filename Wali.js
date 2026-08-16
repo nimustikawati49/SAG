@@ -394,6 +394,68 @@ function arsipJurnalGuruWali(){
   return { success: true, tahun, jumlah: toArchive.length };
 }
 
+/**
+ * getKelasUntukImportBinaan()
+ * Daftar kelas milik guru ini dari Data Siswa (sheet SISWA) di tahun ajaran
+ * aktif — supaya wali kelas bisa AMBIL siswa binaan langsung dari roster
+ * yang sudah diupload di tab Setting, tanpa download template & upload
+ * ulang CSV yang sama.
+ */
+function getKelasUntukImportBinaan(){
+  const auth = getAuth();
+  if(auth.role !== 'admin' && auth.role !== 'superadmin'){
+    throw new Error('AKSES_DITOLAK');
+  }
+  const sh = sheet('SISWA');
+  if(!sh) return [];
+
+  const email = String(auth.email || '').toLowerCase().trim();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+  const data = sh.getDataRange().getValues();
+  const kelasSet = new Set();
+  for(let i = 1; i < data.length; i++){
+    const owner = String(data[i][5] || '').toLowerCase().trim();
+    if(owner !== email) continue;
+    if(!_siswaRowMatchesPeriode_(data[i], tahunAktif)) continue;
+    const kelas = String(data[i][0] || '').trim();
+    if(kelas && kelas.toUpperCase() !== 'ALUMNI') kelasSet.add(kelas);
+  }
+  return Array.from(kelasSet).sort();
+}
+
+/**
+ * getSiswaUntukImportBinaan(kelas)
+ * Daftar siswa di satu kelas (dari sheet SISWA, tahun ajaran aktif) untuk
+ * dipilih sebagai siswa binaan. TIDAK dibatasi 20 di sini — batas 20 siswa
+ * binaan baru ditegakkan saat disimpan lewat importSiswaBinaan(), supaya
+ * user yang bisa memilih sendiri siswa mana kalau kelasnya lebih dari 20.
+ */
+function getSiswaUntukImportBinaan(kelas){
+  const auth = getAuth();
+  if(auth.role !== 'admin' && auth.role !== 'superadmin'){
+    throw new Error('AKSES_DITOLAK');
+  }
+  const sh = sheet('SISWA');
+  if(!sh) return [];
+
+  const email = String(auth.email || '').toLowerCase().trim();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+  const data = sh.getDataRange().getValues();
+  const result = [];
+  for(let i = 1; i < data.length; i++){
+    const owner = String(data[i][5] || '').toLowerCase().trim();
+    if(owner !== email) continue;
+    if(String(data[i][0] || '').trim() !== String(kelas || '').trim()) continue;
+    if(!_siswaRowMatchesPeriode_(data[i], tahunAktif)) continue;
+    result.push({
+      nis  : String(data[i][2] || ''),
+      nama : String(data[i][3] || ''),
+      kelas: String(data[i][0] || '')
+    });
+  }
+  return result.sort(function(a, b){ return String(a.nama).localeCompare(String(b.nama)); });
+}
+
 function importSiswaBinaan(rows){
 
   assertLicenseActive();
