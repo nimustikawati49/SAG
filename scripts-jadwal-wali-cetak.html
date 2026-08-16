@@ -519,15 +519,19 @@ if(!window._jadwalLiveRefreshStarted){
    SISWA BINAAN – IMPORT / DOWNLOAD TEMPLATE
    ===================================================== */
 
+/**
+ * downloadTemplateSiswaBinaan() — file Excel (.xlsx) siap isi, dengan
+ * baris contoh, sama seperti Template Data Siswa utama di tab Setting.
+ */
 function downloadTemplateSiswaBinaan(){
-  const csv = 'nama_siswa,nis,kelas,tahun_masuk,status\n' +
-              '(contoh) Budi Santoso,1001,10A,2024,aktif\n';
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(
-    new Blob([csv], { type: 'text/csv' })
-  );
-  a.download = 'template_siswa_binaan.csv';
-  a.click();
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
+  const header = ['nama_siswa','nis','kelas','tahun_masuk','status'];
+  const contoh  = ['Budi Santoso','1001','10A','2024','aktif'];
+  const ws = XLSX.utils.aoa_to_sheet([header, contoh]);
+  ws['!cols'] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Siswa Binaan');
+  XLSX.writeFile(wb, 'Template_Siswa_Binaan.xlsx');
 }
 
 function resetFileSiswaBinaan(){
@@ -535,40 +539,64 @@ function resetFileSiswaBinaan(){
   if(el) el.value = '';
 }
 
+/**
+ * uploadSiswaBinaan() — pakai SheetJS supaya CSV/XLS/XLSX benar-benar
+ * kebaca (dulu cuma readAsText+split(','), jadi file .xlsx asli jadi
+ * teks biner rusak). raw:false supaya NIS yang diketik sebagai teks
+ * tidak kehilangan angka nol di depan.
+ */
 function uploadSiswaBinaan(){
-  const f = document.getElementById('fileSiswaBinaan').files[0];
+  const fileInput = document.getElementById('fileSiswaBinaan');
+  const f = fileInput && fileInput.files[0];
   if(!f){
     alert('⚠️ Pilih file terlebih dahulu');
     return;
   }
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
 
   const btn = document.getElementById('btnImportSiswaBinaan');
   if(btn){ btn.disabled = true; btn.innerText = '⏳ Mengupload...'; }
   startProgress();
 
+  const finish = () => {
+    endProgress();
+    if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+  };
+
   const reader = new FileReader();
   reader.onload = e => {
-    const text   = e.target.result;
-    const lines  = text.trim().split('\n');
-    const header = lines[0].split(',').map(s => s.trim().toLowerCase());
+    let aoa;
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
+        .filter(row => row.some(cell => String(cell || '').trim() !== ''));
+    } catch (err) {
+      finish();
+      alert('Gagal membaca file: ' + err.message);
+      return;
+    }
+    if (!aoa.length) {
+      finish();
+      alert('⚠️ File tidak berisi data siswa');
+      return;
+    }
+
+    const header = aoa[0].map(s => String(s || '').trim().toLowerCase());
 
     // Validasi kolom
     const required = ['nama_siswa','nis','kelas','tahun_masuk','status'];
     const missing  = required.filter(c => !header.includes(c));
     if(missing.length > 0){
-      endProgress();
-      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      finish();
       alert('❌ Kolom tidak lengkap: ' + missing.join(', '));
       return;
     }
 
-    const rows = lines.slice(1)
-      .map(l => l.split(',').map(s => s.trim()))
-      .filter(r => r.length > 1 && r[0]); // skip baris kosong
+    const rows = aoa.slice(1).filter(r => r[0]); // skip baris tanpa nama_siswa
 
     if(rows.length === 0){
-      endProgress();
-      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+      finish();
       alert('⚠️ File tidak berisi data siswa');
       return;
     }
@@ -576,14 +604,13 @@ function uploadSiswaBinaan(){
     // kirim: [{nama_siswa, nis, kelas, tahun_masuk, status}, ...]
     const payload = rows.map(r => {
       const obj = {};
-      header.forEach((h, i) => { obj[h] = r[i] || ''; });
+      header.forEach((h, i) => { obj[h] = String(r[i] || '').trim(); });
       return obj;
     });
 
     google.script.run
       .withSuccessHandler(res => {
-        endProgress();
-        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        finish();
         if(res && res.status){
           alert('✅ ' + res.imported + ' siswa berhasil diimport');
           resetFileSiswaBinaan();
@@ -594,13 +621,13 @@ function uploadSiswaBinaan(){
         }
       })
       .withFailureHandler(err => {
-        endProgress();
-        if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Data Siswa Binaan'; }
+        finish();
         alert('❌ ' + err.message);
       })
       .importSiswaBinaan(payload);
   };
-  reader.readAsText(f);
+  reader.onerror = () => { finish(); alert('Gagal membaca file'); };
+  reader.readAsArrayBuffer(f);
 }
 
 </script>
