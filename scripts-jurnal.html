@@ -174,7 +174,11 @@ function showTab(id){
     loadRiwayat();
     loadArsipRiwayat(); // tetap aman
     loadRiwayatFilterKelas(); // isi dropdown filter kelas
-    initLaporanAbsensiKelas(); // riwayat & rekap absensi per kelas (pindah dari tab Rekap)
+  }
+
+  // 🔥 LOAD REKAP ABSENSI (rentang tanggal + rekap per kelas)
+  if(id === 'rekap'){
+    initLaporanAbsensiKelas();
   }
 
   // 🔥 AUTO LOAD SETTING + JADWAL

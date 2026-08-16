@@ -105,9 +105,14 @@
       </button>
       <div class="sb-group-body" id="sbgb-monitoring">
         <button class="sb-item sb-child" data-tab="riwayat"
-                onclick="sbGo_('riwayat')" data-tooltip="Riwayat & Rekap">
+                onclick="sbGo_('riwayat')" data-tooltip="Riwayat Jurnal">
           <span class="sb-icon">📑</span>
-          <span class="sb-label">Riwayat & Rekap</span>
+          <span class="sb-label">Riwayat Jurnal</span>
+        </button>
+        <button class="sb-item sb-child" data-tab="rekap"
+                onclick="sbGo_('rekap')" data-tooltip="Rekap Absensi">
+          <span class="sb-icon">📊</span>
+          <span class="sb-label">Rekap Absensi</span>
         </button>
       </div>
     </div>
@@ -284,8 +289,9 @@
     <div class="menu" style="width:100%">
       <button onclick="showTab('dashboard'); initDashboardMeta();">📊 Dashboard</button>
       <button onclick="showTab('jurnalku')">📘 Jurnalku</button>
-      <button onclick="showTab('riwayat')">📑 Riwayat & Rekap</button>
+      <button onclick="showTab('riwayat')">📑 Riwayat Jurnal</button>
       <button onclick="showTab('jurnalGuruWali')">👨‍🏫 Jurnal Guru Wali</button>
+      <button onclick="showTab('rekap')">📊 Rekap Absensi</button>
       <button class="admin-only"
               onclick="showTab('inputNilai'); initTabNilai();">📊 Input Nilai</button>
       <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
@@ -407,7 +413,8 @@
     ">
       <button class="ghost" onclick="goHelperTab('dashboard')">📊 Dashboard</button>
       <button class="ghost" onclick="goHelperTab('jurnalku')">📘 Jurnalku</button>
-      <button class="ghost" onclick="goHelperTab('riwayat')">📑 Riwayat & Rekap</button>
+      <button class="ghost" onclick="goHelperTab('riwayat')">📑 Riwayat Jurnal</button>
+      <button class="ghost" onclick="goHelperTab('rekap')">📊 Rekap Absensi</button>
       <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
       <button onclick="haptic('light'); openJurnalFocus()">+</button>
       <button onclick="haptic('medium'); simpan()">💾 Simpan</button>
@@ -587,202 +594,175 @@
     </div>
   </div>
 
-  <!-- ================= RIWAYAT ================= -->
+  <!-- ================= RIWAYAT JURNAL ================= -->
   <div class="card tab" id="riwayat" data-tabid="riwayat" style="display:none">
-    <h3 style="margin-bottom:2px">📊 Riwayat &amp; Rekap</h3>
-    <p class="muted" style="margin-top:0">Semua riwayat jurnal/absensi dan rekap/export/arsip dalam satu tempat.</p>
+    <h3>📑 Riwayat Jurnal</h3>
 
-    <div class="grid-2" style="align-items:start">
-
-      <!-- ===================== KOLOM KIRI: RIWAYAT ===================== -->
+    <!-- FILTER BAR -->
+    <div id="riwayatFilterBar">
       <div>
-        <h4 style="margin:0 0 12px;font-size:14px;color:#6C63FF;text-transform:uppercase;letter-spacing:.5px">📑 Riwayat</h4>
+        <label>Dari Tanggal</label>
+        <input type="date" id="riwayatFilterDari" onchange="saveRiwayatFilterState()">
+      </div>
+      <div>
+        <label>Sampai</label>
+        <input type="date" id="riwayatFilterSampai" onchange="saveRiwayatFilterState()">
+      </div>
+      <div>
+        <label>Kelas</label>
+        <select id="riwayatFilterKelas" style="min-width:110px" onchange="saveRiwayatFilterState()">
+          <option value="">-- Semua --</option>
+        </select>
+      </div>
+      <div>
+        <label>Cari Materi</label>
+        <input type="text" id="riwayatFilterCari" placeholder="Keyword..." style="width:160px"
+               onkeydown="if(event.key==='Enter') loadRiwayat(1)"
+               oninput="saveRiwayatFilterState()">
+      </div>
+      <button onclick="loadRiwayat(1)">🔎 Cari</button>
+      <button class="ghost" onclick="resetRiwayatFilter()">✕ Reset</button>
+      <button class="ghost" onclick="loadRiwayat()">🔄 Refresh</button>
+    </div>
 
-        <!-- Riwayat Jurnal -->
-        <div class="box" style="margin-bottom:16px">
-          <h4>📘 Riwayat Jurnal</h4>
-          <div id="riwayatFilterBar">
-            <div>
-              <label>Dari Tanggal</label>
-              <input type="date" id="riwayatFilterDari" onchange="saveRiwayatFilterState()">
-            </div>
-            <div>
-              <label>Sampai</label>
-              <input type="date" id="riwayatFilterSampai" onchange="saveRiwayatFilterState()">
-            </div>
-            <div>
-              <label>Kelas</label>
-              <select id="riwayatFilterKelas" style="min-width:110px" onchange="saveRiwayatFilterState()">
-                <option value="">-- Semua --</option>
-              </select>
-            </div>
-            <div>
-              <label>Cari Materi</label>
-              <input type="text" id="riwayatFilterCari" placeholder="Keyword..." style="width:160px"
-                     onkeydown="if(event.key==='Enter') loadRiwayat(1)"
-                     oninput="saveRiwayatFilterState()">
-            </div>
-            <button onclick="loadRiwayat(1)">🔎 Cari</button>
-            <button class="ghost" onclick="resetRiwayatFilter()">✕ Reset</button>
-            <button class="ghost" onclick="loadRiwayat()">🔄 Refresh</button>
-          </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tanggal</th>
+            <th>Kelas</th>
+            <th>Pertemuan</th>
+            <th>Materi</th>
+            <th>Asesmen</th>
+            <th>Absensi</th>
+            <th>📸 Dokumentasi</th>
+            <th>✍️ Refleksi</th>
+            <th>Edit</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="riwayatBody"></tbody>
+      </table>
+      <div id="riwayatPagination" style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap"></div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Tanggal</th>
-                  <th>Kelas</th>
-                  <th>Pertemuan</th>
-                  <th>Materi</th>
-                  <th>Asesmen</th>
-                  <th>Absensi</th>
-                  <th>📸 Dokumentasi</th>
-                  <th>✍️ Refleksi</th>
-                  <th>Edit</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="riwayatBody"></tbody>
-            </table>
-            <div id="riwayatPagination" style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap"></div>
-          </div>
-        </div>
-
-        <!-- Riwayat Absensi Per Kelas -->
-        <div class="box">
-          <h4>📋 Riwayat Absensi Per Kelas</h4>
-          <p class="muted" style="margin-top:0">Rekap kehadiran tiap siswa dalam 1 kelas — pilih bulan (dalam tahun ajaran aktif), semester, atau satu tahun penuh.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-            <div>
-              <label style="font-size:12px">Kelas</label>
-              <select id="laporanKelas" style="min-width:120px">
-                <option value="">-- Pilih --</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size:12px">Periode</label>
-              <select id="laporanMode" onchange="updateLaporanPeriodUI()" style="min-width:120px">
-                <option value="bulan">Per Bulan</option>
-                <option value="semester">Per Semester</option>
-                <option value="tahun">Tahun Pelajaran</option>
-              </select>
-            </div>
-            <div id="laporanPeriodWrap">
-              <label style="font-size:12px">Bulan</label>
-              <input type="month" id="laporanBulan" style="min-width:140px">
-            </div>
-            <div id="laporanSemesterWrap" style="display:none">
-              <label style="font-size:12px">Semester</label>
-              <select id="laporanSemester" style="min-width:120px">
-                <option value="ganjil">Ganjil</option>
-                <option value="genap">Genap</option>
-              </select>
-            </div>
-            <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
-            <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
-          </div>
-          <div id="laporanAbsensiWrap">
-            <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
-          </div>
-        </div>
+      <hr style="margin:28px 0">
+      <h3>📦 Rekap Jurnal Semester</h3>
+      <p class="muted">Download rekap jurnal per semester pada tahun pelajaran yang sama.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="btnSemGanjil" onclick="exportSemester('ganjil')">⬇️ Download Semester Ganjil</button>
+        <button id="btnSemGenap" onclick="exportSemester('genap')">⬇️ Download Semester Genap</button>
+        <div id="exportSkeleton" style="display:none;margin-top:12px;width:280px" class="skeleton"></div>
       </div>
 
-      <!-- ===================== KOLOM KANAN: REKAP ===================== -->
-      <div>
-        <h4 style="margin:0 0 12px;font-size:14px;color:#6C63FF;text-transform:uppercase;letter-spacing:.5px">📊 Rekap</h4>
-
-        <!-- Rekap Absensi (rentang tanggal) -->
-        <div class="box" style="margin-bottom:16px">
-          <h4>📆 Rekap Absensi</h4>
-          <p class="muted" style="margin-top:0">Daftar jurnal &amp; absensi pada rentang tanggal bebas.</p>
-          <label style="font-size:12px">Dari</label>
-          <input type="date" id="dari">
-          <label style="font-size:12px">Sampai</label>
-          <input type="date" id="sampai">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-            <button onclick="loadRekap()">Tampilkan</button>
-            <button class="ghost" onclick="doExportRekapPDF()" title="Export rekap ke PDF">📄 Export PDF</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Kelas</th>
-                  <th>Tanggal</th>
-                  <th>Pertemuan</th>
-                  <th>Asesmen</th>
-                  <th>Keterangan</th>
-                </tr>
-              </thead>
-              <tbody id="rekapBody"></tbody>
-            </table>
-          </div>
+      <hr style="margin:28px 0">
+      <h3>📅 Export Jurnal per Bulan</h3>
+      <p class="muted">Download jurnal untuk bulan dan tahun tertentu dalam format Excel.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="font-size:12px">Bulan</label>
+          <select id="exportBulanSelect" style="min-width:140px">
+            <option value="1">Januari</option>
+            <option value="2">Februari</option>
+            <option value="3">Maret</option>
+            <option value="4">April</option>
+            <option value="5">Mei</option>
+            <option value="6">Juni</option>
+            <option value="7">Juli</option>
+            <option value="8">Agustus</option>
+            <option value="9">September</option>
+            <option value="10">Oktober</option>
+            <option value="11">November</option>
+            <option value="12">Desember</option>
+          </select>
         </div>
-
-        <!-- Rekap Jurnal Semester -->
-        <div class="box" style="margin-bottom:16px">
-          <h4>📦 Rekap Jurnal Semester</h4>
-          <p class="muted" style="margin-top:0">Download rekap jurnal per semester pada tahun pelajaran yang sama.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button id="btnSemGanjil" onclick="exportSemester('ganjil')">⬇️ Semester Ganjil</button>
-            <button id="btnSemGenap" onclick="exportSemester('genap')">⬇️ Semester Genap</button>
-          </div>
-          <div id="exportSkeleton" style="display:none;margin-top:12px;width:280px" class="skeleton"></div>
+        <div>
+          <label style="font-size:12px">Tahun</label>
+          <input type="number" id="exportBulanTahun" style="width:90px" placeholder="2025" value="">
         </div>
+        <button onclick="doExportByBulan()">⬇️ Download Excel</button>
+      </div>
+      <div id="exportBulanInfo" style="margin-top:8px"></div>
 
-        <!-- Export per Bulan -->
-        <div class="box" style="margin-bottom:16px">
-          <h4>📅 Export Jurnal per Bulan</h4>
-          <p class="muted" style="margin-top:0">Download jurnal untuk bulan dan tahun tertentu dalam format Excel.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-            <div>
-              <label style="font-size:12px">Bulan</label>
-              <select id="exportBulanSelect" style="min-width:140px">
-                <option value="1">Januari</option>
-                <option value="2">Februari</option>
-                <option value="3">Maret</option>
-                <option value="4">April</option>
-                <option value="5">Mei</option>
-                <option value="6">Juni</option>
-                <option value="7">Juli</option>
-                <option value="8">Agustus</option>
-                <option value="9">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size:12px">Tahun</label>
-              <input type="number" id="exportBulanTahun" style="width:90px" placeholder="2025" value="">
-            </div>
-            <button onclick="doExportByBulan()">⬇️ Download Excel</button>
-          </div>
-          <div id="exportBulanInfo" style="margin-top:8px"></div>
-        </div>
-
-        <!-- Arsip Jurnal Tahunan -->
-        <div class="box" style="margin-bottom:16px">
-          <h4>📦 Arsip Jurnal Tahunan</h4>
-          <p id="infoArsipRiwayat" class="muted" style="margin-top:0">⏳ Mengecek kelayakan arsip...</p>
-          <button id="btnArsipRiwayat" disabled onclick="arsipTahunPelajaranUI()">📦 Arsipkan Jurnal Tahun Pelajaran</button>
-          <div class="table-wrap" id="arsipRiwayatList" style="margin-top:14px">
-            <p class="muted">📭 Belum ada arsip.</p>
-          </div>
-        </div>
-
-        <!-- Backup Semester ke Sheet -->
-        <div class="box">
-          <h4>💾 Backup Semester ke Sheet</h4>
-          <p class="muted" style="margin-top:0">Salin data jurnal semester aktif ke sheet ARSIP sebagai cadangan permanen.</p>
-          <button id="btnBackupSemester" onclick="backupSemesterUI()">💾 Backup Semester Sekarang</button>
-          <div id="backupSemesterInfo" style="margin-top:8px"></div>
-        </div>
+      <hr style="margin:28px 0">
+      <h3>📦 Arsip Jurnal Tahunan</h3>
+      <p id="infoArsipRiwayat" class="muted">⏳ Mengecek kelayakan arsip...</p>
+      <button id="btnArsipRiwayat" disabled onclick="arsipTahunPelajaranUI()">📦 Arsipkan Jurnal Tahun Pelajaran</button>
+      <div class="table-wrap" id="arsipRiwayatList" style="margin-top:14px">
+        <p class="muted">📭 Belum ada arsip.</p>
       </div>
 
+      <hr style="margin:28px 0">
+      <h3>💾 Backup Semester ke Sheet</h3>
+      <p class="muted">Salin data jurnal semester aktif ke sheet ARSIP sebagai cadangan permanen.</p>
+      <button id="btnBackupSemester" onclick="backupSemesterUI()">💾 Backup Semester Sekarang</button>
+      <div id="backupSemesterInfo" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ================= REKAP ABSENSI ================= -->
+  <div class="card tab" id="rekap" data-tabid="rekap" style="display:none">
+    <h3>📊 Rekap Absensi</h3>
+    <p class="muted">Daftar jurnal &amp; absensi pada rentang tanggal bebas.</p>
+    <label>Dari</label>
+    <input type="date" id="dari">
+    <label>Sampai</label>
+    <input type="date" id="sampai">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+      <button onclick="loadRekap()">Tampilkan</button>
+      <button class="ghost" onclick="doExportRekapPDF()" title="Export rekap ke PDF">📄 Export PDF</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Kelas</th>
+            <th>Tanggal</th>
+            <th>Pertemuan</th>
+            <th>Asesmen</th>
+            <th>Keterangan</th>
+          </tr>
+        </thead>
+        <tbody id="rekapBody"></tbody>
+      </table>
+    </div>
+
+    <hr style="margin:28px 0">
+    <!-- ===== REKAP ABSENSI PER KELAS ===== -->
+    <h3>📋 Rekap Absensi Per Kelas</h3>
+    <p class="muted">Rekap kehadiran tiap siswa dalam 1 kelas — pilih bulan (dalam tahun ajaran aktif), semester, atau satu tahun penuh.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px">Kelas</label>
+        <select id="laporanKelas" style="min-width:120px">
+          <option value="">-- Pilih --</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px">Periode</label>
+        <select id="laporanMode" onchange="updateLaporanPeriodUI()" style="min-width:120px">
+          <option value="bulan">Per Bulan</option>
+          <option value="semester">Per Semester</option>
+          <option value="tahun">Tahun Pelajaran</option>
+        </select>
+      </div>
+      <div id="laporanPeriodWrap">
+        <label style="font-size:12px">Bulan</label>
+        <input type="month" id="laporanBulan" style="min-width:140px">
+      </div>
+      <div id="laporanSemesterWrap" style="display:none">
+        <label style="font-size:12px">Semester</label>
+        <select id="laporanSemester" style="min-width:120px">
+          <option value="ganjil">Ganjil</option>
+          <option value="genap">Genap</option>
+        </select>
+      </div>
+      <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
+      <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
+    </div>
+    <div id="laporanAbsensiWrap">
+      <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
     </div>
   </div>
 
@@ -1717,6 +1697,7 @@
 <div class="mobile-bottom-nav" id="mobileNav" style="display:none">
   <button onclick="mobileNavGo('dashboard')" id="navDashboard">📊<span>Dashboard</span></button>
   <button onclick="mobileNavGo('riwayat')" id="navRiwayat">📑<span>Riwayat</span></button>
+  <button onclick="mobileNavGo('rekap')" id="navRekap">📊<span>Rekap</span></button>
   <button onclick="mobileNavGo('setting')" id="navSetting">⚙️<span>Setting</span></button>
   <button id="btnDarkModeMobile" onclick="toggleDarkMode()">🌙 Dark Mode</button>
 </div>
