@@ -2135,15 +2135,17 @@
         <small class="helper">Pilih setelah Setting disimpan</small>
       </div>
       <div>
-        <label>Kelas <span style="color:#ef4444">*</span></label>
+        <label>Kelas (Tingkat) <span style="color:#ef4444">*</span></label>
         <select id="modulKelasSelect">
           <option value="">-- Pilih Kelas --</option>
         </select>
+        <small class="helper">Per jenjang tingkat (7/8/9), berlaku untuk semua kelas di tingkat itu</small>
       </div>
       <div>
         <label>Bab <span style="color:#ef4444">*</span></label>
-        <input type="text" id="modulBabInput" list="modulBabDatalist" placeholder="cth: Bab 1, UTS, Pertemuan 3..." autocomplete="off">
+        <input type="text" id="modulBabInput" list="modulBabDatalist" placeholder="cth: Bab 1, UTS..." autocomplete="off">
         <datalist id="modulBabDatalist"></datalist>
+        <small class="helper">Umumnya 3-4 bab per semester</small>
       </div>
       <div>
         <label>Judul Modul <span style="color:#ef4444">*</span></label>
@@ -2225,8 +2227,10 @@
         </select>
       </div>
       <div>
-        <label style="font-size:12px">Kelas *</label>
-        <input type="text" id="editModulKelas" style="width:100%;box-sizing:border-box">
+        <label style="font-size:12px">Kelas (Tingkat) *</label>
+        <select id="editModulKelas" style="width:100%">
+          <option value="">-- Pilih Kelas --</option>
+        </select>
       </div>
       <div>
         <label style="font-size:12px">Bab *</label>

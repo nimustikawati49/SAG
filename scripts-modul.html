@@ -24,6 +24,24 @@ function escHtml_(s) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * _extractTingkat_(kelasName)
+ * Modul ajar isinya sama untuk semua rombel di satu jenjang (7A/7B/7C
+ * sama-sama "kelas 7"), jadi form Modul Ajar cuma perlu tingkat, bukan
+ * nama kelas lengkap per rombel. Ambil angka/angka-romawi di depan nama
+ * kelas: "7A" -> "7", "10C" -> "10", "XI IPA 1" -> "XI", "X-2" -> "X".
+ * Kalau polanya tidak dikenali, pakai apa adanya sebagai fallback.
+ */
+function _extractTingkat_(kelasName) {
+  var s = String(kelasName || '').trim();
+  if (!s) return '';
+  var mNum = s.match(/^(\d+)/);
+  if (mNum) return mNum[1];
+  var mRoman = s.match(/^([IVX]+)\b/i);
+  if (mRoman) return mRoman[1].toUpperCase();
+  return s;
+}
+
 // ============ INIT ============
 function initModulAjar() {
   _loadMapelOptions_();    // isi dropdown mapel dari setting
@@ -53,10 +71,14 @@ function _loadMapelOptions_() {
     .getMapelListGuru();
 }
 
-/** Isi datalist untuk input bab dengan saran umum */
+/**
+ * Isi datalist untuk input bab dengan saran umum. Dibatasi 4 bab —
+ * realistisnya satu semester cuma memuat 3-4 bab/topik utama, bukan
+ * belasan.
+ */
 function _fillBabSuggestions_() {
   const suggestions = [];
-  for (let i = 1; i <= 15; i++) suggestions.push('Bab ' + i);
+  for (let i = 1; i <= 4; i++) suggestions.push('Bab ' + i);
   ['UTS','UAS','Review','Pendahuluan','Evaluasi'].forEach(function(s) { suggestions.push(s); });
 
   ['modulBabDatalist','editModulBabDatalist'].forEach(function(id) {
@@ -128,12 +150,15 @@ function _renderJadwalCards_(list) {
 function _populateKelasFromJadwal_(list) {
   const selModulKelas = document.getElementById('modulKelasSelect');
   const selFilter     = document.getElementById('filterModulKelas');
+  const selEditKelas  = document.getElementById('editModulKelas');
   if (!selModulKelas) return;
 
-  // Kumpulkan nama kelas unik dari jadwal (contoh: 7A, 7B, 8A, dst)
+  // Kumpulkan TINGKAT unik dari jadwal (7A/7B/7C jadi satu "7") — materi
+  // modul sama untuk semua rombel di tingkat yang sama.
   const kelasSet = {};
   list.forEach(function(j) {
-    if (j.kelas) kelasSet[j.kelas] = true;
+    var t = _extractTingkat_(j.kelas);
+    if (t) kelasSet[t] = true;
   });
   var kelasList = Object.keys(kelasSet).sort(function(a, b) {
     var aNum = parseInt(a, 10) || 0;
@@ -143,12 +168,13 @@ function _populateKelasFromJadwal_(list) {
   });
 
   const opts = '<option value="">-- Pilih Kelas --</option>' + kelasList.map(function(k) {
-    return '<option value="' + k + '">' + k + '</option>';
+    return '<option value="' + escHtml_(k) + '">' + escHtml_(k) + '</option>';
   }).join('');
   selModulKelas.innerHTML = opts;
   if (selFilter) selFilter.innerHTML = '<option value="">-- Semua Kelas --</option>' + kelasList.map(function(k) {
-    return '<option value="' + k + '">' + k + '</option>';
+    return '<option value="' + escHtml_(k) + '">' + escHtml_(k) + '</option>';
   }).join('');
+  if (selEditKelas) selEditKelas.innerHTML = opts;
 }
 
 function jadwalCardClick_(el) {
@@ -173,7 +199,9 @@ function jadwalCardClick_(el) {
   }
   const selKelas = document.getElementById('modulKelasSelect');
   if (selKelas) {
-    selKelas.value = _selectedJadwalMeta.kelas;
+    // Jadwal tetap per rombel (7A/7B/...), tapi form Modul Ajar cuma
+    // butuh tingkatnya.
+    selKelas.value = _extractTingkat_(_selectedJadwalMeta.kelas);
   }
 
   // Show linked moduls
@@ -433,7 +461,10 @@ function renderModulTable_() {
 
   let rows = _modulData;
   if (fMapel) rows = rows.filter(function(m) { return m.mapel === fMapel; });
-  if (fKelas) rows = rows.filter(function(m) { return m.kelas === fKelas; });
+  // Bandingkan lewat tingkat (bukan string persis) supaya modul lama yang
+  // masih tersimpan sebagai nama rombel penuh (mis. "7A") tetap ketemu
+  // saat difilter per tingkat.
+  if (fKelas) rows = rows.filter(function(m) { return _extractTingkat_(m.kelas) === fKelas; });
 
   // Update count badge in header
   const countBadge = document.getElementById('modulCountBadge');
@@ -490,13 +521,30 @@ function openEditModulModal_(id) {
   if (!m) { showToast('Modul tidak ditemukan', 'error'); return; }
 
   document.getElementById('editModulId').value       = m.id;
-  document.getElementById('editModulKelas').value    = m.kelas;
   document.getElementById('editModulBab').value      = m.bab;
   document.getElementById('editModulJudul').value    = m.judul;
   document.getElementById('editModulDeskripsi').value = m.deskripsi || '';
   document.getElementById('editModulFileInfo').textContent = m.file_url
     ? '📎 File sebelumnya tersimpan. Upload baru untuk mengganti.'
     : 'Belum ada file.';
+
+  // Kelas — tingkat saja. Modul lama mungkin masih tersimpan sebagai nama
+  // rombel penuh (mis. "7A"), jadi ekstrak tingkatnya dulu; kalau tetap
+  // tidak ada di daftar (tingkat di luar jadwal saat ini), tambahkan
+  // sementara supaya nilai lama tidak hilang begitu saja.
+  const selKelasEdit = document.getElementById('editModulKelas');
+  if (selKelasEdit) {
+    const tingkat = _extractTingkat_(m.kelas);
+    const optK = Array.from(selKelasEdit.options).find(function(o) { return o.value === tingkat; });
+    if (optK) {
+      selKelasEdit.value = tingkat;
+    } else if (tingkat) {
+      const ok = document.createElement('option');
+      ok.value = tingkat; ok.textContent = tingkat;
+      selKelasEdit.appendChild(ok);
+      selKelasEdit.value = tingkat;
+    }
+  }
 
   // Isi dropdown mapel edit
   const selEdit = document.getElementById('editModulMapel');
