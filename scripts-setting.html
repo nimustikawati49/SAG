@@ -1,31 +1,77 @@
 <script>
+/**
+ * uploadCsv()
+ * Upload Data Siswa — pakai SheetJS supaya CSV/XLS/XLSX benar-benar
+ * kebaca semua (sebelumnya cuma readAsText+split(','), jadi kalau upload
+ * file .xlsx asli isinya jadi teks biner rusak). raw:false supaya NIS/NISN
+ * yang diketik sebagai teks tidak kehilangan angka nol di depan.
+ */
 function uploadCsv(){
-  const f = document.getElementById('fileSiswa').files[0];
+  const fileInput = document.getElementById('fileSiswa');
+  const f = fileInput && fileInput.files[0];
   if(!f){
-    alert('Pilih file CSV');
+    alert('Pilih file CSV/XLS/XLSX terlebih dahulu');
     return;
   }
-  startProgress();
-  const r=new FileReader();
-  r.onload=e=>{
-    const rows=e.target.result.trim().split('\n').map(x=>x.split(','));
-    google.script.run.withSuccessHandler(()=>{
-      endProgress();
-  //    loadKelas();
-      alert('Upload berhasil');
-      checkAutoLockFrontend(); // 🔥 AUTO LOCK CEK
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
 
-    }).importSiswa(rows);
+  const btn = document.getElementById('btnUploadSiswa');
+  startProgress();
+  if (btn) btn.disabled = true;
+
+  const finish = () => { endProgress(); if (btn) btn.disabled = false; };
+
+  const r = new FileReader();
+  r.onload = e => {
+    let rows;
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
+        .filter(row => row.some(cell => String(cell || '').trim() !== ''));
+    } catch (err) {
+      finish();
+      alert('Gagal membaca file: ' + err.message);
+      return;
+    }
+    if (!rows.length) {
+      finish();
+      alert('File tidak berisi data siswa');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(()=>{
+        finish();
+        alert('Upload berhasil');
+        checkAutoLockFrontend(); // 🔥 AUTO LOCK CEK
+      })
+      .withFailureHandler(err => {
+        finish();
+        alert('Gagal upload: ' + (err && err.message ? err.message : err));
+      })
+      .importSiswa(rows);
   };
-  r.readAsText(f);
+  r.onerror = () => { finish(); alert('Gagal membaca file'); };
+  r.readAsArrayBuffer(f);
 }
 
+/**
+ * downloadTemplate()
+ * Template Data Siswa — file Excel (.xlsx) siap isi, bukan CSV kosong:
+ * ada baris contoh yang menunjukkan format tiap kolom (termasuk NIS/NISN
+ * sebagai teks, dan nilai jk/status yang diharapkan), tinggal dihapus lalu
+ * diisi data asli.
+ */
 function downloadTemplate(){
-  const csv="kelas,no_absen,nis,nisn,nama,jk,ttl,alamat,orang_tua,kontak,status\n";
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='template_siswa.csv';
-  a.click();
+  if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
+  const header = ['kelas','no_absen','nis','nisn','nama','jk','ttl','alamat','orang_tua','kontak','status'];
+  const contoh  = ['7A','1','1234567890','0012345678','Contoh Nama Siswa','L','Jakarta, 01-01-2012','Jl. Contoh No. 1','Nama Orang Tua','081234567890','AKTIF'];
+  const ws = XLSX.utils.aoa_to_sheet([header, contoh]);
+  ws['!cols'] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Siswa');
+  XLSX.writeFile(wb, 'Template_Data_Siswa.xlsx');
 }
 
 function simpanSetting(){
