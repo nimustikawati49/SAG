@@ -59,6 +59,38 @@ function getCatatanSiswa(kelas) {
 }
 
 /**
+ * getCatatanRiwayatSiswa(nis) — Semua catatan siswa ini milik guru aktif,
+ * LINTAS KELAS (bukan cuma kelas aktif saat ini). Karena catatan disimpan
+ * per (guru, kelas, nis) dan kelas berubah tiap siswa naik tingkat, ini
+ * otomatis jadi riwayat catatan per tahun/kelas — dipakai di modal
+ * "Riwayat" pada tabel Daftar Siswa Binaan, digabung dengan riwayat kelas.
+ */
+function getCatatanRiwayatSiswa(nis) {
+  assertLicenseActive();
+  var email = getLoginEmail();
+  var nisNorm = String(nis || '').trim();
+  if (!nisNorm) return [];
+
+  var sh   = _ensureCatatanSheet_();
+  var data = sh.getDataRange().getValues();
+  var result = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (String(row[1] || '').toLowerCase() !== email) continue;
+    if (String(row[3] || '').trim() !== nisNorm) continue;
+    result.push({
+      kelas   : String(row[2] || ''),
+      catatan : String(row[5] || ''),
+      tgl     : String(row[6] || ''),
+      tipe    : String(row[7] || 'individu') || 'individu'
+    });
+  }
+  result.sort(function(a, b) { return a.tgl < b.tgl ? 1 : (a.tgl > b.tgl ? -1 : 0); });
+  return result;
+}
+
+/**
  * saveCatatanSiswa(obj) — Simpan atau update catatan SATU siswa (dipakai
  * untuk kasus serius/individual). obj: {kelas, nis, nama, catatan}
  */

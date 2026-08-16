@@ -841,8 +841,9 @@ function loadSiswaBinaan(page){
 /**
  * showRiwayatSiswaBinaan_(nis, nama)
  * Tampilkan riwayat kelas satu siswa binaan lintas tahun ajaran (mis. kelas 7
- * di 2024/2025, kelas 8 di 2025/2026, dst) memakai modal wizard akademik yang
- * sudah ada supaya tidak perlu bikin modal baru.
+ * di 2024/2025, kelas 8 di 2025/2026, dst) SEKALIGUS riwayat catatan siswa
+ * ini (individu maupun kelompok) — memakai modal wizard akademik yang sudah
+ * ada supaya tidak perlu bikin modal baru.
  */
 function showRiwayatSiswaBinaan_(nis, nama){
   var m = document.getElementById('academicWizardModal');
@@ -852,25 +853,29 @@ function showRiwayatSiswaBinaan_(nis, nama){
   var p = document.getElementById('academicWizardProgress');
   if(!m || !t || !b || !a || !p) return;
 
-  t.textContent = 'Riwayat Kelas — ' + (nama || nis);
+  t.textContent = 'Riwayat — ' + (nama || nis);
   b.innerHTML = '<p class="muted">Memuat riwayat...</p>';
   a.innerHTML = '';
   p.style.width = '100%';
   m.style.display = 'flex';
 
-  google.script.run
-    .withSuccessHandler(function(rows){
-      if(!rows || !rows.length){
-        b.innerHTML = '<p class="muted">Belum ada riwayat kelas tercatat untuk siswa ini.</p>';
-        return;
-      }
-      b.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+  var done = { kelas: false, catatan: false };
+  var kelasRows = [], catatanRows = [];
+
+  var render = function(){
+    if(!done.kelas || !done.catatan) return;
+
+    var kelasHtml = '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px">📚 Riwayat Kelas</div>';
+    if(!kelasRows.length){
+      kelasHtml += '<p class="muted" style="font-size:12px">Belum ada riwayat kelas tercatat.</p>';
+    } else {
+      kelasHtml += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px">' +
         '<thead><tr>' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #e5e7eb">Tahun Ajaran</th>' +
           '<th style="text-align:center;padding:6px;border-bottom:1px solid #e5e7eb">Kelas</th>' +
           '<th style="text-align:center;padding:6px;border-bottom:1px solid #e5e7eb">Status</th>' +
         '</tr></thead><tbody>' +
-        rows.map(function(r){
+        kelasRows.map(function(r){
           return '<tr>' +
             '<td style="padding:6px;border-bottom:1px solid #f3f4f6">' + (r.tahun_pelajaran || '-') + '</td>' +
             '<td style="text-align:center;padding:6px;border-bottom:1px solid #f3f4f6">' + (r.kelas || '-') + '</td>' +
@@ -878,11 +883,47 @@ function showRiwayatSiswaBinaan_(nis, nama){
           '</tr>';
         }).join('') +
         '</tbody></table>';
-    })
+    }
+
+    var catatanHtml = '<div style="font-size:13px;font-weight:700;color:#374151;margin:14px 0 6px">📝 Riwayat Catatan</div>';
+    if(!catatanRows.length){
+      catatanHtml += '<p class="muted" style="font-size:12px">Belum ada catatan tercatat untuk siswa ini.</p>';
+    } else {
+      catatanHtml += '<div style="display:flex;flex-direction:column;gap:8px">' +
+        catatanRows.map(function(c){
+          var isGrup = String(c.tipe || '').toLowerCase() === 'kelompok';
+          var badge = isGrup
+            ? '<span style="background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px">👥 Kelompok</span>'
+            : '<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px">👤 Individu</span>';
+          return '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+              '<span style="font-size:11px;color:#6b7280">Kelas ' + (c.kelas || '-') + ' &bull; ' + (c.tgl || '-') + '</span>' +
+              badge +
+            '</div>' +
+            '<div style="font-size:13px;white-space:pre-wrap">' + (c.catatan || '-') + '</div>' +
+          '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    b.innerHTML = kelasHtml + catatanHtml;
+  };
+
+  google.script.run
+    .withSuccessHandler(function(rows){ kelasRows = rows || []; done.kelas = true; render(); })
     .withFailureHandler(function(err){
-      b.innerHTML = '<p style="color:red">Gagal memuat riwayat: ' + (err && err.message ? err.message : err) + '</p>';
+      console.error('[Riwayat] getRiwayatKelasSiswaBinaan:', err && err.message);
+      done.kelas = true; render();
     })
     .getRiwayatKelasSiswaBinaan(nis);
+
+  google.script.run
+    .withSuccessHandler(function(rows){ catatanRows = rows || []; done.catatan = true; render(); })
+    .withFailureHandler(function(err){
+      console.error('[Riwayat] getCatatanRiwayatSiswa:', err && err.message);
+      done.catatan = true; render();
+    })
+    .getCatatanRiwayatSiswa(nis);
 }
 
 function loadJurnalGuruWali(){
