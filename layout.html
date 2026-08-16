@@ -2340,16 +2340,9 @@
 }
 #landingPage { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
 .lp-card-enter { animation: lp-fade-up .5s ease both; }
-.lp-card-enter:nth-child(1) { animation-delay:.1s; }
-.lp-card-enter:nth-child(2) { animation-delay:.2s; }
-.lp-card-enter:nth-child(3) { animation-delay:.3s; }
-.lp-card-enter:nth-child(4) { animation-delay:.4s; }
 @media (max-width:480px) {
-  .lp-features { grid-template-columns: repeat(2,1fr) !important; }
-  .lp-hero-title { font-size:24px !important; }
-  .lp-hero-em { font-size:52px !important; }
-  .lp-stats { flex-wrap:wrap !important; gap:10px !important; }
-  .lp-main-card { padding:28px 20px !important; }
+  .lp-hero-title { font-size:22px !important; }
+  .lp-hero-em { font-size:48px !important; }
 }
 </style>
 <div id="landingPage" style="display:none;position:fixed;inset:0;z-index:99998;overflow-y:auto;
@@ -2357,120 +2350,43 @@
   background-size:400% 400%;
   animation: lp-bg-shift 10s ease infinite;">
 
-  <!-- Decorative blobs -->
-  <div style="position:fixed;top:-80px;left:-80px;width:320px;height:320px;
-    background:radial-gradient(circle,rgba(139,92,246,.35) 0%,transparent 70%);
-    border-radius:50%;pointer-events:none;animation:lp-blob 8s ease-in-out infinite;filter:blur(40px)"></div>
-  <div style="position:fixed;bottom:-100px;right:-60px;width:360px;height:360px;
-    background:radial-gradient(circle,rgba(59,130,246,.3) 0%,transparent 70%);
-    border-radius:50%;pointer-events:none;animation:lp-blob 11s ease-in-out infinite reverse;filter:blur(50px)"></div>
-  <div style="position:fixed;top:40%;left:60%;width:200px;height:200px;
-    background:radial-gradient(circle,rgba(167,139,250,.2) 0%,transparent 70%);
-    border-radius:50%;pointer-events:none;filter:blur(30px)"></div>
+  <!-- Decorative blob (single, subtle) -->
+  <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;height:420px;
+    background:radial-gradient(circle,rgba(139,92,246,.22) 0%,transparent 70%);
+    border-radius:50%;pointer-events:none;animation:lp-blob 12s ease-in-out infinite;filter:blur(50px)"></div>
 
   <!-- Main content -->
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;text-align:center;color:#fff;position:relative;z-index:1">
 
     <!-- Logo area -->
-    <div class="lp-card-enter" style="position:relative;margin-bottom:24px">
+    <div class="lp-card-enter" style="position:relative;margin-bottom:20px">
       <div style="position:absolute;inset:-8px;border-radius:50%;background:rgba(139,92,246,.4);animation:lp-pulse-ring 2.5s ease-out infinite"></div>
-      <div class="lp-hero-em" style="font-size:64px;line-height:1;position:relative;z-index:1;animation:lp-float 3.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 8px 24px rgba(139,92,246,.6))">🎓</div>
-    </div>
-
-    <!-- Badge -->
-    <div class="lp-card-enter" style="animation-delay:.05s;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;letter-spacing:.5px;margin-bottom:16px;backdrop-filter:blur(8px)">
-      <span style="width:6px;height:6px;border-radius:50%;background:#4ade80;display:inline-block;box-shadow:0 0 8px #4ade80"></span>
-      SISTEM AKADEMIK DIGITAL
+      <div class="lp-hero-em" style="font-size:56px;line-height:1;position:relative;z-index:1;animation:lp-float 3.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 8px 24px rgba(139,92,246,.6))">🎓</div>
     </div>
 
     <!-- Title -->
-    <h1 class="lp-card-enter lp-hero-title" style="margin:0 0 14px;font-size:30px;font-weight:900;letter-spacing:-1px;line-height:1.15;animation-delay:.1s">
+    <h1 class="lp-card-enter lp-hero-title" style="margin:0 0 8px;font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.15;animation-delay:.1s">
       Sistem Akademik Guru
     </h1>
-    <p class="lp-card-enter" style="margin:0 0 36px;font-size:15px;opacity:.8;max-width:400px;line-height:1.7;font-weight:400;animation-delay:.15s">
-      Platform digital lengkap untuk jurnal, absensi, nilai, modul ajar, dan pendampingan wali kelas — semua dalam satu tempat.
+    <p class="lp-card-enter" style="margin:0 0 40px;font-size:14px;opacity:.65;max-width:340px;line-height:1.6;font-weight:400;animation-delay:.15s">
+      Jurnal, nilai, dan wali kelas dalam satu platform.
     </p>
 
-    <!-- Main glass card -->
-    <div class="lp-card-enter lp-main-card" style="background:rgba(255,255,255,.08);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:32px 28px;max-width:500px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3);animation-delay:.2s">
-
-      <!-- Feature grid — 6 fitur utama, sinkron dengan menu sidebar -->
-      <div class="lp-features" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px">
-        <div class="lp-card-enter" style="animation-delay:.25s">
-          <div style="background:rgba(99,102,241,.25);border:1px solid rgba(99,102,241,.4);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">📘</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Jurnal<br>Digital</div>
-          </div>
-        </div>
-        <div class="lp-card-enter" style="animation-delay:.3s">
-          <div style="background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">📊</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Rekap<br>Absensi</div>
-          </div>
-        </div>
-        <div class="lp-card-enter" style="animation-delay:.35s">
-          <div style="background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">🎓</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Input<br>Nilai</div>
-          </div>
-        </div>
-        <div class="lp-card-enter" style="animation-delay:.4s">
-          <div style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">📚</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Modul<br>Ajar</div>
-          </div>
-        </div>
-        <div class="lp-card-enter" style="animation-delay:.45s">
-          <div style="background:rgba(139,92,246,.22);border:1px solid rgba(139,92,246,.4);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">👨‍🏫</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Guru<br>Wali</div>
-          </div>
-        </div>
-        <div class="lp-card-enter" style="animation-delay:.5s">
-          <div style="background:rgba(14,165,233,.2);border:1px solid rgba(14,165,233,.35);border-radius:14px;padding:14px 8px">
-            <div style="font-size:24px;margin-bottom:6px">📝</div>
-            <div style="font-size:11px;font-weight:700;line-height:1.3">Catatan<br>Siswa</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Divider -->
-      <div style="height:1px;background:rgba(255,255,255,.12);margin-bottom:20px"></div>
-
-      <!-- Stats row -->
-      <div class="lp-stats" style="display:flex;justify-content:space-around;margin-bottom:24px">
-        <div style="text-align:center">
-          <div style="font-size:20px;font-weight:800;color:#a5b4fc">100%</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px">Digital</div>
-        </div>
-        <div style="width:1px;background:rgba(255,255,255,.12)"></div>
-        <div style="text-align:center">
-          <div style="font-size:20px;font-weight:800;color:#6ee7b7">Real-time</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px">Rekap Data</div>
-        </div>
-        <div style="width:1px;background:rgba(255,255,255,.12)"></div>
-        <div style="text-align:center">
-          <div style="font-size:20px;font-weight:800;color:#fcd34d">Drive</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px">Penyimpanan</div>
-        </div>
-      </div>
-
-      <!-- Auth checking -->
-      <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.2);border-radius:12px;padding:12px 16px">
-        <div style="width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:lp-spin .8s linear infinite;flex-shrink:0"></div>
-        <div style="text-align:left;flex:1">
-          <div style="font-size:12px;font-weight:600;color:#e2e8f0">Memverifikasi akun Anda...</div>
-          <div style="height:4px;background:rgba(255,255,255,.15);border-radius:999px;margin-top:8px;overflow:hidden">
-            <div id="landingProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#818cf8,#a5b4fc);border-radius:999px;transition:width 2s ease;position:relative">
-              <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);background-size:200px 100%;animation:lp-shimmer 1.5s infinite;border-radius:999px"></div>
-            </div>
+    <!-- Auth checking (minimal pill, no big card) -->
+    <div class="lp-card-enter" style="animation-delay:.25s;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:10px 18px;max-width:280px;width:100%;box-shadow:0 12px 32px rgba(0,0,0,.25)">
+      <div style="width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:lp-spin .8s linear infinite;flex-shrink:0"></div>
+      <div style="text-align:left;flex:1">
+        <div style="font-size:12px;font-weight:600;color:#e2e8f0">Memverifikasi akun Anda...</div>
+        <div style="height:3px;background:rgba(255,255,255,.15);border-radius:999px;margin-top:6px;overflow:hidden">
+          <div id="landingProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#818cf8,#a5b4fc);border-radius:999px;transition:width 2s ease;position:relative">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);background-size:200px 100%;animation:lp-shimmer 1.5s infinite;border-radius:999px"></div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Footer note -->
-    <div class="lp-card-enter" style="margin-top:24px;font-size:12px;opacity:.45;animation-delay:.5s">
+    <div class="lp-card-enter" style="margin-top:28px;font-size:11px;opacity:.4;animation-delay:.35s">
       Dwi Mustikawati © 2025 &nbsp;·&nbsp; Powered by Google Apps Script
     </div>
   </div>
