@@ -3,7 +3,7 @@
  * uploadCsv()
  * Upload Data Siswa — pakai SheetJS supaya CSV/XLS/XLSX benar-benar
  * kebaca semua (sebelumnya cuma readAsText+split(','), jadi kalau upload
- * file .xlsx asli isinya jadi teks biner rusak). raw:false supaya NIS/NISN
+ * file .xlsx asli isinya jadi teks biner rusak). raw:false supaya NIS
  * yang diketik sebagai teks tidak kehilangan angka nol di depan.
  */
 function uploadCsv(){
@@ -59,14 +59,15 @@ function uploadCsv(){
 /**
  * downloadTemplate()
  * Template Data Siswa — file Excel (.xlsx) siap isi, bukan CSV kosong:
- * ada baris contoh yang menunjukkan format tiap kolom (termasuk NIS/NISN
+ * ada baris contoh yang menunjukkan format tiap kolom (termasuk NIS
  * sebagai teks, dan nilai jk/status yang diharapkan), tinggal dihapus lalu
- * diisi data asli.
+ * diisi data asli. Cuma satu kolom NIS — NISN terpisah tidak dipakai lagi
+ * supaya tidak membingungkan.
  */
 function downloadTemplate(){
   if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
-  const header = ['kelas','no_absen','nis','nisn','nama','jk','ttl','alamat','orang_tua','kontak','status'];
-  const contoh  = ['7A','1','1234567890','0012345678','Contoh Nama Siswa','L','Jakarta, 01-01-2012','Jl. Contoh No. 1','Nama Orang Tua','081234567890','AKTIF'];
+  const header = ['kelas','no_absen','nis','nama','jk','ttl','alamat','orang_tua','kontak','status'];
+  const contoh  = ['7A','1','1234567890','Contoh Nama Siswa','L','Jakarta, 01-01-2012','Jl. Contoh No. 1','Nama Orang Tua','081234567890','AKTIF'];
   const ws = XLSX.utils.aoa_to_sheet([header, contoh]);
   ws['!cols'] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
   const wb = XLSX.utils.book_new();
