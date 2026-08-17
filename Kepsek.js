@@ -139,6 +139,41 @@ function _kepsekReadSheetRowsMulti_(ssMap, guruEmails, sheetName) {
 }
 
 /**
+ * _kepsekSettingIdx_(headerRow)
+ * Bangun index kolom SETTING dari HEADER ASLI — sama seperti getSetting()
+ * di Setting.js — bukan indeks tetap (setAll[si][2] dst). Sheet SETTING
+ * dulu dibaca dengan indeks tetap di sini (setAll[si][2] dianggap selalu
+ * "tahun_pelajaran"), padahal urutan kolomnya tergantung urutan header
+ * ASLI di tiap spreadsheet (bisa beda-beda hasil migrasi antar guru) —
+ * ini akar penyebab "Tahun Pelajaran: -" kosong di Rekap Guru Wali
+ * walau datanya sebenarnya ada.
+ */
+function _kepsekSettingIdx_(headerRow) {
+  var header = (headerRow || []).map(function(h) { return String(h || '').toLowerCase().trim(); });
+  var idx = {};
+  header.forEach(function(h, i) { idx[h] = i; });
+  return idx;
+}
+
+/**
+ * _kepsekTahunFromRow_/_kepsekSemesterFromRow_
+ * Prioritaskan kolom tahun_pelajaran_aktif/semester_aktif (nilai yang
+ * benar-benar dipakai guru sekarang, lihat getSetting() di Setting.js)
+ * — baru fallback ke kolom tahun/semester lama kalau kolom aktif itu
+ * belum ada/kosong.
+ */
+function _kepsekTahunFromRow_(row, idx) {
+  if (idx.tahun_pelajaran_aktif > -1 && row[idx.tahun_pelajaran_aktif]) return String(row[idx.tahun_pelajaran_aktif]);
+  if (idx.tahun > -1) return String(row[idx.tahun] || '');
+  return '';
+}
+function _kepsekSemesterFromRow_(row, idx) {
+  if (idx.semester_aktif > -1 && row[idx.semester_aktif]) return String(row[idx.semester_aktif]);
+  if (idx.semester > -1) return String(row[idx.semester] || '');
+  return '';
+}
+
+/**
  * getRekapSekolah()
  * Mengembalikan rekap seluruh guru di sekolah yang sama
  * (semua user bertipe 'admin' di USERS sheet).
@@ -180,20 +215,23 @@ function getRekapSekolah(forceRefresh) {
   var settingRowsNilai = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING_NILAI');
 
   // ── Setting sekolah (ambil baris pertama yang terisi) ──
+  var sIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
   var sekolah         = '';
   var tahun_pelajaran = '';
   var semester_aktif  = '';
   for (var si = 1; si < setAll.length; si++) {
-    if (setAll[si][1]) { sekolah         = String(setAll[si][1] || ''); }
-    if (setAll[si][2]) { tahun_pelajaran = String(setAll[si][2] || ''); }
-    if (setAll[si][3]) { semester_aktif  = String(setAll[si][3] || ''); break; }
+    if (sIdx.sekolah > -1 && setAll[si][sIdx.sekolah]) sekolah = String(setAll[si][sIdx.sekolah] || '');
+    var rowTahun = _kepsekTahunFromRow_(setAll[si], sIdx);
+    if (rowTahun) tahun_pelajaran = rowTahun;
+    var rowSem = _kepsekSemesterFromRow_(setAll[si], sIdx);
+    if (rowSem) { semester_aktif = rowSem; break; }
   }
 
   // ── Baca setting per guru (nama_guru) ──
   var namaMap = {};
   for (var ni = 1; ni < setAll.length; ni++) {
-    var nEmail = String(setAll[ni][0] || '').toLowerCase().trim();
-    var nNama  = String(setAll[ni][4] || '').trim(); // kolom nama_guru
+    var nEmail = sIdx.email > -1 ? String(setAll[ni][sIdx.email] || '').toLowerCase().trim() : '';
+    var nNama  = sIdx.guru > -1 ? String(setAll[ni][sIdx.guru] || '').trim() : '';
     if (nEmail && nNama) namaMap[nEmail] = nNama;
   }
 
@@ -417,13 +455,17 @@ function getRekapGuruWali(forceRefresh) {
   var jgwRows = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL_GURU_WALI');
   var setAll  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
 
+  var sIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
   var namaMap = {};
   var activeTahun = '';
   for (var si = 1; si < setAll.length; si++) {
-    var nEmail = String(setAll[si][0] || '').toLowerCase().trim();
-    var nNama  = String(setAll[si][4] || '').trim();
+    var nEmail = sIdx.email > -1 ? String(setAll[si][sIdx.email] || '').toLowerCase().trim() : '';
+    var nNama  = sIdx.guru > -1 ? String(setAll[si][sIdx.guru] || '').trim() : '';
     if (nEmail && nNama) namaMap[nEmail] = nNama;
-    if (!activeTahun && setAll[si][2]) activeTahun = String(setAll[si][2] || '');
+    if (!activeTahun) {
+      var rowTahun = _kepsekTahunFromRow_(setAll[si], sIdx);
+      if (rowTahun) activeTahun = rowTahun;
+    }
   }
 
   var now      = new Date();
@@ -502,10 +544,13 @@ function getRekapGuruWaliDetail(email) {
   var shSet = ss.getSheetByName('SETTING');
   if (shSet) {
     var setRows = shSet.getDataRange().getValues();
-    for (var si = 1; si < setRows.length; si++) {
-      if (String(setRows[si][0] || '').toLowerCase().trim() === targetEmail) {
-        activeTahun = String(setRows[si][2] || '');
-        break;
+    if (setRows.length) {
+      var dIdx = _kepsekSettingIdx_(setRows[0]);
+      for (var si = 1; si < setRows.length; si++) {
+        if (dIdx.email > -1 && String(setRows[si][dIdx.email] || '').toLowerCase().trim() === targetEmail) {
+          activeTahun = _kepsekTahunFromRow_(setRows[si], dIdx);
+          break;
+        }
       }
     }
   }
@@ -554,10 +599,11 @@ function getRekapAbsensiSekolah(dari, sampai) {
 
   // Nama guru map
   var setAll = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
+  var setIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
   var namaMap = {};
   for (var si = 1; si < setAll.length; si++) {
-    var em = String(setAll[si][0] || '').toLowerCase().trim();
-    var nm = String(setAll[si][4] || '').trim();
+    var em = setIdx.email > -1 ? String(setAll[si][setIdx.email] || '').toLowerCase().trim() : '';
+    var nm = setIdx.guru > -1 ? String(setAll[si][setIdx.guru] || '').trim() : '';
     if (em && nm) namaMap[em] = nm;
   }
 

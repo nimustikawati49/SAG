@@ -125,12 +125,15 @@
       </div>
     </div>
 
-    <!-- Group: Kelas -->
+    <!-- Group: Guru Wali (dulu berlabel "Kelas") — id internal (sbgrp-kelas/
+         sbgb-kelas/toggleSbGroup_('kelas')) SENGAJA TIDAK diubah karena
+         dirujuk scripts-license.html (logika sembunyikan grup ini untuk
+         Kepsek) — cuma teks yang terlihat user yang diganti. -->
     <div class="sb-group" id="sbgrp-kelas">
       <button class="sb-group-hd" onclick="toggleSbGroup_('kelas')"
-              aria-expanded="false" data-tooltip="Kelas">
-        <span class="sb-icon">👥</span>
-        <span class="sb-label">Kelas</span>
+              aria-expanded="false" data-tooltip="Guru Wali">
+        <span class="sb-icon">👨‍🏫</span>
+        <span class="sb-label">Guru Wali</span>
         <svg class="sb-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"/>
@@ -138,14 +141,14 @@
       </button>
       <div class="sb-group-body" id="sbgb-kelas">
         <button class="sb-item sb-child" data-tab="jurnalGuruWali"
-                onclick="sbGo_('jurnalGuruWali', function(){ loadJurnalGuruWali(); })" data-tooltip="Guru Wali">
-          <span class="sb-icon">👨‍🏫</span>
-          <span class="sb-label">Guru Wali</span>
+                onclick="sbGo_('jurnalGuruWali', function(){ loadJurnalGuruWali(); })" data-tooltip="Murid Binaan">
+          <span class="sb-icon">🧑‍🎓</span>
+          <span class="sb-label">Murid Binaan</span>
         </button>
         <button class="sb-item sb-child admin-only" data-tab="catatanSiswa"
-                onclick="sbGo_('catatanSiswa', function(){ initCatatanSiswa(); })" data-tooltip="Catatan Siswa">
+                onclick="sbGo_('catatanSiswa', function(){ initCatatanSiswa(); })" data-tooltip="Catatan Murid">
           <span class="sb-icon">📝</span>
-          <span class="sb-label">Catatan Siswa</span>
+          <span class="sb-label">Catatan Murid</span>
         </button>
       </div>
     </div>
@@ -392,7 +395,7 @@
       </li>
       <li>
         <b>📝 Catatan Siswa Binaan</b><br>
-        Catat perilaku atau prestasi penting untuk siswa binaan Anda di menu Kelas → Catatan Siswa.
+        Catat perilaku atau prestasi penting untuk siswa binaan Anda di menu Guru Wali → Catatan Murid.
       </li>
      </ol>
     </div>
