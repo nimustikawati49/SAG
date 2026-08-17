@@ -580,34 +580,91 @@ function getNotifikasiGuru() {
   return result;
 }
 
+/**
+ * LEGACY_CLEANUP_ACTIVE_SHEETS_
+ * Daftar sheet yang MASIH dipakai sistem — dicocokkan lewat
+ * getSheetByName('NAMA') / sheet('NAMA') / insertSheet('NAMA') di seluruh
+ * kode server (dicek ulang manual satu-satu, bukan tebakan) supaya
+ * cleanupUnusedLegacySheets*() tidak pernah salah hapus sheet yang
+ * sebenarnya masih aktif hanya karena sedang kosong (mis. baru dibuat,
+ * atau isinya sudah lama tidak keisi lagi tapi fiturnya masih ada).
+ * Dipakai untuk spreadsheet central MAUPUN spreadsheet pribadi guru
+ * (mode per_guru) — sheet-sheet operasional (JURNAL, SISWA, dst.) bisa
+ * ada di keduanya tergantung mode penyimpanan yang aktif.
+ */
+var LEGACY_CLEANUP_ACTIVE_SHEETS_ = {
+  'JURNAL': true,
+  'ABSENSI': true,
+  'SISWA': true,
+  'MasterSiswa': true,
+  'RiwayatKelas': true,
+  'GuruMengajar': true,
+  'MasterTahunPelajaran': true,
+  'JADWAL_SEMESTER': true,
+  'JADWAL_MENGAJAR': true, // dicek runJadwalReminderCheck_() (Trigger.js) — lindungi walau belum pasti masih terisi
+  'NILAI_SISWA': true,
+  'SETTING_NILAI': true,
+  'AUDIT_NILAI': true,
+  'ModulAjar': true,
+  'Relasi_Modul_Jadwal': true,
+  'SETTING': true,
+  'USERS': true,
+  'LICENSES': true,
+  'AUDIT_LOG': true,
+  '_LOG_ERROR_': true,
+  'RESOURCE_MAP': true,
+  'SUMMARY_SYNC': true,
+  'APP_RELEASES': true,
+  'UPDATE_LOG': true,
+  'DEPLOYMENTS': true,
+  'JURNAL_GURU_WALI': true,
+  'SISWA_BINAAN': true,
+  'EXPORT_JURNAL': true,  // dibuat ulang tiap kali exportJurnalExcel() dipanggil
+  '_PDF_REKAP': true      // dibuat ulang tiap kali exportRekapPDF() dipanggil
+};
+
+/**
+ * _cleanupSheetsInSpreadsheet_(ss)
+ * Logika inti (read-only kecuali menghapus sheet yang benar-benar kosong):
+ * cuma menghapus sheet DI LUAR whitelist di atas yang TIDAK PUNYA baris
+ * data sama sekali (kosong total atau cuma header tanpa isi). Sheet apa
+ * pun yang masih ada isinya SELALU dilewati, tidak pernah dihapus.
+ */
+function _cleanupSheetsInSpreadsheet_(ss) {
+  var deleted = [];
+  var skipped = [];
+
+  ss.getSheets().forEach(function(sh) {
+    var name = sh.getName();
+    if (LEGACY_CLEANUP_ACTIVE_SHEETS_[name]) return;
+
+    var lastRow = sh.getLastRow();
+    var lastCol = sh.getLastColumn();
+    var isHeaderOnly = false;
+    if (lastRow <= 1) {
+      if (lastRow === 0 || lastCol === 0) {
+        isHeaderOnly = true;
+      } else {
+        var firstRow = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+        isHeaderOnly = firstRow.every(function(v) { return !String(v || '').trim(); });
+      }
+    }
+
+    if (isHeaderOnly) {
+      ss.deleteSheet(sh);
+      deleted.push(name);
+      return;
+    }
+    skipped.push(name + ' (tidak dikenali tapi masih berisi data)');
+  });
+
+  return { deleted: deleted, skipped: skipped };
+}
+
 function cleanupUnusedLegacySheets() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
 
   var ss = getCentralSpreadsheet_();
-  var activeSheets = {
-    'JURNAL': true,
-    'ABSENSI': true,
-    'SISWA': true,
-    'MasterSiswa': true,
-    'RiwayatKelas': true,
-    'GuruMengajar': true,
-    'MasterTahunPelajaran': true,
-    'JADWAL_SEMESTER': true,
-    'NILAI_SISWA': true,
-    'SETTING_NILAI': true,
-    'ModulAjar': true,
-    'Relasi_Modul_Jadwal': true,
-    'SETTING': true,
-    'USERS': true,
-    'LICENSES': true,
-    'AUDIT_LOG': true,
-    '_LOG_ERROR_': true,
-    'RESOURCE_MAP': true,
-    'SUMMARY_SYNC': true,
-    'APP_RELEASES': true,
-    'UPDATE_LOG': true,
-    'DEPLOYMENTS': true
-  };
   var duplicateCandidates = ['jadwal_semester', 'Jadwal_Semester'];
   var deleted = [];
   var skipped = [];
@@ -627,33 +684,60 @@ function cleanupUnusedLegacySheets() {
     deleted.push(name);
   });
 
-  ss.getSheets().forEach(function(sh) {
-    var name = sh.getName();
-    if (activeSheets[name]) return;
-    if (duplicateCandidates.indexOf(name) > -1) return;
-
-    var lastRow = sh.getLastRow();
-    var lastCol = sh.getLastColumn();
-    var isHeaderOnly = false;
-    if (lastRow <= 1) {
-      if (lastRow === 0 || lastCol === 0) {
-        isHeaderOnly = true;
-      } else {
-        var firstRow = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
-        isHeaderOnly = firstRow.every(function(v) { return !String(v || '').trim(); });
-      }
-    }
-
-    if (isHeaderOnly) {
-      ss.deleteSheet(sh);
-      deleted.push(name);
-      return;
-    }
-    skipped.push(name + ' (tidak aktif tapi masih berisi data)');
-  });
+  var mainResult = _cleanupSheetsInSpreadsheet_(ss);
+  deleted = deleted.concat(mainResult.deleted);
+  skipped = skipped.concat(mainResult.skipped);
 
   logAudit('CLEANUP_UNUSED_SHEETS', getLoginEmail(), 'deleted=' + (deleted.join(', ') || '-') + ' | skipped=' + (skipped.length || 0));
   return { deleted: deleted, skipped: skipped };
+}
+
+/**
+ * cleanupUnusedLegacySheetsAllGuru()
+ * Sama seperti cleanupUnusedLegacySheets(), tapi menyapu SETIAP spreadsheet
+ * pribadi guru satu per satu (mode per_guru) — bukan cuma spreadsheet
+ * central. Guru yang belum pernah ter-provisioning (belum punya spreadsheet
+ * sendiri) dilewati, bukan error. Operasi ini bisa berat kalau guru
+ * banyak (buka N spreadsheet), jadi dipanggil manual lewat tombol —
+ * tidak otomatis/terjadwal.
+ */
+function cleanupUnusedLegacySheetsAllGuru() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+
+  var shUsers = _getCentralSheetByName_('USERS');
+  var emails = [];
+  if (shUsers) {
+    var userData = shUsers.getDataRange().getValues();
+    for (var i = 1; i < userData.length; i++) {
+      var email = String(userData[i][0] || '').toLowerCase().trim();
+      var role  = String(userData[i][1] || '').toLowerCase().trim();
+      if (email && role !== 'superadmin') emails.push(email);
+    }
+  }
+
+  var perGuru = [];
+  var totalDeleted = 0;
+  var totalSkipped = 0;
+
+  emails.forEach(function(email) {
+    var sid = resolveSpreadsheetIdForUser_(email);
+    if (!sid) return; // belum ter-provisioning, lewati
+
+    var ss;
+    try { ss = SpreadsheetApp.openById(sid); } catch (e) { return; }
+
+    var result = _cleanupSheetsInSpreadsheet_(ss);
+    if (result.deleted.length || result.skipped.length) {
+      perGuru.push({ email: email, deleted: result.deleted, skipped: result.skipped });
+      totalDeleted += result.deleted.length;
+      totalSkipped += result.skipped.length;
+    }
+  });
+
+  logAudit('CLEANUP_UNUSED_SHEETS_ALL_GURU', getLoginEmail(),
+    'guru_diperiksa=' + emails.length + ' | total_deleted=' + totalDeleted + ' | total_skipped=' + totalSkipped);
+
+  return { checked: emails.length, totalDeleted: totalDeleted, totalSkipped: totalSkipped, perGuru: perGuru };
 }
 // =====================================================================
 // CENTRAL REGISTRY HUB

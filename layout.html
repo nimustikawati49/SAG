@@ -1362,11 +1362,13 @@
       <p class="muted" style="margin:4px 0 0;font-size:12px">Read-only — cuma menghitung, tidak mengubah/menghapus apa pun. Dipakai untuk cek sheet mana yang paling besar sebelum bersih-bersih data lama/test.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="ghost" onclick="cleanupUnusedLegacySheetsUI()" style="font-size:12px;color:#0f766e">🧹 Cleanup Sheet Kosong</button>
+      <button class="ghost" onclick="cleanupUnusedLegacySheetsUI()" style="font-size:12px;color:#0f766e">🧹 Cleanup Sheet Kosong (Central)</button>
+      <button class="ghost" onclick="cleanupUnusedLegacySheetsAllGuruUI()" style="font-size:12px;color:#0f766e">🧹 Cleanup Sheet Kosong (Semua Guru)</button>
       <button class="ghost" onclick="loadCentralDataSizeReport()" style="font-size:12px">🔄 Cek Sekarang</button>
     </div>
   </div>
   <div id="dataSizeReportBox"><div class="muted">Klik "Cek Sekarang" untuk memuat laporan.</div></div>
+  <div id="cleanupAllGuruResult" style="margin-top:10px"></div>
 </div>
 <!-- ===== AKTIVASI AKUN GURU (TRIAL 30 HARI) ===== -->
 <div class="card" style="margin-top:16px;border:2px solid #f59e0b">
@@ -1527,6 +1529,24 @@
   <div id="saNotifHistory"><div class="muted">⏳ Memuat riwayat notifikasi…</div></div>
 </div>
 
+<!-- ===== PENGATURAN LANJUTAN (Registry/Storage/Sync/Release) =====
+     Digabung di balik satu toggle atas permintaan user supaya menu
+     SuperAdmin tidak terlalu padat — 4 panel di bawah ini teknis dan
+     jarang perlu dibuka sehari-hari (sebagian besar interaksi harian
+     ada di Aktivasi Akun Guru / Arsip / Broadcast di atas). Tetap
+     dimuat otomatis di background (setTimeout di loadDashboardSuperAdmin)
+     walau tersembunyi, jadi begitu dibuka datanya sudah siap. -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSuperAdminAdvanced_()">
+    <div>
+      <h3 style="margin:0">⚙️ Pengaturan Lanjutan</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Registry, mode storage, summary sync, dan release/update — panel teknis, biasanya jarang perlu dibuka.</p>
+    </div>
+    <span id="saAdvancedToggleIcon" style="font-size:18px;color:#6b7280">▾</span>
+  </div>
+</div>
+<div id="saAdvancedPanels" style="display:none">
+
 <!-- ===== DEPLOYMENT TRACKER ===== -->
 <div class="card" style="margin-top:16px;border:1.5px solid #bfdbfe;background:linear-gradient(180deg,#eff6ff,#ffffff)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
@@ -1590,6 +1610,8 @@
   <div id="appReleaseBox"><div class="muted">⏳ Memuat release…</div></div>
   <div id="updateLogBox" style="margin-top:14px"><div class="muted">⏳ Memuat update log…</div></div>
 </div>
+
+</div><!-- end #saAdvancedPanels -->
 
 <div id="appReleaseModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
   <div style="background:#fff;width:92%;max-width:560px;border-radius:18px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,.35)">

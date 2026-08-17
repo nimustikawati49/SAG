@@ -1,4 +1,20 @@
 <script>
+/**
+ * toggleSuperAdminAdvanced_()
+ * Panel Registry/Storage/Sync/Release digabung di balik satu toggle
+ * (atas permintaan user, supaya menu SuperAdmin tidak terlalu padat) —
+ * data di dalamnya tetap dimuat otomatis di background via
+ * loadDashboardSuperAdmin(), toggle ini cuma soal tampil/sembunyi.
+ */
+function toggleSuperAdminAdvanced_(){
+  var panel = document.getElementById('saAdvancedPanels');
+  var icon  = document.getElementById('saAdvancedToggleIcon');
+  if (!panel) return;
+  var isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+  if (icon) icon.textContent = isHidden ? '▴' : '▾';
+}
+
 function loadDashboardSuperAdmin(){
   google.script.run
     .withFailureHandler(err=>{
@@ -668,6 +684,52 @@ function cleanupUnusedLegacySheetsUI(){
       if(typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal cleanup sheet'), 'error', 7000);
     })
     .cleanupUnusedLegacySheets();
+}
+
+/**
+ * cleanupUnusedLegacySheetsAllGuruUI()
+ * Sama seperti cleanupUnusedLegacySheetsUI() tapi menyapu spreadsheet
+ * pribadi SETIAP guru (mode per_guru) — bisa lambat kalau guru banyak
+ * (buka satu-satu spreadsheet-nya), jadi dikasih notifikasi waktu
+ * berjalan supaya tidak terlihat macet.
+ */
+function cleanupUnusedLegacySheetsAllGuruUI(){
+  if (!confirm('Hapus sheet tidak terpakai di SEMUA spreadsheet pribadi guru?\n\nSetiap spreadsheet guru diperiksa satu per satu — hanya sheet yang bukan bagian aktif aplikasi DAN kosong/header-only yang dihapus. Sheet yang masih berisi data selalu dilewati. Proses ini bisa makan waktu kalau guru banyak.')) return;
+
+  var box = document.getElementById('cleanupAllGuruResult');
+  if (box) box.innerHTML = '<div id="cleanupAllGuruNotice" class="muted" style="font-size:12px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('cleanupAllGuruNotice'), '⏳ Memeriksa spreadsheet tiap guru...');
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      stopTimer();
+      if (!box) return;
+      if (!res || !res.checked) {
+        box.innerHTML = '<div class="alert-banner info">Tidak ada guru untuk diperiksa.</div>';
+        return;
+      }
+      var html = '<div class="alert-banner ' + (res.totalDeleted > 0 ? 'success' : 'info') + '" style="margin-bottom:10px">' +
+        '✅ ' + res.checked + ' guru diperiksa &middot; ' + res.totalDeleted + ' sheet dihapus &middot; ' + res.totalSkipped + ' sheet dilewati (masih berisi data / tidak dikenali).' +
+        '</div>';
+      if (res.perGuru && res.perGuru.length) {
+        html += '<div class="table-wrap"><table><thead><tr><th>Guru</th><th>Dihapus</th><th>Dilewati</th></tr></thead><tbody>';
+        res.perGuru.forEach(function(g){
+          html += '<tr>' +
+            '<td style="font-size:12px">' + _escSA(g.email) + '</td>' +
+            '<td style="font-size:12px">' + (g.deleted.length ? _escSA(g.deleted.join(', ')) : '<span class="muted">—</span>') + '</td>' +
+            '<td style="font-size:12px">' + (g.skipped.length ? _escSA(g.skipped.join('; ')) : '<span class="muted">—</span>') + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      box.innerHTML = html;
+      if (typeof showToast === 'function') showToast('🧹 Cleanup semua guru selesai', 'success', 7000);
+    })
+    .withFailureHandler(function(err){
+      stopTimer();
+      if (box) box.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal cleanup') + '</div>';
+    })
+    .cleanupUnusedLegacySheetsAllGuru();
 }
 
 

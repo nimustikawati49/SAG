@@ -1,9 +1,14 @@
 /**
- * License.js — Sistem Lisensi Per Sekolah (school-wide)
+ * License.js — Sistem Lisensi Per Deployment (school-wide)
  *
- * Lisensi disimpan di ScriptProperties (bukan per user).
- * 1 project GAS = 1 sekolah = 1 lisensi.
- * SuperAdmin yang mengelola (set / renew / deactivate).
+ * Lisensi disimpan di ScriptProperties (bukan per user) — 1 project/
+ * deployment GAS = 1 lisensi, dikelola SuperAdmin (set / renew /
+ * deactivate). CATATAN: satu deployment TIDAK LAGI berarti satu
+ * sekolah — sejak fitur multi-sekolah ditambahkan, satu deployment
+ * bisa melayani beberapa sekolah sekaligus, dikelompokkan lewat
+ * kolom kode_sekolah di USERS (lihat updateUserSekolah() di Users.js
+ * dan _kepsekActiveGuruEmails_() di Kepsek.js). Lisensi ini tetap satu
+ * untuk seluruh deployment, bukan per kode_sekolah.
  *
  * Akses guru sendiri diatur lewat status akun per-akun (lihat Users.js):
  * guru baru otomatis dapat masa uji coba 30 hari, lalu SuperAdmin
