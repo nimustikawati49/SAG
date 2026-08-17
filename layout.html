@@ -1387,7 +1387,15 @@
 </div>
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
-<!-- ===== REMINDER LISENSI (trigger email, tersisa dari sistem lisensi lama) ===== -->
+<!-- ===== REMINDER LISENSI SEKOLAH ============================================
+     Trigger harian (08:00) yang mengaktifkan/menonaktifkan tombol di bawah ini
+     memanggil runDailyLicenseReminder_() (Trigger.js) -> delegasi langsung ke
+     checkSchoolLicenseExpiryReminder() (License.js), yang membaca lisensi
+     sekolah AKTIF SAAT INI dari _readSchoolLicense_() (berbasis Script
+     Properties per-sekolah, BUKAN sheet LICENSES lama berbasis per-user) dan
+     kirim email ke SuperAdmin di H-60/H-30/H-7 sebelum expired. Panel ini
+     masih benar-benar terpakai — jangan dihapus.
+     ============================================================================ -->
 <div class="card" style="margin-top:16px">
   <h4 style="margin:0 0 6px;font-size:13px">🔔 Reminder Renewal Otomatis</h4>
   <p class="muted" style="font-size:12px;margin:0 0 8px">Email ke SuperAdmin saat lisensi H-60, H-30, H-7 sebelum expired.</p>
@@ -1397,7 +1405,7 @@
     <button onclick="deactivateLicenseReminderTrigger_()" class="ghost" id="btnDelLicReminder" style="font-size:12px">🗑️ Nonaktifkan</button>
   </div>
 </div>
-<!-- ===== END REMINDER LISENSI ===== -->
+<!-- ===== END REMINDER LISENSI SEKOLAH ===== -->
 
       <hr style="margin:28px 0">
 <div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
