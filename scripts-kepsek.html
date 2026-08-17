@@ -66,6 +66,12 @@ function _renderRekapSekolah_(data) {
     '<div style="font-size:12px;opacity:.7;margin-top:4px">Bulan aktif: ' + _esc(data.bulanLabel || '') + '</div>' +
     '</div>';
 
+  // ── Panduan singkat (sekali render, di atas KPI) ──
+  html += '<div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px;font-size:12.5px;line-height:1.7">' +
+    '<b>📌 Cara pakai:</b> Dashboard ini read-only — semua angka diambil otomatis dari jurnal &amp; absensi guru di sekolah Anda (yang kode_sekolah-nya sama dengan akun Kepsek ini, diatur SuperAdmin). ' +
+    '<b>Rekap Kehadiran</b> untuk lihat detail kehadiran per kelas, <b>Early Warning</b> untuk kelas/siswa yang perlu perhatian, <b>Raport Siswa</b> untuk cetak per anak, dan <b>Export Excel</b> untuk unduh rekap ini.' +
+    '</div>';
+
   // ── KPI Cards ──
   var kpis = [
     { label: 'Total Guru Aktif',    value: data.totalGuru,       icon: '👨‍🏫', color: '#3b82f6' },
@@ -213,6 +219,10 @@ function _renderRekapGuruWali_(data) {
   html += '<div style="background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;border-radius:18px;padding:20px 24px;margin-bottom:20px">' +
     '<h2 style="margin:0 0 6px;font-size:20px;font-weight:800">👨‍🏫 Rekap Jurnal Guru Wali</h2>' +
     '<div style="font-size:13px;opacity:.85">Tahun Pelajaran: <b>' + _esc(data.activeTahun || '-') + '</b></div>' +
+    '</div>';
+
+  html += '<div class="card" style="background:#f8fafc;border-left:6px solid #14b8a6;margin-bottom:16px;font-size:12.5px;line-height:1.7">' +
+    '<b>📌 Cara pakai:</b> Rekap ini khusus guru yang berperan sebagai WALI KELAS di sekolah Anda dan jurnal pendampingan siswa binaan mereka (beda dari jurnal mengajar mapel biasa). Klik nama guru di tabel untuk lihat detail jurnalnya.' +
     '</div>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">';

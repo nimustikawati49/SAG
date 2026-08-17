@@ -1335,7 +1335,12 @@
   </div>
 
   <hr style="margin:32px 0">
+<!-- Isi satu baris per jam mengajar (bisa berkali-kali untuk hari/kelas
+     berbeda) — jadwal ini yang muncul di kartu "Jadwal Mengajar" pada
+     Dashboard. Reset Jadwal menghapus SEMUA jadwal periode aktif
+     sekaligus, dipakai kalau mau mulai isi ulang dari kosong. -->
 <h3>📅 Input Jadwal Mengajar</h3>
+<p class="muted" style="font-size:12.5px;margin:0 0 12px">Isi Hari, Kelas, Mapel, dan jam mengajar Anda — bisa ditambah berkali-kali untuk hari/kelas berbeda. Jadwal ini yang muncul otomatis di kartu "📅 Jadwal Mengajar" pada Dashboard.</p>
 
 <div class="grid-2">
 
@@ -1404,9 +1409,16 @@
   </div>
 </div>
 
-<!-- TAB DASHBOARD SUPERADMIN -->
+<!-- TAB DASHBOARD SUPERADMIN =====================================
+     Interaksi harian SuperAdmin biasanya cukup di 2 panel teratas:
+     "🎓 Aktivasi Akun Guru" (aktifkan akun baru, atur role/sekolah) dan
+     "📢 Broadcast Notifikasi". Panel-panel teknis yang jarang dibuka
+     (arsip lintas guru, registry, mode storage, release pipeline)
+     disembunyikan di balik toggle "⚙️ Pengaturan Lanjutan" di bawah. -->
 <div class="card tab" id="DashboardSuperAdmin" data-tabid="DashboardSuperAdmin" style="display:none">
   <h3>👑 Dashboard SuperAdmin</h3>
+  <!-- KPI ringkas jumlah akun guru per status — murni tampilan, klik
+       "🎓 Aktivasi Akun Guru" di bawah untuk aksi (aktifkan/nonaktifkan). -->
   <div class="grid-dashboard">
     <div class="card stat">
       <div class="label">👥 Total Guru</div>
@@ -1629,9 +1641,13 @@
 <!-- ===== END BACKUP OTOMATIS & REMINDER PENGISIAN JURNAL ===== -->
 
 <!-- SUPERADMIN EMAIL MANAGEMENT -->
+<!-- ⚠️ Mengganti ini memindahkan akses kontrol PENUH sistem (lihat
+     isSuperAdmin() di Auth.js — dibandingkan langsung dengan email di
+     sini) ke akun lain. Pastikan email tujuan benar sebelum simpan;
+     akun SuperAdmin lama otomatis kehilangan akses begitu disimpan. -->
 <div class="card">
   <h3>👑 Email SuperAdmin</h3>
-  <p class="muted">Email yang digunakan sebagai superadmin. Disimpan di Script Properties — tidak perlu edit kode.</p>
+  <p class="muted">Email yang digunakan sebagai superadmin (akses kontrol penuh sistem). Disimpan di Script Properties — tidak perlu edit kode. Berhati-hati: mengganti ini langsung memindahkan akses SuperAdmin ke akun baru.</p>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
     <div style="flex:1;min-width:200px">
       <label style="font-size:12px;color:#6b7280">Email SuperAdmin Aktif</label>
@@ -2046,6 +2062,9 @@
   body.dark .ntd-inp input{background:#1f2937;color:#e5e7eb;border-color:#4b5563}
   body.dark #tabelNilai tr.row-nildata-empty{background:#3f3418}
 </style>
+<!-- Tab ini sudah punya panduan cukup lengkap bawaan (kartu "ℹ️ Panduan
+     Singkat" di bawah + penjelasan rumus katrol di kartu "⚙️ Pengaturan
+     Nilai") — sengaja tidak ditambah kartu baru supaya tidak redundan. -->
 <div id="inputNilai" class="card tab" data-tabid="inputNilai" style="display:none">
   <h2>📊 Daftar Nilai Siswa</h2>
   <p class="muted" style="margin-bottom:10px">Bisa diakses semua akun guru terdaftar (tidak khusus admin/superadmin) — untuk input, pengolahan, dan cetak daftar nilai.</p>
@@ -2425,7 +2444,15 @@
 
 <div id="modulAjar" class="card tab" data-tabid="modulAjar" style="display:none">
   <h2>📚 Modul Ajar</h2>
-  <p class="muted" style="margin-bottom:12px">Kelola modul ajar Anda.</p>
+  <p class="muted" style="margin-bottom:12px">Kelola modul ajar Anda — bank materi/RPP per mapel &amp; bab, terpisah dari Jurnal (jurnal mencatat KEGIATAN mengajar harian, modul ini menyimpan BAHAN ajarnya).</p>
+  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px;font-size:12.5px;line-height:1.7">
+    <h4 style="margin-top:0">📌 Cara Pakai</h4>
+    <ol style="margin:8px 0 0 18px">
+      <li>Pilih <b>Mata Pelajaran</b> &amp; <b>Kelas (Tingkat)</b> — kalau daftarnya kosong, isi &amp; simpan dulu Mata Pelajaran/Kelas Diampu di tab ⚙️ Pengaturan.</li>
+      <li>Isi <b>Bab</b> (bebas, cth "Bab 1" atau "UTS") dan <b>Judul Modul</b>, opsional tambah Deskripsi &amp; upload file (PDF/DOC/PPT, maks 10 MB).</li>
+      <li>Klik <b>💾 Simpan Modul</b> — modul langsung muncul di tabel "Semua Modul Ajar" di bawah, bisa difilter per mapel/kelas.</li>
+    </ol>
+  </div>
 
   <!-- ===== FORM TAMBAH MODUL ===== -->
   <div class="card" style="margin-bottom:20px">
