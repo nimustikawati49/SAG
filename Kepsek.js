@@ -518,42 +518,30 @@ function getRekapGuruWaliDetail(email) {
 function getRekapAbsensiSekolah(dari, sampai) {
   assertKepsek_();
 
-  var ss       = getSpreadsheet_();
-  var shJurnal = ss.getSheetByName('JURNAL');
-  var shAbsen  = ss.getSheetByName('ABSENSI');
-  var shUsers  = ss.getSheetByName('USERS');
-  var shSetting= ss.getSheetByName('SETTING');
+  var cacheKey = 'KEPSEK_REKAP_ABSENSI_' + String(dari || '') + '_' + String(sampai || '');
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  if (!shJurnal || !shAbsen) return [];
-
-  // Guru aktif set
-  var guruSet = new Set();
-  if (shUsers) {
-    var ud = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < ud.length; ui++) {
-      if (String(ud[ui][1] || '').toLowerCase() === 'admin' &&
-          String(ud[ui][2] || '').toLowerCase() === 'active') {
-        guruSet.add(String(ud[ui][0] || '').toLowerCase().trim());
-      }
-    }
-  }
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+  var guruSet    = new Set(guruEmails);
 
   // Nama guru map
+  var setAll = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
   var namaMap = {};
-  if (shSetting) {
-    var sd = shSetting.getDataRange().getValues();
-    for (var si = 1; si < sd.length; si++) {
-      var em = String(sd[si][0] || '').toLowerCase().trim();
-      var nm = String(sd[si][4] || '').trim();
-      if (em && nm) namaMap[em] = nm;
-    }
+  for (var si = 1; si < setAll.length; si++) {
+    var em = String(setAll[si][0] || '').toLowerCase().trim();
+    var nm = String(setAll[si][4] || '').trim();
+    if (em && nm) namaMap[em] = nm;
   }
 
   var from = dari   ? new Date(dari   + 'T00:00:00') : null;
   var to   = sampai ? new Date(sampai + 'T23:59:59') : null;
 
-  var jurnalData = shJurnal.getDataRange().getValues();
-  var absenData  = shAbsen.getDataRange().getValues();
+  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
+  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
 
   // Build jurnal id → {email, kelas}
   var jurnalMap = {};
@@ -596,6 +584,8 @@ function getRekapAbsensiSekolah(dari, sampai) {
   });
 
   result.sort(function(a, b) { return a.persen - b.persen; }); // risiko terbesar dulu
+
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
   return result;
 }
 /**
@@ -607,28 +597,23 @@ function getEarlyWarningSiswa(threshold) {
   assertKepsek_();
   var limit = (typeof threshold === 'number') ? threshold : 75;
 
-  var ss       = getSpreadsheet_();
-  var shJurnal = ss.getSheetByName('JURNAL');
-  var shAbsen  = ss.getSheetByName('ABSENSI');
-  var shSiswa  = ss.getSheetByName('SISWA');
+  var cacheKey = 'KEPSEK_EARLY_WARNING_' + limit;
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  if (!shJurnal || !shAbsen || !shSiswa) return [];
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+  var guruSet    = new Set(guruEmails);
 
-  // Guru aktif di sekolah ini
-  var shUsers = ss.getSheetByName('USERS');
-  var guruSet = new Set();
-  if (shUsers) {
-    var ud = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < ud.length; ui++) {
-      if (String(ud[ui][1] || '').toLowerCase() === 'admin' &&
-          String(ud[ui][2] || '').toLowerCase() === 'active') {
-        guruSet.add(String(ud[ui][0] || '').toLowerCase().trim());
-      }
-    }
-  }
+  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
+  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
+  var siswaData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SISWA');
+
+  if (!jurnalData.length || !absenData.length || !siswaData.length) return [];
 
   // Build jurnal id → kelas (hanya guru sekolah ini)
-  var jurnalData = shJurnal.getDataRange().getValues();
   var jurnalMap  = {};
   for (var ji = 1; ji < jurnalData.length; ji++) {
     var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
@@ -640,7 +625,6 @@ function getEarlyWarningSiswa(threshold) {
   }
 
   // Build siswa map: kelas → {nis → nama}
-  var siswaData = shSiswa.getDataRange().getValues();
   var siswaMap  = {};
   for (var si = 1; si < siswaData.length; si++) {
     var sOwner = String(siswaData[si][5] || '').toLowerCase().trim();
@@ -654,7 +638,6 @@ function getEarlyWarningSiswa(threshold) {
 
   // Akumulasi absensi per siswa per kelas
   // ABSENSI: [0]=jurnal_id, [1]=no_absen, [2]=nis, [3]=status, [4]=keterangan, [5]=nama
-  var absenData   = shAbsen.getDataRange().getValues();
   var siswaAbsen  = {}; // key: kelas+nis
 
   for (var ai = 1; ai < absenData.length; ai++) {
@@ -698,6 +681,8 @@ function getEarlyWarningSiswa(threshold) {
     }
   }
   result.sort(function(a, b) { return a.persen - b.persen; });
+
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
   return result;
 }
 
@@ -709,25 +694,21 @@ function getEarlyWarningSiswa(threshold) {
 function getRaportAbsensiSiswa() {
   assertKepsek_();
 
-  var ss       = getSpreadsheet_();
-  var shJurnal = ss.getSheetByName('JURNAL');
-  var shAbsen  = ss.getSheetByName('ABSENSI');
+  var cacheKey = 'KEPSEK_RAPORT_ABSENSI';
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  if (!shJurnal || !shAbsen) return [];
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+  var guruSet    = new Set(guruEmails);
 
-  var shUsers = ss.getSheetByName('USERS');
-  var guruSet = new Set();
-  if (shUsers) {
-    var ud = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < ud.length; ui++) {
-      if (String(ud[ui][1] || '').toLowerCase() === 'admin' &&
-          String(ud[ui][2] || '').toLowerCase() === 'active') {
-        guruSet.add(String(ud[ui][0] || '').toLowerCase().trim());
-      }
-    }
-  }
+  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
+  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
 
-  var jurnalData = shJurnal.getDataRange().getValues();
+  if (!jurnalData.length || !absenData.length) return [];
+
   var jurnalMap  = {};
   for (var ji = 1; ji < jurnalData.length; ji++) {
     var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
@@ -735,7 +716,6 @@ function getRaportAbsensiSiswa() {
     jurnalMap[jurnalData[ji][0]] = String(jurnalData[ji][2] || '');
   }
 
-  var absenData  = shAbsen.getDataRange().getValues();
   var siswaMap   = {};
 
   for (var ai = 1; ai < absenData.length; ai++) {
@@ -772,6 +752,8 @@ function getRaportAbsensiSiswa() {
     if (a.kelas > b.kelas) return 1;
     return a.nama < b.nama ? -1 : 1;
   });
+
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
   return result;
 }
 
@@ -784,23 +766,20 @@ function getRaportAbsensiSiswa() {
 function getJurnalChartData() {
   assertKepsek_();
 
-  var ss       = getSpreadsheet_();
-  var shJurnal = ss.getSheetByName('JURNAL');
-  var shAbsen  = ss.getSheetByName('ABSENSI');
+  var cacheKey = 'KEPSEK_JURNAL_CHART';
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  if (!shJurnal) return { weekly: [], absence: {H:0,S:0,I:0,A:0}, labels: [] };
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+  var guruSet    = new Set(guruEmails);
 
-  var shUsers = ss.getSheetByName('USERS');
-  var guruSet = new Set();
-  if (shUsers) {
-    var ud = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < ud.length; ui++) {
-      if (String(ud[ui][1] || '').toLowerCase() === 'admin' &&
-          String(ud[ui][2] || '').toLowerCase() === 'active') {
-        guruSet.add(String(ud[ui][0] || '').toLowerCase().trim());
-      }
-    }
-  }
+  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
+  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
+
+  if (!jurnalData.length) return { weekly: [], absence: {H:0,S:0,I:0,A:0}, labels: [] };
 
   // Tren jurnal per minggu (4 minggu terakhir)
   var now      = new Date();
@@ -816,7 +795,6 @@ function getJurnalChartData() {
     labels.push(label);
   }
 
-  var jurnalData = shJurnal.getDataRange().getValues();
   var jurnalIds  = new Set();
   for (var ji = 1; ji < jurnalData.length; ji++) {
     var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
@@ -834,20 +812,19 @@ function getJurnalChartData() {
 
   // Distribusi absensi total
   var absTotals = { H:0, S:0, I:0, A:0 };
-  if (shAbsen) {
-    var absenData = shAbsen.getDataRange().getValues();
-    for (var ai = 1; ai < absenData.length; ai++) {
-      if (!jurnalIds.has(String(absenData[ai][0]))) continue;
-      var st = String(absenData[ai][3] || '').toUpperCase();
-      if (absTotals[st] !== undefined) absTotals[st]++;
-    }
+  for (var ai = 1; ai < absenData.length; ai++) {
+    if (!jurnalIds.has(String(absenData[ai][0]))) continue;
+    var st = String(absenData[ai][3] || '').toUpperCase();
+    if (absTotals[st] !== undefined) absTotals[st]++;
   }
 
-  return {
+  var chartResult = {
     labels : labels,
     weekly : weeks.map(function(w) { return w.count; }),
     absence: absTotals
   };
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(chartResult), 180); } catch (e) { /* > 100KB, lewati cache */ }
+  return chartResult;
 }
 
 // Fitur AI Summary dihapus (quota Gemini API habis)
