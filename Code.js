@@ -451,6 +451,29 @@ function invalidateCache_(sheetName) {
 }
 
 /**
+ * getSheetValuesCached_(sheetName, sh, ttl)
+ * Sama seperti getSheetCached(), tapi menerima objek Sheet yang sudah
+ * di-resolve oleh caller (mis. lewat ensureXSheet_() yang juga menangani
+ * pembuatan sheet baru + migrasi header) — dipakai saat caller butuh
+ * caching di lapisan baca data tapi resolusi sheet-nya sendiri lebih
+ * rumit dari sekadar sheet(name). Pakai cache key persis sama dengan
+ * getSheetCached()/invalidateCache_() supaya saling kompatibel —
+ * invalidateCache_(sheetName) akan menghapus cache ini juga.
+ */
+function getSheetValuesCached_(sheetName, sh, ttl = 120) {
+  const cache  = CacheService.getScriptCache();
+  const email  = (function(){ try { return Session.getEffectiveUser().getEmail().toLowerCase(); } catch(e){ return 'anon'; } })();
+  const key    = 'SHEET_' + sheetName + '_' + email;
+  const cached = cache.get(key);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) { /* cache korup, baca ulang */ }
+  }
+  const data = sh ? sh.getDataRange().getValues() : [];
+  try { cache.put(key, JSON.stringify(data), ttl); } catch(e) { /* > 100KB, lewati cache */ }
+  return data;
+}
+
+/**
  * invalidateDashboardCache_()
  * Hapus cache dashboard user saat ada perubahan data
  * (jadwal, setting, jurnal). Dipanggil dari Save* functions.

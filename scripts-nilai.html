@@ -532,7 +532,8 @@ function muatDataNilai(forceLocked = false) {
   const isActivePeriode = _isActiveNilaiPeriode_(tahun, sem);
 
   const btn = document.getElementById('btnMuatNilai');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memuat...'; }
+  if (btn) btn.disabled = true;
+  const stopMuatTimer = startElapsedNotice_(btn, '⏳ Memuat...');
   if (typeof startProgress === 'function') startProgress();
 
   const done = { siswa: isActivePeriode ? false : true, nilai: false, setting: false };
@@ -541,6 +542,7 @@ function muatDataNilai(forceLocked = false) {
   const tryRender = () => {
     if (!done.siswa || !done.nilai || !done.setting) return;
     if (typeof endProgress === 'function') endProgress();
+    stopMuatTimer();
     if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
 
     const nilaiMap = {};
@@ -616,6 +618,7 @@ function muatDataNilai(forceLocked = false) {
       .withSuccessHandler(d => { siswaData = d || []; done.siswa = true; tryRender(); })
       .withFailureHandler(e => {
         if (typeof endProgress === 'function') endProgress();
+        stopMuatTimer();
         if (btn) { btn.disabled = false; btn.textContent = '📂 Muat Data Siswa'; }
         // Still complete the render so main section shows (with empty student list + error msg)
         console.error('[NILAI] getDataSiswaUntukNilai gagal:', e && e.message);

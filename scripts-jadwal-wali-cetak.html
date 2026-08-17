@@ -252,20 +252,15 @@ function loadStatusArsipWali(){
   const btn  = document.getElementById('btnArsipWali');
   if(!el) return;
 
-  // Pengecekan ini butuh cari folder/file di Drive (lebih lambat dari baca
-  // Sheets biasa). Kalau lebih dari 8 detik belum juga selesai, kasih tahu
-  // user itu masih diproses (bukan macet) — daripada teks "Mengecek..."
-  // diam saja tanpa kabar sampai entah kapan.
-  let resolved = false;
-  const stallTimer = setTimeout(() => {
-    if (resolved) return;
-    el.innerHTML = '⏳ Masih mengecek status arsip (folder Drive), mohon tunggu sebentar lagi...';
-  }, 8000);
+  // Pengecekan ini bisa butuh cari folder/file di Drive (lebih lambat dari
+  // baca Sheets biasa) kalau belum ada di cache — tampilkan detik berjalan
+  // supaya user tahu prosesnya masih jalan, bukan macet, dan tidak buru-buru
+  // reload halaman.
+  const stopTimer = startElapsedNotice_(el, '⏳ Mengecek status arsip...');
 
   google.script.run
     .withSuccessHandler(res => {
-      resolved = true;
-      clearTimeout(stallTimer);
+      stopTimer();
       if(!res.activeTahun){
         el.innerHTML = '❌ Tahun pelajaran belum diset di pengaturan.';
         return;
@@ -280,8 +275,7 @@ function loadStatusArsipWali(){
       if(btn) btn.disabled = false;
     })
     .withFailureHandler(err => {
-      resolved = true;
-      clearTimeout(stallTimer);
+      stopTimer();
       if(el) el.innerHTML = `<span class="muted">❌ ${err.message} — <a href="#" onclick="loadStatusArsipWali();return false;">Coba lagi</a></span>`;
     })
     .getStatusArsipJurnalWali();
@@ -308,15 +302,17 @@ function arsipJurnalWaliUI(){
 function loadRiwayatGuruWali(){
   const tbody = document.getElementById('riwayatGuruWaliBody');
   if(!tbody) return;
-  if(!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" class="muted">⏳ Memuat...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="muted"></td></tr>';
+  const stopTimer = startElapsedNotice_(tbody.querySelector('td'), '⏳ Memuat...');
 
   google.script.run
     .withSuccessHandler(data=>{
+      stopTimer();
       riwayatGuruWaliData = data || [];
       renderRiwayatGuruWali();
     })
     .withFailureHandler(err=>{
+      stopTimer();
       const tbody2 = document.getElementById('riwayatGuruWaliBody');
       if(tbody2)
         tbody2.innerHTML =

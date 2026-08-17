@@ -77,7 +77,7 @@ function getInfoGuruWali(){
   const setting = getSetting();
   const sh      = ensureSiswaBinaanSheet_();
   const tIdx    = _siswaBinaanTahunColIdx_(sh);
-  const data    = sh.getDataRange().getValues();
+  const data    = getSheetValuesCached_('SISWA_BINAAN', sh);
   const email   = auth.email;
   const tahunAktif = setting.tahun_pelajaran || '';
 
@@ -102,7 +102,7 @@ function getSiswaBinaan(page, pageSize){
   const auth  = getAuth();
   const sh    = ensureSiswaBinaanSheet_();
   const tIdx  = _siswaBinaanTahunColIdx_(sh);
-  const data  = sh.getDataRange().getValues();
+  const data  = getSheetValuesCached_('SISWA_BINAAN', sh);
   const email = auth.email;
   const tahunAktif = getSetting().tahun_pelajaran || '';
 
@@ -189,6 +189,7 @@ function simpanJurnalGuruWali(data){
 
   logAudit('SIMPAN_JURNAL_WALI', auth.email, data.topik_pendampingan);
   trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_JURNAL_WALI');
+  invalidateCache_('JURNAL_GURU_WALI');
 
   return { status: true, id };
 }
@@ -230,7 +231,7 @@ function getRiwayatJurnalGuruWali(){
   const setting     = getSetting();
   const activeTahun = setting.tahun_pelajaran || '';
   const sh    = ensureJurnalGuruWaliSheet_();
-  const data  = sh.getDataRange().getValues();
+  const data  = getSheetValuesCached_('JURNAL_GURU_WALI', sh);
   const email = auth.email;
   const tz    = Session.getScriptTimeZone();
 
@@ -283,6 +284,7 @@ function hapusJurnalGuruWali(id){
 
     sh.deleteRow(i + 1);
     logAudit('HAPUS_JURNAL_WALI', auth.email, id);
+    invalidateCache_('JURNAL_GURU_WALI');
     return true;
   }
 
@@ -303,7 +305,10 @@ function _arsipWaliCacheKey_(email, tahun) {
  * script.run lain), terasa seperti macet lama padahal cuma lambat.
  * Status ini jarang berubah (cuma berubah begitu guru benar-benar
  * mengarsip), jadi di-cache 5 menit — arsipJurnalGuruWali() membersihkan
- * cache-nya begitu berhasil supaya statusnya langsung update.
+ * cache-nya begitu berhasil supaya statusnya langsung update. Pembacaan
+ * sheet JURNAL_GURU_WALI di bawah (untuk hitung tahunSet) juga lewat
+ * getSheetValuesCached_() — sheet ini dipakai bersama semua guru wali di
+ * sekolah jadi bisa besar, jangan baca ulang tiap kali tab dibuka.
  */
 function getStatusArsipJurnalWali(){
   const auth        = getAuth();
@@ -313,7 +318,7 @@ function getStatusArsipJurnalWali(){
   const safeEmail   = email.replace(/[@.]/g,'_');
 
   const sh   = ensureJurnalGuruWaliSheet_();
-  const data = sh.getDataRange().getValues();
+  const data = getSheetValuesCached_('JURNAL_GURU_WALI', sh);
 
   const tahunSet = new Set();
   for(let i = 1; i < data.length; i++){
@@ -430,6 +435,7 @@ function arsipJurnalGuruWali(){
   }
 
   try { CacheService.getScriptCache().remove(_arsipWaliCacheKey_(email, tahun)); } catch(e) {}
+  invalidateCache_('JURNAL_GURU_WALI');
 
   logAudit('ARSIP_JURNAL_WALI', email, tahun + ' | ' + toArchive.length + ' entri');
   return { success: true, tahun, jumlah: toArchive.length };
@@ -452,7 +458,7 @@ function getKelasUntukImportBinaan(){
 
   const email = String(auth.email || '').toLowerCase().trim();
   const tahunAktif = getSetting().tahun_pelajaran || '';
-  const data = sh.getDataRange().getValues();
+  const data = getSheetCached('SISWA', 120);
 
   const kelasPeriode = new Set();
   const kelasSemua = new Set();
@@ -692,7 +698,7 @@ function getRiwayatKelasSiswaBinaan(nis){
 
   const sh   = ensureSiswaBinaanSheet_();
   const tIdx = _siswaBinaanTahunColIdx_(sh);
-  const data = sh.getDataRange().getValues();
+  const data = getSheetValuesCached_('SISWA_BINAAN', sh);
 
   const result = [];
   for(let i = 1; i < data.length; i++){
@@ -718,7 +724,7 @@ function getKelasSiswaBinaan(){
   const email = String(auth.email || '').toLowerCase().trim();
   const sh    = ensureSiswaBinaanSheet_();
   const tIdx  = _siswaBinaanTahunColIdx_(sh);
-  const data  = sh.getDataRange().getValues();
+  const data  = getSheetValuesCached_('SISWA_BINAAN', sh);
   const tahunAktif = getSetting().tahun_pelajaran || '';
   const kelasSet = {};
   for(let i = 1; i < data.length; i++){
@@ -742,7 +748,7 @@ function getSiswaBinaanByKelas(kelas){
   const email = String(auth.email || '').toLowerCase().trim();
   const sh    = ensureSiswaBinaanSheet_();
   const tIdx  = _siswaBinaanTahunColIdx_(sh);
-  const data  = sh.getDataRange().getValues();
+  const data  = getSheetValuesCached_('SISWA_BINAAN', sh);
   const tahunAktif = getSetting().tahun_pelajaran || '';
   const result = [];
   for(let i = 1; i < data.length; i++){

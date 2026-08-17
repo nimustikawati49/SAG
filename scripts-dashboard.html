@@ -795,9 +795,11 @@ function loadSiswaBinaan(page){
   var tbody = document.getElementById('siswaBinaanBody');
   if(!tbody) return;
   var p = Number(page) || 1;
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:12px">⏳ Memuat...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:12px"></td></tr>';
+  var stopTimer = startElapsedNotice_(tbody.querySelector('td'), '⏳ Memuat...');
   google.script.run
     .withSuccessHandler(function(res){
+      stopTimer();
       var data = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
       if(!data.length){
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:16px">📭 Belum ada siswa binaan. Upload via template CSV.</td></tr>';
@@ -833,6 +835,7 @@ function loadSiswaBinaan(page){
       }
     })
     .withFailureHandler(function(err){
+      stopTimer();
       if(tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:12px">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</td></tr>';
     })
     .getSiswaBinaan(p, 20);

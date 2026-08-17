@@ -45,6 +45,26 @@
   });
 })();
 
+/* =================================================================
+   ELAPSED-TIME NOTICE — dipakai di teks "⏳ Memuat..." supaya user
+   lihat detik berjalan (bukan cuma teks diam), jadi tahu prosesnya
+   masih jalan dan tidak buru-buru reload/refresh halaman.
+   Pakai: const stop = startElapsedNotice_(el, '⏳ Memuat...');
+          ...setelah selesai (sukses/gagal)...  stop();
+   ================================================================= */
+function startElapsedNotice_(el, baseText) {
+  if (!el) return function(){};
+  var start = Date.now();
+  el.innerHTML = baseText + ' <span class="elapsed-notice" style="opacity:.65;font-size:.9em">(0 detik)</span>';
+  var timer = setInterval(function(){
+    var span = el.querySelector ? el.querySelector('.elapsed-notice') : null;
+    if (!span || !document.body.contains(span)) { clearInterval(timer); return; }
+    var secs = Math.floor((Date.now() - start) / 1000);
+    span.textContent = '(' + secs + ' detik)';
+  }, 1000);
+  return function stop(){ clearInterval(timer); };
+}
+
 function isMobile(){
   return window.innerWidth <= 768;
 }
