@@ -273,54 +273,111 @@ function getJadwalReminderStatus() {
 /**
  * Dipanggil otomatis pukul 15:00 — kirim email ke setiap guru
  * tentang jadwal mengajar mereka besok hari.
+ *
+ * PERBAIKAN (sebelumnya kemungkinan besar tidak pernah benar-benar
+ * mengirim apa pun): fungsi lama mencari sheet 'JADWAL_MENGAJAR', yang
+ * tidak pernah dibuat oleh kode manapun — sheet jadwal yang sebenarnya
+ * aktif dan dipakai di seluruh aplikasi bernama JADWAL_SEMESTER (lihat
+ * ensureJadwalSheet_() di Jadwal.js). Ia juga membaca kolom 'jam'
+ * (tidak ada di skema — yang ada jam_mulai & jam_selesai terpisah) dan
+ * membandingkan nama hari dengan casing campuran ('Senin') padahal
+ * kolom 'hari' selalu disimpan UPPERCASE ('SENIN', lihat baris tulis
+ * jadwal di Jadwal.js). Sekaligus diperbaiki supaya benar di mode
+ * per_guru: trigger terjadwal berjalan sebagai PEMILIK SCRIPT, bukan
+ * sebagai guru yang bersangkutan, jadi tidak bisa pakai getSpreadsheet_()/
+ * sheet() biasa (itu akan resolve ke spreadsheet pemilik script untuk
+ * SEMUA guru) — di sini tiap guru aktif dibuka spreadsheet-nya sendiri
+ * satu per satu lewat resolveSpreadsheetIdForUser_().
  */
 function runJadwalReminderCheck_() {
-  const ss      = getSpreadsheet_();
-  const shJdwl  = ss.getSheetByName('JADWAL_MENGAJAR');
-  if (!shJdwl) return;
-
   const tz      = Session.getScriptTimeZone();
   const now     = new Date();
-  // Tentukan "besok" berdasarkan nama hari
+  // Tentukan "besok" berdasarkan nama hari — kolom 'hari' di JADWAL_SEMESTER
+  // selalu UPPERCASE (lihat data.hari = ....toUpperCase() di Jadwal.js).
   const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const hariNames    = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const hariNames    = ['MINGGU','SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
   const tomorrowHari = hariNames[tomorrowDate.getDay()];
   const tomorrowStr  = Utilities.formatDate(tomorrowDate, tz, 'EEEE, d MMMM yyyy');
 
   const appName = 'Sistem Akademik Guru';
   const appUrl  = ScriptApp.getService().getUrl();
+  const modePerGuru = getStorageMode_() === 'per_guru';
 
-  const rows  = shJdwl.getDataRange().getValues();
-  const header = rows[0];
-  const idx = {
-    hari:  header.indexOf('hari'),
-    jam:   header.indexOf('jam'),
-    mapel: header.indexOf('mapel'),
-    kelas: header.indexOf('kelas'),
-    email: header.indexOf('email'),
-  };
+  const shUsersCentral = _getCentralSheetByName_('USERS');
+  if (!shUsersCentral) return;
+  const userData = shUsersCentral.getDataRange().getValues();
 
-  // Kumpulkan jadwal besok per guru
-  const byEmail = {};
-  rows.slice(1).forEach(r => {
-    const hari  = String(r[idx.hari]  || '').trim();
-    const email = String(r[idx.email] || '').toLowerCase().trim();
-    if (!email || hari !== tomorrowHari) return;
-    if (!byEmail[email]) byEmail[email] = [];
-    byEmail[email].push({
-      jam:   r[idx.jam]   || '',
-      mapel: r[idx.mapel] || '',
-      kelas: r[idx.kelas] || '',
-    });
-  });
+  for (let ui = 1; ui < userData.length; ui++) {
+    const email  = String(userData[ui][0] || '').toLowerCase().trim();
+    const role   = String(userData[ui][1] || '').toLowerCase().trim();
+    const status = String(userData[ui][2] || '').toLowerCase().trim();
+    if (!email || role === 'superadmin' || status !== 'active') continue;
 
-  Object.keys(byEmail).forEach(email => {
-    const jadwals = byEmail[email];
-    if (!jadwals.length) return;
+    let ss;
+    if (modePerGuru) {
+      const sid = resolveSpreadsheetIdForUser_(email);
+      if (!sid) continue; // belum ter-provisioning, lewati
+      try { ss = SpreadsheetApp.openById(sid); } catch (e) { continue; }
+    } else {
+      ss = getCentralSpreadsheet_();
+    }
+
+    const shJdwl = ss.getSheetByName('JADWAL_SEMESTER') || ss.getSheetByName('jadwal_semester');
+    if (!shJdwl || shJdwl.getLastRow() < 2) continue;
+
+    // Semester/tahun ajaran aktif guru ini, dari SETTING di spreadsheet-nya sendiri.
+    let semesterAktif = '';
+    let tahunAktif    = '';
+    const shSetting = ss.getSheetByName('SETTING');
+    if (shSetting && shSetting.getLastRow() > 1) {
+      const setRows   = shSetting.getDataRange().getValues();
+      const setHeader = setRows[0].map(h => String(h || '').toLowerCase().trim());
+      const idxEmail    = setHeader.indexOf('email');
+      const idxTaAktif  = setHeader.indexOf('tahun_pelajaran_aktif');
+      const idxSemAktif = setHeader.indexOf('semester_aktif');
+      const idxTahunOld = setHeader.indexOf('tahun');
+      const idxSemOld   = setHeader.indexOf('semester');
+      for (let si = 1; si < setRows.length; si++) {
+        if (idxEmail > -1 && String(setRows[si][idxEmail] || '').toLowerCase().trim() !== email) continue;
+        tahunAktif = String((idxTaAktif > -1 && setRows[si][idxTaAktif]) || (idxTahunOld > -1 && setRows[si][idxTahunOld]) || '').trim();
+        semesterAktif = normalizeSemesterLabel_(String((idxSemAktif > -1 && setRows[si][idxSemAktif]) || (idxSemOld > -1 && setRows[si][idxSemOld]) || ''));
+        break;
+      }
+    }
+
+    // Header JADWAL_SEMESTER: email, semester, hari, kelas, mapel, jam_mulai, jam_selesai, [tahun_pelajaran]
+    const jdwlLastCol = shJdwl.getLastColumn();
+    const jdwlHeader  = shJdwl.getRange(1, 1, 1, jdwlLastCol).getValues()[0]
+      .map(h => String(h || '').toLowerCase().trim());
+    const tIdx = jdwlHeader.indexOf('tahun_pelajaran');
+
+    const rows = shJdwl.getDataRange().getValues();
+    const jadwals = [];
+    for (let i = 1; i < rows.length; i++) {
+      const rowEmail = String(rows[i][0] || '').toLowerCase().trim();
+      if (rowEmail !== email) continue;
+      const hari = String(rows[i][2] || '').trim().toUpperCase();
+      if (hari !== tomorrowHari) continue;
+      if (semesterAktif && normalizeSemesterLabel_(String(rows[i][1] || '')) !== semesterAktif) continue;
+      if (tahunAktif && tIdx > -1) {
+        const tahunRow = String(rows[i][tIdx] || '').trim();
+        if (tahunRow && tahunRow !== tahunAktif) continue;
+      }
+      jadwals.push({
+        jam_mulai: formatJam(rows[i][5]),
+        jam_selesai: formatJam(rows[i][6]),
+        mapel: rows[i][4] || '',
+        kelas: rows[i][3] || ''
+      });
+    }
+    if (!jadwals.length) continue;
+
+    jadwals.sort((a, b) => toMinutes_(a.jam_mulai) - toMinutes_(b.jam_mulai));
+
     try {
       const rows_html = jadwals.map(j =>
         `<tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6">${j.jam}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6">${j.jam_mulai} - ${j.jam_selesai}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6">${j.mapel}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6">${j.kelas}</td>
         </tr>`
@@ -363,5 +420,5 @@ function runJadwalReminderCheck_() {
     } catch(e) {
       console.error('[JADWAL_REMINDER] Gagal kirim ke ' + email + ': ' + (e.message || e));
     }
-  });
+  }
 }
