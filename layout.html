@@ -1508,6 +1508,45 @@
 </div>
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
+<!-- ===== KALENDER HARI LIBUR ====================================================
+     Dua sumber tanggal libur (lihat Kalender.js):
+      1. 'nasional' — ditarik otomatis dari kalender publik Google
+         ("Holidays in Indonesia") lewat tombol Sinkronkan di bawah. Tidak
+         otomatis jalan sendiri (biar tidak boros kuota Calendar API) —
+         SuperAdmin klik manual, idealnya sekali di awal tahun ajaran.
+      2. 'sekolah' — ditambah manual untuk hari libur yang tidak ada di
+         kalender nasional (libur semester, hari raya lokal, dst) —
+         SELALU menang, tidak pernah ditimpa sync nasional.
+     Begitu tersimpan, kartu "📅 Jadwal Mengajar" di Dashboard guru
+     otomatis menampilkan "🎉 Libur" pada hari yang bertepatan, jadi guru
+     tidak perlu dikasih tahu manual lewat menu lain. -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+    <div>
+      <h3 style="margin:0">📅 Kalender Hari Libur</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Hari yang ditandai libur di sini otomatis muncul sebagai "🎉 Libur" di kartu Jadwal Mengajar semua guru — jadi guru langsung tahu tanpa perlu diberi tahu manual.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="syncKalenderNasionalUI()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">🔄 Sinkronkan Kalender Nasional</button>
+      <button class="ghost" onclick="loadHariLiburPanel()" style="font-size:13px">🔄 Muat</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px;background:#f8fafc;border-radius:10px">
+    <div>
+      <label style="font-size:12px;color:#6b7280">Tanggal</label>
+      <input type="date" id="hariLiburTanggalInput">
+    </div>
+    <div style="flex:1;min-width:200px">
+      <label style="font-size:12px;color:#6b7280">Keterangan</label>
+      <input type="text" id="hariLiburKeteranganInput" placeholder="mis. Libur Semester Genap">
+    </div>
+    <button onclick="addHariLiburManualUI()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">➕ Tambah Libur Sekolah</button>
+  </div>
+  <div id="hariLiburResult" style="margin-bottom:10px;font-size:13px"></div>
+  <div id="hariLiburListBox"><div class="muted">Klik "Muat" untuk menampilkan daftar.</div></div>
+</div>
+<!-- ===== END KALENDER HARI LIBUR ===== -->
+
 <!-- ===== SPREADSHEET LAMA (SUDAH DIPINDAH GURU) ===============================
      ⚠️ CATATAN SUPERADMIN: sejak connectOwnSpreadsheet() (DriveConnect.js)
      bisa memverifikasi hasil salin data, spreadsheet lama (bekas

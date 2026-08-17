@@ -40,6 +40,7 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadSuperAdminEmailUI, 1100);
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadTrialActivationPanel, 1600);
+      setTimeout(loadHariLiburPanel, 1750);
       setTimeout(loadSANotifHistory, 1900);
     setTimeout(loadArsipFolderConfig, 2400);
       setTimeout(loadCentralRegistryOverview, 2700);
@@ -1499,6 +1500,104 @@ function clearRedundantCentralMasterRosterUI() {
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .clearRedundantCentralMasterRoster();
+}
+
+/**
+ * loadHariLiburPanel()
+ * Panel "📅 Kalender Hari Libur" — lihat komentar di layout.html dan
+ * Kalender.js (getHariLiburList).
+ */
+function loadHariLiburPanel() {
+  var el = document.getElementById('hariLiburListBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:60px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada hari libur tersimpan. Klik "🔄 Sinkronkan Kalender Nasional" atau tambah manual di atas.</div>';
+        return;
+      }
+      var todayISO = new Date().toISOString().slice(0, 10);
+      var html = '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Sumber</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        var isPast = r.tanggal < todayISO;
+        var sumberBadge = r.sumber === 'nasional'
+          ? '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600">🇮🇩 Nasional</span>'
+          : '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600">🏫 Sekolah</span>';
+        html += '<tr style="' + (isPast ? 'opacity:.5' : '') + '">' +
+          '<td style="font-size:12px;white-space:nowrap">' + _escSA(r.tanggal) + '</td>' +
+          '<td style="font-size:13px">' + _escSA(r.keterangan) + '</td>' +
+          '<td>' + sumberBadge + '</td>' +
+          '<td><button class="ghost" onclick="deleteHariLiburUI(\'' + _escSA(r.tanggal) + '\')" style="font-size:12px;color:#dc2626">🗑️</button></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
+    })
+    .getHariLiburList();
+}
+
+function syncKalenderNasionalUI() {
+  var resultEl = document.getElementById('hariLiburResult');
+  if (resultEl) resultEl.textContent = '';
+  var stopElapsed = (typeof startElapsedNotice_ === 'function' && resultEl)
+    ? startElapsedNotice_(resultEl, '⏳ Menyinkronkan kalender nasional...')
+    : null;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (stopElapsed) stopElapsed();
+      var msg = '✅ Sinkron selesai — ditambah: ' + res.added + ', diperbarui: ' + res.updated +
+        (res.skipped ? ', dilewati (sudah ada entry sekolah): ' + res.skipped : '') + '.';
+      if (resultEl) resultEl.textContent = msg;
+      if (typeof showToast === 'function') showToast(msg, 'success', 8000);
+      loadHariLiburPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (stopElapsed) stopElapsed();
+      var msg = '❌ ' + (err && err.message ? err.message : err);
+      if (resultEl) resultEl.textContent = msg;
+      if (typeof showToast === 'function') showToast(msg, 'error', 9000);
+    })
+    .syncKalenderNasional();
+}
+
+function addHariLiburManualUI() {
+  var tglInput = document.getElementById('hariLiburTanggalInput');
+  var ketInput = document.getElementById('hariLiburKeteranganInput');
+  var tgl = tglInput ? tglInput.value : '';
+  var ket = ketInput ? ketInput.value.trim() : '';
+  if (!tgl) { alert('Pilih tanggal terlebih dahulu'); return; }
+  if (!ket) { alert('Isi keterangan terlebih dahulu'); return; }
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Hari libur disimpan', 'success');
+      if (tglInput) tglInput.value = '';
+      if (ketInput) ketInput.value = '';
+      loadHariLiburPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .addHariLiburManual(tgl, ket);
+}
+
+function deleteHariLiburUI(tanggal) {
+  if (!confirm('Hapus hari libur tanggal ' + tanggal + '?')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('🗑️ Hari libur dihapus', 'success');
+      loadHariLiburPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .deleteHariLibur(tanggal);
 }
 
 </script>

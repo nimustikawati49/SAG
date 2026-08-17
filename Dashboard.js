@@ -412,6 +412,13 @@ function getDashboardAllData() {
     jadwal = {};
   }
 
+  // Tandai hari libur minggu berjalan (lihat Kalender.js) — sama seperti
+  // getDashboardJadwal(), key '_libur' tidak bentrok dengan nama hari
+  // (selalu UPPERCASE).
+  try {
+    if (typeof getHariLiburMingguIni === 'function') jadwal._libur = getHariLiburMingguIni();
+  } catch (eLibur) { /* fail-soft */ }
+
   // Baca JURNAL & ABSENSI SEKALI di sini, dipakai ulang untuk meta + v4 —
   // dulu masing-masing dibaca sendiri-sendiri lewat getDashboardMetaData()
   // dan getDashboardV4Data(), jadi JURNAL kebaca 2x per load dashboard.

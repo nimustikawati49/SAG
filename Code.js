@@ -78,7 +78,8 @@ function _isCentralOnlySheet_(name) {
     'DEPLOYMENTS': true,
     'RESOURCE_MAP': true,
     'APP_RELEASES': true,
-    'UPDATE_LOG': true
+    'UPDATE_LOG': true,
+    'HARI_LIBUR': true
   };
   return !!centralSheets[String(name || '').trim().toUpperCase()];
 }

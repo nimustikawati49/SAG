@@ -311,6 +311,9 @@ function _renderJadwalGrid_(obj, container){
         'letter-spacing:.3px;background:rgba(255,255,255,.22)}' +
       '.jw-dot{display:inline-block;width:6px;height:6px;border-radius:50%;' +
         'background:#fff;animation:jwDot 1.2s infinite;flex-shrink:0}' +
+      '.jw-libur-badge{margin:8px 6px;padding:10px 8px;text-align:center;border-radius:9px;' +
+        'background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;line-height:1.5}' +
+      'body.dark .jw-libur-badge{background:#422006;color:#fde68a}' +
       '@media(min-width:540px){.jw-col{flex:1}}' +
       'body.dark .jw-wrap{background:#1f2937;border-color:#374151}' +
       'body.dark .jw-col{border-color:#374151}' +
@@ -349,41 +352,64 @@ function _renderJadwalGrid_(obj, container){
     });
   });
 
+  // Hari libur (nasional/sekolah) minggu berjalan \u2014 lihat Kalender.js,
+  // dikirim server lewat key '_libur' di objek jadwal yang sama (bukan
+  // request terpisah). Dipetakan ke tanggal ASLI minggu ini per nama hari
+  // supaya kolom yang kebetulan bertepatan dengan tanggal libur bisa
+  // ditandai, walau jadwalnya sendiri recurring mingguan (tidak per
+  // tanggal spesifik).
+  var liburMap = (obj && obj._libur) || {};
+  var hariDateMap = {};
+  try {
+    var _dayIdx = now.getDay(); // 0=Minggu
+    var _mondayOffset = _dayIdx === 0 ? -6 : 1 - _dayIdx;
+    var _monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + _mondayOffset);
+    semuaHari.forEach(function(h, i){
+      var d = new Date(_monday.getTime() + i*24*60*60*1000);
+      hariDateMap[h] = d.getFullYear()+'-'+_pad_(d.getMonth()+1)+'-'+_pad_(d.getDate());
+    });
+  } catch(e){}
+
   var html = '<div class="jw-wrap" id="jwWrap">';
 
   hariAktif.forEach(function(h){
     var isToday = (h === hariIni);
+    var liburKet = liburMap[hariDateMap[h]] || '';
     html += '<div class="jw-col'+(isToday?' jw-today':'')+'" data-hari="'+h+'">';
     html += '<div class="jw-head">' +
       '<div class="jw-head-day">'+(_abbr[h]||h)+'</div>' +
       (isToday ? '<div class="jw-head-date">'+todayDate+'</div>' : '') +
     '</div>';
     html += '<div class="jw-slots">';
-    (obj[h]||[]).forEach(function(item){
-      var sMin=0, eMin=1440;
-      try{ var sp=item.jam_mulai.split(':'); sMin=+sp[0]*60+ +sp[1]; }catch(e){}
-      try{ var ep=item.jam_selesai.split(':'); eMin=+ep[0]*60+ +ep[1]; }catch(e){}
-      var isNow = isToday && curMin>=sMin && curMin<=eMin;
-      var clr   = clrMap[item.mapel] || palette[0];
-      var slotBg = isNow
-        ? 'background:'+clr.bg+';animation:jwPulse 2s ease-in-out infinite;'
-        : 'background:'+clr.light+';border-left:3px solid '+clr.bg+';';
-      var kelasClr = isNow ? 'color:#fff;' : 'color:'+clr.text+';';
-      var mapelClr = isNow ? 'color:rgba(255,255,255,.85);' : 'color:#6b7280;';
-      var timeClr  = isNow ? 'color:rgba(255,255,255,.7);' : 'color:#9ca3af;';
-      html +=
-        '<div class="jw-slot" style="'+slotBg+'">' +
-          '<div class="jw-slot-kelas" style="'+kelasClr+'">'+_esc_(item.kelas)+'</div>' +
-          '<div class="jw-slot-mapel" style="'+mapelClr+'">'+_esc_(item.mapel)+'</div>' +
-          '<div class="jw-slot-time" style="'+timeClr+'">' +
-            (isNow
-              ? '<span class="jw-dot"></span>'+_esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)+
-                ' <span class="jw-now-badge">SEKARANG</span>'
-              : _esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)
-            ) +
-          '</div>' +
-        '</div>';
-    });
+    if(liburKet){
+      html += '<div class="jw-libur-badge">\ud83c\udf89 Libur<br>'+_esc_(liburKet)+'</div>';
+    } else {
+      (obj[h]||[]).forEach(function(item){
+        var sMin=0, eMin=1440;
+        try{ var sp=item.jam_mulai.split(':'); sMin=+sp[0]*60+ +sp[1]; }catch(e){}
+        try{ var ep=item.jam_selesai.split(':'); eMin=+ep[0]*60+ +ep[1]; }catch(e){}
+        var isNow = isToday && curMin>=sMin && curMin<=eMin;
+        var clr   = clrMap[item.mapel] || palette[0];
+        var slotBg = isNow
+          ? 'background:'+clr.bg+';animation:jwPulse 2s ease-in-out infinite;'
+          : 'background:'+clr.light+';border-left:3px solid '+clr.bg+';';
+        var kelasClr = isNow ? 'color:#fff;' : 'color:'+clr.text+';';
+        var mapelClr = isNow ? 'color:rgba(255,255,255,.85);' : 'color:#6b7280;';
+        var timeClr  = isNow ? 'color:rgba(255,255,255,.7);' : 'color:#9ca3af;';
+        html +=
+          '<div class="jw-slot" style="'+slotBg+'">' +
+            '<div class="jw-slot-kelas" style="'+kelasClr+'">'+_esc_(item.kelas)+'</div>' +
+            '<div class="jw-slot-mapel" style="'+mapelClr+'">'+_esc_(item.mapel)+'</div>' +
+            '<div class="jw-slot-time" style="'+timeClr+'">' +
+              (isNow
+                ? '<span class="jw-dot"></span>'+_esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)+
+                  ' <span class="jw-now-badge">SEKARANG</span>'
+                : _esc_(item.jam_mulai)+'\u2013'+_esc_(item.jam_selesai)
+              ) +
+            '</div>' +
+          '</div>';
+      });
+    }
     html += '</div></div>';
   });
 

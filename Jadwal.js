@@ -697,7 +697,15 @@ function getDashboardJadwal(){
       });
     }
 
-    return _sortJadwalGrouped_(grouped);
+    const sorted = _sortJadwalGrouped_(grouped);
+    // Tandai hari libur (nasional/sekolah) minggu berjalan supaya kartu
+    // Jadwal Mengajar bisa menampilkan "Libur" alih-alih daftar kelas —
+    // key '_libur' sengaja huruf kecil, tidak akan bentrok dengan nama
+    // hari (selalu UPPERCASE, mis. SENIN) yang jadi key lain di objek ini.
+    try {
+      if (typeof getHariLiburMingguIni === 'function') sorted._libur = getHariLiburMingguIni();
+    } catch (eLibur) { /* fail-soft — jangan sampai jadwal gagal tampil gara-gara ini */ }
+    return sorted;
 
   } catch(e) {
     return { _error: e.message || 'UNKNOWN_ERROR' };

@@ -620,7 +620,8 @@ var LEGACY_CLEANUP_ACTIVE_SHEETS_ = {
   'JURNAL_GURU_WALI': true,
   'SISWA_BINAAN': true,
   'EXPORT_JURNAL': true,  // dibuat ulang tiap kali exportJurnalExcel() dipanggil
-  '_PDF_REKAP': true      // dibuat ulang tiap kali exportRekapPDF() dipanggil
+  '_PDF_REKAP': true,     // dibuat ulang tiap kali exportRekapPDF() dipanggil
+  'HARI_LIBUR': true      // kalender libur nasional+sekolah, lihat Kalender.js
 };
 
 /**
