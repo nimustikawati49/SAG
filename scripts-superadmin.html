@@ -1217,7 +1217,7 @@ function loadTrialActivationPanel() {
         el.innerHTML = '<div class="alert-banner info">Belum ada akun guru.</div>';
         return;
       }
-      var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Kode/Nama Sekolah</th><th>Dibuat</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+      var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Kode/Nama Sekolah</th><th>Dibuat</th><th>Status</th><th>Drive</th><th>Aksi</th></tr></thead><tbody>';
       rows.forEach(function(r) {
         var statusHtml, statusActionHtml;
         if (r.status === 'trial') {
@@ -1260,12 +1260,20 @@ function loadTrialActivationPanel() {
               'onclick="saveKodeSekolahUI(\'' + _escSA(r.email) + '\')" title="Simpan sekolah">💾</button>' +
           '</div>';
 
+        var driveHtml = '<span class="muted" style="font-size:11px">–</span>';
+        if (r.drive_self_owned === true) {
+          driveHtml = '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600" title="Database guru sudah di Drive miliknya sendiri">✅ Milik sendiri</span>';
+        } else if (r.drive_self_owned === false) {
+          driveHtml = '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600" title="Database guru masih di Drive SuperAdmin, belum dihubungkan ke Drive sendiri">⚠️ Drive SA</span>';
+        }
+
         html += '<tr>' +
           '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
           '<td style="font-size:12px">' + _escSA(r.role) + '</td>' +
           '<td>' + kodeSekolahHtml + '</td>' +
           '<td style="font-size:12px">' + _escSA(r.dibuat) + '</td>' +
           '<td>' + statusHtml + '</td>' +
+          '<td>' + driveHtml + '</td>' +
           '<td>' + actionHtml + '</td>' +
           '</tr>';
       });

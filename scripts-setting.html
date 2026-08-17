@@ -636,6 +636,82 @@ function loadSettingForm(){
     refreshAcademicQuickInfo();
 
   }).getSetting();
+
+  loadDriveConnectStatus_();
+}
+
+/**
+ * loadDriveConnectStatus_()
+ * Tampilkan kartu "Google Drive Pribadi Saya" kalau relevan (akun guru,
+ * mode storage per_guru) — lihat DriveConnect.js.
+ */
+function loadDriveConnectStatus_(){
+  google.script.run
+    .withSuccessHandler(function(info){
+      var card = document.getElementById('driveConnectCard');
+      if(!card || !info || !info.applicable) { if(card) card.style.display = 'none'; return; }
+
+      card.style.display = 'block';
+      var saEmailEl = document.getElementById('driveConnectSaEmail');
+      if(saEmailEl) saEmailEl.textContent = info.shareWithEmail || '-';
+
+      var ok = document.getElementById('driveConnectStatusOk');
+      var needed = document.getElementById('driveConnectStatusNeeded');
+      var note = document.getElementById('driveConnectRequiredNote');
+
+      if(info.connected){
+        if(ok) ok.style.display = 'block';
+        if(needed) needed.style.display = 'none';
+      }else{
+        if(ok) ok.style.display = 'none';
+        if(needed) needed.style.display = 'block';
+        if(note) note.style.display = info.required ? 'block' : 'none';
+      }
+    })
+    .withFailureHandler(function(err){ console.warn('[loadDriveConnectStatus_] gagal:', err && err.message); })
+    .getDriveConnectInfo();
+}
+
+/**
+ * connectOwnSpreadsheetUI()
+ * Kirim link/ID spreadsheet pribadi guru ke connectOwnSpreadsheet()
+ * (DriveConnect.js) — migrasi data lama (kalau ada) berjalan otomatis
+ * di server, jadi proses ini bisa makan beberapa detik.
+ */
+function connectOwnSpreadsheetUI(){
+  var input = document.getElementById('driveConnectUrlInput');
+  var url = input ? input.value.trim() : '';
+  if(!url){ alert('Tempel link Google Sheets Anda terlebih dahulu'); return; }
+
+  var resultEl = document.getElementById('driveConnectResult');
+  if(resultEl) resultEl.textContent = '';
+  var elapsedEl = resultEl;
+  var stopElapsed = (typeof startElapsedNotice_ === 'function' && elapsedEl)
+    ? startElapsedNotice_(elapsedEl, '⏳ Menghubungkan & menyalin data lama (kalau ada)...')
+    : null;
+
+  startProgress();
+  google.script.run
+    .withSuccessHandler(function(res){
+      endProgress();
+      if(stopElapsed) stopElapsed();
+      var msg = '✅ Berhasil terhubung ke "' + res.spreadsheetName + '".';
+      if(res.migratedSheets && res.migratedSheets.length){
+        msg += ' Data lama disalin: ' + res.migratedSheets.join(', ') + '.';
+      }
+      if(resultEl) resultEl.textContent = msg;
+      if(typeof showToast === 'function') showToast(msg, 'success', 8000);
+      loadDriveConnectStatus_();
+    })
+    .withFailureHandler(function(err){
+      endProgress();
+      if(stopElapsed) stopElapsed();
+      var msg = '❌ ' + (err && err.message ? err.message : err);
+      if(resultEl) resultEl.textContent = msg;
+      if(typeof showToast === 'function') showToast(msg, 'error', 9000);
+      else alert(msg);
+    })
+    .connectOwnSpreadsheet(url);
 }
 
 /**

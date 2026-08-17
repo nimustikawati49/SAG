@@ -56,6 +56,15 @@ function assertLicenseActive(){
     throw new Error('TRIAL_EXPIRED');
   }
 
+  // Wajib menghubungkan Google Drive pribadi begitu akun diaktifkan penuh
+  // (lihat DriveConnect.js) — supaya data guru berikutnya tersimpan di
+  // kuota Drive guru sendiri, bukan terus menumpuk di Drive SuperAdmin.
+  // Trial TIDAK digerbang di sini (biar bisa dicoba dulu tanpa friksi),
+  // digerbang begitu status berubah jadi 'active'.
+  if(auth.status === 'active' && auth.role === 'admin' && auth.drive_connect_required){
+    throw new Error('🔒 Akun Anda sudah aktif, tapi belum terhubung ke Google Drive pribadi. Buka menu ⚙️ Pengaturan → bagian "Google Drive Pribadi Saya" untuk menghubungkan sebelum bisa menyimpan data.');
+  }
+
   // Cek lisensi per sekolah (school-wide) — tetap berlaku sebagai gerbang tambahan.
   return assertSchoolLicenseActive_();
 }
@@ -280,6 +289,16 @@ function _resolveAuth_(email){
               _autoProvisionUserSpreadsheet_(email);
             }
           } catch (provErr) { /* fail-soft, jangan ganggu login */ }
+        }
+
+        // Guru aktif (bukan trial) di mode per_guru wajib sudah pindah ke
+        // spreadsheet milik sendiri (lihat DriveConnect.js) — flag ini dibaca
+        // assertLicenseActive() untuk menggerbang fitur tulis sampai guru
+        // menghubungkan Drive pribadinya.
+        if (status === 'active' && role === 'admin' && getStorageMode_() === 'per_guru') {
+          try {
+            result.drive_connect_required = !_isDriveSelfOwned_(email);
+          } catch (flagErr) { result.drive_connect_required = false; }
         }
 
         return result;

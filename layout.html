@@ -1073,6 +1073,33 @@
   <p class="muted" style="margin-top:10px">
     ⚠️ Data siswa tidak dapat diupload sebelum setting disimpan.
   </p>
+
+  <!-- ================= GOOGLE DRIVE PRIBADI ================= -->
+  <div class="card setting-guru-only" id="driveConnectCard" style="display:none;border-left:6px solid #f59e0b;background:#fffbeb;margin-top:14px">
+    <h4 style="margin-top:0">🔐 Google Drive Pribadi Saya</h4>
+    <div id="driveConnectStatusOk" style="display:none;color:#16a34a;font-weight:600;font-size:13.5px">
+      ✅ Data Anda sudah tersimpan di Google Drive pribadi Anda sendiri — tidak lagi membebani Drive SuperAdmin.
+    </div>
+    <div id="driveConnectStatusNeeded">
+      <p id="driveConnectRequiredNote" style="margin:0 0 10px;font-size:12.5px;font-weight:700;color:#b45309;display:none">
+        ⚠️ Akun Anda sudah aktif — mohon segera hubungkan supaya bisa terus menyimpan data.
+      </p>
+      <p style="margin:4px 0 10px;font-size:13.5px;line-height:1.7">
+        Supaya data Anda tersimpan di <b>Google Drive Anda sendiri</b> (bukan Drive SuperAdmin), hubungkan 1 spreadsheet kosong milik Anda:
+      </p>
+      <ol style="margin:0 0 12px 18px;font-size:13.5px;line-height:1.8">
+        <li>Buka <a href="https://sheet.new" target="_blank" rel="noopener">sheet.new</a> untuk membuat Google Sheet kosong baru di Drive Anda.</li>
+        <li>Klik <b>Bagikan (Share)</b> di kanan atas → tambahkan email <code id="driveConnectSaEmail">-</code> sebagai <b>Editor</b>.</li>
+        <li>Salin link spreadsheet dari address bar, tempel di bawah ini, lalu klik Hubungkan.</li>
+      </ol>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="driveConnectUrlInput" placeholder="Tempel link Google Sheets di sini" style="flex:1;min-width:240px">
+        <button type="button" onclick="connectOwnSpreadsheetUI()">🔗 Hubungkan</button>
+      </div>
+      <div id="driveConnectResult" style="margin-top:10px;font-size:13px"></div>
+    </div>
+  </div>
+
   <!-- ================= FORM SETTING ================= -->
   <div class="setting-grid">
     <!-- KIRI -->

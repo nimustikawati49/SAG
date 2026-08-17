@@ -103,12 +103,19 @@ function getGuruActivationList() {
       dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
       kode_sekolah: String(data[i][4] || '').trim(),
       days_left: null,
-      expired: false
+      expired: false,
+      drive_self_owned: null
     };
     if (status === 'trial') {
       var info = _computeTrialInfo_(data[i][3]);
       entry.days_left = info.daysLeft;
       entry.expired = info.expired;
+    }
+    // Kepemilikan Drive database — cuma relevan untuk guru (role admin) di
+    // mode per_guru, lihat DriveConnect.js. null = tidak relevan (kepsek,
+    // mode central, dll), bukan false.
+    if (role === 'admin' && typeof getStorageMode_ === 'function' && getStorageMode_() === 'per_guru') {
+      try { entry.drive_self_owned = typeof _isDriveSelfOwned_ === 'function' ? _isDriveSelfOwned_(email) : null; } catch (e) { entry.drive_self_owned = null; }
     }
     result.push(entry);
   }
