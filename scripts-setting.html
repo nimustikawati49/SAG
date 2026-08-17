@@ -87,14 +87,20 @@ function downloadTemplate(){
 
 function simpanSetting(){
 
+  const isKepsek = window._currentUserRole === 'kepsek';
+
   if(!settingSudahAda){
     const missing = [];
     if(!set_sekolah.value.trim()) missing.push('Nama Sekolah');
     if(!set_tahun.value.trim()) missing.push('Tahun Pelajaran');
     if(!set_semester.value.trim()) missing.push('Semester');
     if(!set_guru.value.trim()) missing.push('Nama Guru');
-    if(!set_kelas_diampu.value.trim()) missing.push('Kelas Diampu');
-    if(document.querySelectorAll('.mapel-cb:checked').length === 0) missing.push('Mata Pelajaran (centang minimal 1)');
+    // Kepsek tidak mengajar kelas manapun — Kelas Diampu & Mata Pelajaran
+    // disembunyikan dari form-nya, jadi jangan diwajibkan juga.
+    if(!isKepsek){
+      if(!set_kelas_diampu.value.trim()) missing.push('Kelas Diampu');
+      if(document.querySelectorAll('.mapel-cb:checked').length === 0) missing.push('Mata Pelajaran (centang minimal 1)');
+    }
     if(missing.length){
       alert('⚠️ Lengkapi data berikut terlebih dahulu:\n- ' + missing.join('\n- '));
       return;

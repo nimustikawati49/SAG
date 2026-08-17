@@ -60,6 +60,14 @@
       <span class="sb-label">Rekap Sekolah</span>
     </button>
 
+    <!-- Rekap Guru Wali (kepsek only) -->
+    <button class="sb-item kepsek-only" data-tab="rekapGuruWali"
+            onclick="sbGo_('rekapGuruWali',function(){if(typeof initRekapGuruWali==='function')initRekapGuruWali();})"
+            data-tooltip="Rekap Guru Wali">
+      <span class="sb-icon">👨‍🏫</span>
+      <span class="sb-label">Rekap Guru Wali</span>
+    </button>
+
     <!-- Group: Pembelajaran -->
     <div class="sb-group" id="sbgrp-pembelajaran">
       <button class="sb-group-hd" onclick="toggleSbGroup_('pembelajaran')"
@@ -426,6 +434,24 @@
 <div id="rekapSekolah" class="card tab kepsek-only" data-tabid="rekapSekolah" style="display:none">
   <div id="kepsekContainer">
     <p class="muted">⏳ Memuat data rekap sekolah...</p>
+  </div>
+</div>
+
+<!-- ====================REKAP GURU WALI (KEPSEK)============ -->
+<div id="rekapGuruWali" class="card tab kepsek-only" data-tabid="rekapGuruWali" style="display:none">
+  <div id="rekapGuruWaliContainer">
+    <p class="muted">⏳ Memuat rekap guru wali...</p>
+  </div>
+</div>
+
+<!-- ===== MODAL: DETAIL JURNAL GURU WALI (KEPSEK) ===== -->
+<div id="rgwDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99995;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto">
+  <div style="background:#fff;width:95%;max-width:760px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">📘 Jurnal Pendampingan: <span id="rgwDetailNama" style="color:#6C63FF"></span></h3>
+      <button onclick="closeRgwDetailModal_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <div id="rgwDetailBody"><p class="muted">⏳ Memuat...</p></div>
   </div>
 </div>
 
@@ -1089,7 +1115,7 @@
   </div>
 
   <!-- ===== MATA PELAJARAN (FULL WIDTH) ===== -->
-  <div style="margin-top:18px">
+  <div class="setting-guru-only" style="margin-top:18px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <div>
         <label style="font-weight:600;font-size:14px">Mata Pelajaran <span style="color:#ef4444">*</span></label>
@@ -1133,7 +1159,7 @@
     <div id="mapelSelectedPreview" style="margin-top:8px;min-height:22px;font-size:12px;color:#6C63FF;font-weight:600"></div>
   </div>
   <!-- ===== KELAS DIAMPU (FULL WIDTH) ===== -->
-  <div style="margin-top:18px">
+  <div class="setting-guru-only" style="margin-top:18px">
     <label style="font-weight:600;font-size:14px">Kelas Diampu <span style="color:#ef4444">*</span></label>
     <p class="muted" style="margin:2px 0 6px;font-size:12px">Pisahkan dengan koma, contoh: 7A, 7B, 8A — atau pilih jenjang di bawah, kelas akan otomatis terisi.</p>
     <input id="set_kelas_diampu" placeholder="7A, 7B, 8A" oninput="refreshSiswaKelasHint_()">
@@ -1161,6 +1187,7 @@
   ✏️ Edit Setting
 </button>
   </div>
+  <div class="setting-guru-only">
   <hr style="margin:32px 0">
 
   <!-- ================= DATA SISWA ================= -->
@@ -1278,6 +1305,7 @@
 <div id="jadwalList"></div>
 <div id="listJadwalSetting"></div>
 </div>
+</div><!-- end .setting-guru-only -->
 
 <div id="academicWizardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;align-items:center;justify-content:center">
   <div style="background:#fff;width:min(680px,94vw);max-height:88vh;overflow:auto;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3)">

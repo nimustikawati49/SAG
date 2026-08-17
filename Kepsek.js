@@ -16,6 +16,105 @@ function assertKepsek_() {
 }
 
 /**
+ * ================================================================
+ * MULTI-SPREADSHEET HELPERS (mode per_guru)
+ * ================================================================
+ * Di mode storage 'central' semua guru berbagi SATU spreadsheet, jadi
+ * baca sheet USERS/JURNAL/SISWA/dst sekali saja sudah cukup — begitu
+ * getRekapSekolah() aslinya dibuat.
+ *
+ * Tapi kalau mode aktifnya 'per_guru' (tiap guru punya spreadsheet
+ * sendiri, supaya beban Drive tidak numpuk di akun SuperAdmin), data
+ * operasional (JURNAL, SISWA, SETTING, NILAI_SISWA, JURNAL_GURU_WALI,
+ * dst) TERSEBAR di spreadsheet masing-masing guru — cuma sheet USERS
+ * yang tetap selalu di spreadsheet central (lihat _isCentralOnlySheet_
+ * di Code.js). Akun Kepsek sendiri TIDAK PERLU di-mapping ke
+ * spreadsheet guru manapun — dia cukup dikenali dari role='kepsek' di
+ * USERS (central), lalu kode di bawah ini yang membuka SATU-SATU
+ * spreadsheet tiap guru aktif dan menggabungkan barisnya. Baris di
+ * setiap sheet operasional sudah menyimpan email pemiliknya sendiri
+ * (kolom owner/guru_wali), jadi logika agregasi lama yang mengelompokkan
+ * per-email tetap jalan tanpa perubahan — cuma sumber barisnya yang
+ * sekarang bisa datang dari banyak spreadsheet sekaligus.
+ */
+
+/** Daftar email guru/admin berstatus aktif, dari sheet USERS (selalu central). */
+function _kepsekActiveGuruEmails_() {
+  var shUsers = _getCentralSheetByName_('USERS');
+  var guruEmails = [];
+  if (shUsers) {
+    var userData = shUsers.getDataRange().getValues();
+    for (var ui = 1; ui < userData.length; ui++) {
+      var uEmail = String(userData[ui][0] || '').toLowerCase().trim();
+      var uRole  = String(userData[ui][1] || '').toLowerCase().trim();
+      var uStatus= String(userData[ui][2] || '').toLowerCase().trim();
+      if (uEmail && (uRole === 'admin' || uRole === 'guru') && uStatus === 'active') {
+        guruEmails.push(uEmail);
+      }
+    }
+  }
+  return guruEmails;
+}
+
+/**
+ * Buka spreadsheet operasional untuk tiap guru di guruEmails.
+ * Mode central -> semua guru menunjuk ke objek spreadsheet central yang sama
+ * (dibuka sekali). Mode per_guru -> resolve spreadsheet_id masing-masing
+ * lewat RESOURCE_MAP/DEPLOYMENTS; guru yang belum pernah login/belum
+ * ter-provisioning dilewati saja (bukan error) supaya satu guru bermasalah
+ * tidak menggagalkan rekap guru lain.
+ * @returns {Object} map email -> Spreadsheet (guru yang gagal dibuka tidak ada di map)
+ */
+function _kepsekOpenSpreadsheetsMap_(guruEmails) {
+  var mode = getStorageMode_();
+  var map = {};
+  if (mode !== 'per_guru') {
+    var centralSS = getCentralSpreadsheet_();
+    guruEmails.forEach(function(email) { map[email] = centralSS; });
+    return map;
+  }
+
+  var ssById = {}; // cache biar spreadsheet yang sama tidak dibuka berkali-kali
+  guruEmails.forEach(function(email) {
+    var sid = resolveSpreadsheetIdForUser_(email);
+    if (!sid) return; // belum ter-provisioning — dilewati, bukan dianggap error
+    if (ssById[sid] === undefined) {
+      try { ssById[sid] = SpreadsheetApp.openById(sid); }
+      catch (e) { ssById[sid] = null; }
+    }
+    if (ssById[sid]) map[email] = ssById[sid];
+  });
+  return map;
+}
+
+/**
+ * Gabungkan baris dari sheet bernama sama di banyak spreadsheet guru
+ * jadi satu array getValues()-style (header sekali di baris 0, lalu
+ * semua baris data). Sheet yang tidak ada di spreadsheet guru tertentu
+ * (mis. guru itu belum pernah pakai fitur Guru Wali) dilewati saja.
+ */
+function _kepsekReadSheetRowsMulti_(ssMap, guruEmails, sheetName) {
+  var header = null;
+  var dataRows = [];
+  var seenSS = {}; // mode central: semua guru share 1 objek SS, jangan baca berkali-kali
+  guruEmails.forEach(function(email) {
+    var ss = ssMap[email];
+    if (!ss) return;
+    var ssKey = ss.getId();
+    if (seenSS[ssKey]) return; // sudah dibaca (mode central atau kebetulan share spreadsheet)
+    seenSS[ssKey] = true;
+
+    var sh = ss.getSheetByName(sheetName);
+    if (!sh) return;
+    var vals = sh.getDataRange().getValues();
+    if (!vals.length) return;
+    if (!header) header = vals[0];
+    dataRows = dataRows.concat(vals.slice(1));
+  });
+  return header ? [header].concat(dataRows) : [];
+}
+
+/**
  * getRekapSekolah()
  * Mengembalikan rekap seluruh guru di sekolah yang sama
  * (semua user bertipe 'admin' di USERS sheet).
@@ -36,62 +135,42 @@ function assertKepsek_() {
  *   }]
  * }
  */
-function getRekapSekolah() {
+function getRekapSekolah(forceRefresh) {
   assertKepsek_();
 
-  var ss        = getSpreadsheet_();
-  var shUsers   = ss.getSheetByName('USERS');
-  var shJurnal  = ss.getSheetByName('JURNAL');
-  var shSiswa   = ss.getSheetByName('SISWA');
-  var shSetting = ss.getSheetByName('SETTING');
-  var shNilai   = ss.getSheetByName('NILAI_SISWA');
-  var shNilaiSet= ss.getSheetByName('SETTING_NILAI');
+  var cacheKey = 'KEPSEK_REKAP_SEKOLAH';
+  if (!forceRefresh) {
+    try {
+      var cached = CacheService.getScriptCache().get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
+  }
 
-  // ── Setting sekolah ──
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+
+  var jurnalRows = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
+  var siswaRows  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SISWA');
+  var setAll     = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
+  var nilaiRows  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'NILAI_SISWA');
+  var settingRowsNilai = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING_NILAI');
+
+  // ── Setting sekolah (ambil baris pertama yang terisi) ──
   var sekolah         = '';
   var tahun_pelajaran = '';
   var semester_aktif  = '';
-  if (shSetting) {
-    var setRows = shSetting.getDataRange().getValues();
-    // Find any row (setting is per-user, take the most common sekolah)
-    for (var si = 1; si < setRows.length; si++) {
-      if (setRows[si][1]) { sekolah         = String(setRows[si][1] || ''); }
-      if (setRows[si][2]) { tahun_pelajaran = String(setRows[si][2] || ''); }
-      if (setRows[si][3]) { semester_aktif  = String(setRows[si][3] || ''); break; }
-    }
+  for (var si = 1; si < setAll.length; si++) {
+    if (setAll[si][1]) { sekolah         = String(setAll[si][1] || ''); }
+    if (setAll[si][2]) { tahun_pelajaran = String(setAll[si][2] || ''); }
+    if (setAll[si][3]) { semester_aktif  = String(setAll[si][3] || ''); break; }
   }
-
-  // ── Daftar semua guru (role = admin) ──
-  var guruEmails = [];
-  if (shUsers) {
-    var userData = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < userData.length; ui++) {
-      var uEmail = String(userData[ui][0] || '').toLowerCase().trim();
-      var uRole  = String(userData[ui][1] || '').toLowerCase().trim();
-      var uStatus= String(userData[ui][2] || '').toLowerCase().trim();
-      if (uEmail && (uRole === 'admin' || uRole === 'guru') && uStatus === 'active') {
-        guruEmails.push(uEmail);
-      }
-    }
-  }
-
-  // ── Baca jurnal semua guru ──
-  var jurnalRows = [];
-  if (shJurnal) { jurnalRows = shJurnal.getDataRange().getValues(); }
-
-  // ── Baca siswa semua guru ──
-  var siswaRows = [];
-  if (shSiswa) { siswaRows = shSiswa.getDataRange().getValues(); }
 
   // ── Baca setting per guru (nama_guru) ──
   var namaMap = {};
-  if (shSetting) {
-    var setAll = shSetting.getDataRange().getValues();
-    for (var ni = 1; ni < setAll.length; ni++) {
-      var nEmail = String(setAll[ni][0] || '').toLowerCase().trim();
-      var nNama  = String(setAll[ni][4] || '').trim(); // kolom nama_guru
-      if (nEmail && nNama) namaMap[nEmail] = nNama;
-    }
+  for (var ni = 1; ni < setAll.length; ni++) {
+    var nEmail = String(setAll[ni][0] || '').toLowerCase().trim();
+    var nNama  = String(setAll[ni][4] || '').trim(); // kolom nama_guru
+    if (nEmail && nNama) namaMap[nEmail] = nNama;
   }
 
   // ── Tanggal awal bulan ini ──
@@ -198,14 +277,12 @@ function getRekapSekolah() {
 
   // ── Ketuntasan siswa per kelas berdasarkan nilai akhir ──
   var kelasKetuntasan = [];
-  if (shNilai) {
-    var nilaiRows = shNilai.getDataRange().getValues();
-    if (nilaiRows.length > 1) {
+  if (nilaiRows.length > 1) {
       var nh = nilaiRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
       var nidx = {};
       nh.forEach(function(h, i) { nidx[h] = i; });
 
-      var settingRows = shNilaiSet ? shNilaiSet.getDataRange().getValues() : [];
+      var settingRows = settingRowsNilai;
       var kkmMap = {};
       if (settingRows.length > 1) {
         var shh = settingRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
@@ -268,9 +345,8 @@ function getRekapSekolah() {
       });
       kelasKetuntasan = kelasKetuntasan.slice(0, 10);
     }
-  }
 
-  return {
+  var result = {
     sekolah         : sekolah,
     tahun_pelajaran : tahun_pelajaran,
     semester        : semester_aktif,
@@ -283,6 +359,155 @@ function getRekapSekolah() {
     kelasKetuntasan : kelasKetuntasan,
     guruList        : guruList
   };
+
+  // Di mode per_guru fungsi ini membuka spreadsheet tiap guru satu-satu
+  // (bisa berat kalau guru banyak) — cache 3 menit supaya buka tab/refresh
+  // beruntun tidak mengulang proses berat itu. Tombol "🔄 Refresh" di UI
+  // memanggil dengan forceRefresh=true untuk melewati cache.
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
+
+  return result;
+}
+
+/**
+ * getRekapGuruWali(forceRefresh)
+ * Rekap Jurnal Guru Wali (pendampingan) semua guru di sekolah — Kepsek bisa
+ * lihat berapa guru sudah mengisi jurnal wali dan ringkasannya per guru.
+ * Isi lengkap tiap entri jurnal diambil terpisah lewat
+ * getRekapGuruWaliDetail(email) supaya payload awal ini tetap ringkas.
+ */
+function getRekapGuruWali(forceRefresh) {
+  assertKepsek_();
+
+  var cacheKey = 'KEPSEK_REKAP_GURU_WALI';
+  if (!forceRefresh) {
+    try {
+      var cached = CacheService.getScriptCache().get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
+  }
+
+  var guruEmails = _kepsekActiveGuruEmails_();
+  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
+
+  var jgwRows = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL_GURU_WALI');
+  var setAll  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
+
+  var namaMap = {};
+  var activeTahun = '';
+  for (var si = 1; si < setAll.length; si++) {
+    var nEmail = String(setAll[si][0] || '').toLowerCase().trim();
+    var nNama  = String(setAll[si][4] || '').trim();
+    if (nEmail && nNama) namaMap[nEmail] = nNama;
+    if (!activeTahun && setAll[si][2]) activeTahun = String(setAll[si][2] || '');
+  }
+
+  var now      = new Date();
+  var bulanIni = new Date(now.getFullYear(), now.getMonth(), 1);
+  var tz       = Session.getScriptTimeZone();
+
+  var guruMap = {};
+  guruEmails.forEach(function(email) {
+    guruMap[email] = { email: email, nama: namaMap[email] || email, totalEntri: 0, entriBulanIni: 0, lastEntri: null };
+  });
+
+  for (var i = 1; i < jgwRows.length; i++) {
+    var jEmail = String(jgwRows[i][9] || '').toLowerCase().trim();
+    if (!guruMap[jEmail]) continue;
+    var rowTahun = String(jgwRows[i][11] || '').trim();
+    if (activeTahun && rowTahun && rowTahun !== activeTahun) continue;
+
+    guruMap[jEmail].totalEntri++;
+    var tgl = jgwRows[i][1] ? new Date(jgwRows[i][1]) : null;
+    if (tgl) {
+      if (!guruMap[jEmail].lastEntri || tgl > guruMap[jEmail].lastEntri) guruMap[jEmail].lastEntri = tgl;
+      if (tgl >= bulanIni) guruMap[jEmail].entriBulanIni++;
+    }
+  }
+
+  var guruList = guruEmails.map(function(email) {
+    var g = guruMap[email];
+    var status = 'belum_mulai';
+    if (g.totalEntri > 0) status = g.entriBulanIni > 0 ? 'aktif' : 'tidak_aktif';
+    return {
+      email        : g.email,
+      nama         : g.nama,
+      totalEntri   : g.totalEntri,
+      entriBulanIni: g.entriBulanIni,
+      lastEntri    : g.lastEntri ? Utilities.formatDate(g.lastEntri, tz, 'dd MMM yyyy') : '-',
+      statusJurnal : status
+    };
+  });
+
+  var ORDER = { aktif: 0, tidak_aktif: 1, belum_mulai: 2 };
+  guruList.sort(function(a, b) {
+    if (ORDER[a.statusJurnal] !== ORDER[b.statusJurnal]) return ORDER[a.statusJurnal] - ORDER[b.statusJurnal];
+    return b.entriBulanIni - a.entriBulanIni;
+  });
+
+  var result = {
+    activeTahun     : activeTahun,
+    totalGuru       : guruEmails.length,
+    guruSudahMengisi: guruList.filter(function(g) { return g.totalEntri > 0; }).length,
+    guruList        : guruList
+  };
+
+  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
+  return result;
+}
+
+/**
+ * getRekapGuruWaliDetail(email)
+ * Isi lengkap jurnal pendampingan wali SATU guru — dipanggil saat Kepsek
+ * klik/expand nama guru tertentu di tabel Rekap Guru Wali.
+ */
+function getRekapGuruWaliDetail(email) {
+  assertKepsek_();
+  var targetEmail = String(email || '').toLowerCase().trim();
+  if (!targetEmail) return [];
+
+  var ssMap = _kepsekOpenSpreadsheetsMap_([targetEmail]);
+  var ss = ssMap[targetEmail];
+  if (!ss) return [];
+
+  var sh = ss.getSheetByName('JURNAL_GURU_WALI');
+  if (!sh) return [];
+  var data = sh.getDataRange().getValues();
+
+  var activeTahun = '';
+  var shSet = ss.getSheetByName('SETTING');
+  if (shSet) {
+    var setRows = shSet.getDataRange().getValues();
+    for (var si = 1; si < setRows.length; si++) {
+      if (String(setRows[si][0] || '').toLowerCase().trim() === targetEmail) {
+        activeTahun = String(setRows[si][2] || '');
+        break;
+      }
+    }
+  }
+
+  var tz = Session.getScriptTimeZone();
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var rowEmail = String(data[i][9] || '').toLowerCase().trim();
+    if (rowEmail !== targetEmail) continue;
+    var rowTahun = String(data[i][11] || '').trim();
+    if (activeTahun && rowTahun && rowTahun !== activeTahun) continue;
+
+    var tgl = data[i][1] ? new Date(data[i][1]) : null;
+    var tglFmt = tgl ? Utilities.formatDate(tgl, tz, 'dd MMMM yyyy') : '-';
+    var hariStr = String(data[i][2] || '');
+
+    result.push({
+      tanggal           : hariStr ? hariStr + ', ' + tglFmt : tglFmt,
+      waktu             : String(data[i][3] || '-'),
+      fokus_pendampingan: String(data[i][4] || '-'),
+      topik_pendampingan: String(data[i][5] || '-'),
+      catatan           : String(data[i][6] || '-'),
+      tindak_lanjut     : String(data[i][7] || '-')
+    });
+  }
+  return result.reverse();
 }
 
 /**

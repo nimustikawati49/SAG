@@ -12,17 +12,20 @@ function initDashboardKepsek() {
   loadRekapSekolah();
 }
 
-function loadRekapSekolah() {
+function loadRekapSekolah(forceRefresh) {
   _kepsekLoaded = false;
 
-  // Tampilkan skeleton
+  // Tampilkan skeleton + penghitung waktu (proses ini bisa berat kalau mode
+  // per_guru — tiap guru buka spreadsheet sendiri-sendiri).
   var container = document.getElementById('kepsekContainer');
   if (container) {
-    container.innerHTML = _kepsekSkeleton_();
+    container.innerHTML = '<div id="kepsekLoadingNotice" class="muted" style="margin-bottom:8px;font-size:12px"></div>' + _kepsekSkeleton_();
   }
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekLoadingNotice'), '⏳ Memuat rekap sekolah...');
 
   google.script.run
     .withFailureHandler(function(err) {
+      stopTimer();
       _kepsekLoaded = false;
       var c = document.getElementById('kepsekContainer');
       if (c) c.innerHTML =
@@ -30,10 +33,11 @@ function loadRekapSekolah() {
         (err && err.message ? err.message : 'Coba refresh halaman') + '</div>';
     })
     .withSuccessHandler(function(data) {
+      stopTimer();
       _kepsekLoaded = true;
       _renderRekapSekolah_(data);
     })
-    .getRekapSekolah();
+    .getRekapSekolah(!!forceRefresh);
 }
 
 function _kepsekSkeleton_() {
@@ -90,7 +94,7 @@ function _renderRekapSekolah_(data) {
     '<button onclick="_exportRekapSekolahExcel_()" style="background:linear-gradient(135deg,#059669,#34d399);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📥 Export Excel</button>' +
     '<button onclick="loadEarlyWarning()" style="background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">⚠️ Early Warning</button>' +
     '<button onclick="loadRaportAbsensi()" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📋 Raport Siswa</button>' +
-    '<button onclick="loadRekapSekolah()" class="ghost" style="font-size:13px;padding:8px 14px;border-radius:10px">🔄 Refresh</button>' +
+    '<button onclick="loadRekapSekolah(true)" class="ghost" style="font-size:13px;padding:8px 14px;border-radius:10px">🔄 Refresh</button>' +
     '</div>';
 
   // ── Warning: guru tidak aktif ──
@@ -163,6 +167,147 @@ function _renderRekapSekolah_(data) {
   setTimeout(loadKelasFavoritSekolah, 450);
   setTimeout(loadKetuntasanSekolah, 550);
   setTimeout(loadEarlyWarning, 600);
+}
+
+/* ============================================================
+   REKAP GURU WALI (KEPSEK) — berapa guru sudah isi jurnal
+   pendampingan wali, dan isi jurnalnya per guru.
+   ============================================================ */
+var _rgwLoaded = false;
+
+function initRekapGuruWali() {
+  if (_rgwLoaded) return;
+  loadRekapGuruWali();
+}
+
+function loadRekapGuruWali(forceRefresh) {
+  _rgwLoaded = false;
+  var container = document.getElementById('rekapGuruWaliContainer');
+  if (container) {
+    container.innerHTML = '<div id="rgwLoadingNotice" class="muted" style="margin-bottom:8px;font-size:12px"></div>' + _kepsekSkeleton_();
+  }
+  var stopTimer = startElapsedNotice_(document.getElementById('rgwLoadingNotice'), '⏳ Memuat rekap guru wali...');
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      stopTimer();
+      _rgwLoaded = false;
+      var c = document.getElementById('rekapGuruWaliContainer');
+      if (c) c.innerHTML =
+        '<div class="alert-banner error">❌ Gagal memuat data: ' +
+        (err && err.message ? err.message : 'Coba refresh halaman') + '</div>';
+    })
+    .withSuccessHandler(function(data) {
+      stopTimer();
+      _rgwLoaded = true;
+      _renderRekapGuruWali_(data);
+    })
+    .getRekapGuruWali(!!forceRefresh);
+}
+
+function _renderRekapGuruWali_(data) {
+  var container = document.getElementById('rekapGuruWaliContainer');
+  if (!container) return;
+
+  var html = '';
+  html += '<div style="background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;border-radius:18px;padding:20px 24px;margin-bottom:20px">' +
+    '<h2 style="margin:0 0 6px;font-size:20px;font-weight:800">👨‍🏫 Rekap Jurnal Guru Wali</h2>' +
+    '<div style="font-size:13px;opacity:.85">Tahun Pelajaran: <b>' + _esc(data.activeTahun || '-') + '</b></div>' +
+    '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">';
+  html += '<div class="card stat" style="border-top:3px solid #3b82f6;padding:14px 16px"><div class="label">👨‍🏫 Total Guru Wali</div><div class="value">' + data.totalGuru + '</div></div>';
+  html += '<div class="card stat" style="border-top:3px solid #22c55e;padding:14px 16px"><div class="label">✅ Sudah Mengisi Jurnal</div><div class="value" style="color:#22c55e">' + data.guruSudahMengisi + '</div></div>';
+  html += '<div class="card stat" style="border-top:3px solid #ef4444;padding:14px 16px"><div class="label">❌ Belum Mengisi</div><div class="value" style="color:#ef4444">' + (data.totalGuru - data.guruSudahMengisi) + '</div></div>';
+  html += '</div>';
+
+  html += '<div style="display:flex;gap:10px;margin-bottom:16px">' +
+    '<button onclick="loadRekapGuruWali(true)" class="ghost" style="font-size:13px;padding:8px 14px;border-radius:10px">🔄 Refresh</button>' +
+    '</div>';
+
+  html += '<p class="muted" style="font-size:12px;margin-bottom:10px">Klik nama guru untuk melihat isi jurnal pendampingannya.</p>';
+
+  html += '<div style="width:100%;overflow:hidden">' +
+    '<table style="table-layout:fixed;width:100%;border-collapse:collapse">' +
+    '<colgroup><col style="width:34%"><col style="width:16%"><col style="width:16%"><col style="width:18%"><col style="width:16%"></colgroup>' +
+    '<thead><tr>' +
+    '<th style="text-align:left;padding:8px 10px">Guru</th>' +
+    '<th style="padding:8px 6px">Entri Bulan Ini</th>' +
+    '<th style="padding:8px 6px">Total Entri</th>' +
+    '<th style="padding:8px 6px;text-align:left">Entri Terakhir</th>' +
+    '<th style="padding:8px 6px">Status</th>' +
+    '</tr></thead><tbody>';
+
+  if (!data.guruList || data.guruList.length === 0) {
+    html += '<tr><td colspan="5" class="muted" style="padding:16px;text-align:center">Belum ada guru wali aktif.</td></tr>';
+  } else {
+    data.guruList.forEach(function(g) {
+      var statusBg =
+        g.statusJurnal === 'aktif'       ? '#dcfce7' :
+        g.statusJurnal === 'tidak_aktif' ? '#fef9c3' : '#fee2e2';
+      var statusColor =
+        g.statusJurnal === 'aktif'       ? '#166534' :
+        g.statusJurnal === 'tidak_aktif' ? '#854d0e' : '#991b1b';
+      var statusLabel =
+        g.statusJurnal === 'aktif'       ? '✅ Aktif' :
+        g.statusJurnal === 'tidak_aktif' ? '⚠️ Tdk Aktif' : '❌ Belum';
+
+      html += '<tr style="cursor:pointer" onclick="showRgwDetail_(\'' + _esc(g.email).replace(/'/g,"\\'") + '\',\'' + _esc(g.nama).replace(/'/g,"\\'") + '\')">' +
+        '<td style="padding:8px 10px;overflow:hidden">' +
+          '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#4338ca;text-decoration:underline" title="' + _esc(g.nama) + '">' + _esc(g.nama) + '</div>' +
+          '<div style="font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _esc(g.email) + '">' + _esc(g.email) + '</div>' +
+        '</td>' +
+        '<td style="padding:8px 6px;text-align:center"><b style="font-size:15px">' + g.entriBulanIni + '</b></td>' +
+        '<td style="padding:8px 6px;text-align:center;font-size:13px">' + g.totalEntri + '</td>' +
+        '<td style="padding:8px 6px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _esc(g.lastEntri) + '</td>' +
+        '<td style="padding:8px 6px;text-align:center"><span style="background:' + statusBg + ';color:' + statusColor + ';padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap">' + statusLabel + '</span></td>' +
+        '</tr>';
+    });
+  }
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function showRgwDetail_(email, nama) {
+  var modal = document.getElementById('rgwDetailModal');
+  var nameEl = document.getElementById('rgwDetailNama');
+  var body = document.getElementById('rgwDetailBody');
+  if (!modal || !body) return;
+  if (nameEl) nameEl.textContent = nama || email;
+  body.innerHTML = '<p class="muted">⏳ Memuat...</p>';
+  modal.style.display = 'flex';
+
+  google.script.run
+    .withFailureHandler(function(err) {
+      body.innerHTML = '<div class="alert-banner error">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</div>';
+    })
+    .withSuccessHandler(function(entries) {
+      if (!entries || !entries.length) {
+        body.innerHTML = '<div class="alert-banner info">Belum ada jurnal pendampingan dari guru ini.</div>';
+        return;
+      }
+      var html = '<div style="display:grid;gap:10px">';
+      entries.forEach(function(e) {
+        html += '<div class="card" style="margin:0;background:#f8fafc;border-left:4px solid #14b8a6;padding:12px 14px">' +
+          '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
+            '<b style="font-size:13px">' + _esc(e.tanggal) + '</b>' +
+            '<span class="muted" style="font-size:12px">' + _esc(e.waktu) + ' &middot; ' + _esc(e.fokus_pendampingan) + '</span>' +
+          '</div>' +
+          '<div style="font-size:13px;margin-bottom:4px"><b>Topik:</b> ' + _esc(e.topik_pendampingan) + '</div>' +
+          '<div style="font-size:13px;margin-bottom:4px"><b>Catatan:</b> ' + _esc(e.catatan) + '</div>' +
+          '<div style="font-size:13px"><b>Tindak Lanjut:</b> ' + _esc(e.tindak_lanjut) + '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      body.innerHTML = html;
+    })
+    .getRekapGuruWaliDetail(email);
+}
+
+function closeRgwDetailModal_() {
+  var modal = document.getElementById('rgwDetailModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function loadRekapAbsensiSekolah() {
