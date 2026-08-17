@@ -186,6 +186,48 @@ function getNilaiDataVersion_(kelas, mapel, tahun, semester, ownerEmail, sheetRe
   return latest;
 }
 
+/**
+ * Ringkasan {kelas,mapel,tahun,semester} milik satu owner dari NILAI_SISWA,
+ * di-cache 3 menit supaya dropdown Tahun/Semester/Kelas/Mapel di tab Nilai
+ * tidak perlu getDataRange().getValues() dari sheet (bisa besar & lambat)
+ * berkali-kali setiap kali salah satu dropdown diganti. Cache dihapus begitu
+ * ada perubahan nyata lewat simpanNilaiSiswa().
+ */
+function _nilaiOwnerIndex_(ownerEmail) {
+  const email = String(ownerEmail || '').toLowerCase().trim();
+  const cacheKey = 'NILAI_IDX_' + email.replace(/[^a-z0-9]/gi, '_');
+  const cache = CacheService.getScriptCache();
+
+  try {
+    const cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* cache miss/corrupt, lanjut baca sheet */ }
+
+  const sh   = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  const h    = rows[0];
+  const idx  = (n) => h.indexOf(n);
+
+  const list = rows.slice(1)
+    .filter(r => String(r[idx('owner_email')]).toLowerCase().trim() === email)
+    .map(r => ({
+      kelas   : String(r[idx('kelas')]    || '').trim(),
+      mapel   : String(r[idx('mapel')]    || '').trim(),
+      tahun   : String(r[idx('tahun')]    || '').trim(),
+      semester: String(r[idx('semester')] || '').trim()
+    }));
+
+  try { cache.put(cacheKey, JSON.stringify(list), 180); } catch (e) { /* > 100KB, biarkan tanpa cache */ }
+  return list;
+}
+
+function _nilaiOwnerIndexClear_(ownerEmail) {
+  try {
+    const email = String(ownerEmail || '').toLowerCase().trim();
+    CacheService.getScriptCache().remove('NILAI_IDX_' + email.replace(/[^a-z0-9]/gi, '_'));
+  } catch (e) { /* no-op */ }
+}
+
 
 /* ==================== PUBLIC API ==================== */
 
@@ -399,6 +441,7 @@ function simpanNilaiSiswa(payload) {
   // 7. Audit trail
   appendAuditNilai_(auth.email, 'SAVE', payload.kelas, payload.mapel, payload.tahun, semester, newRows.length);
   trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_NILAI');
+  _nilaiOwnerIndexClear_(auth.email);
 
   return { success: true, jumlah: newRows.length, version: ts };
 }
@@ -615,19 +658,13 @@ function getRankingNilai(kelas, mapel, tahun, semester) {
  * Tahun Pelajaran/Semester di tab Nilai (tidak lagi terkunci ke periode aktif saja).
  */
 function getRiwayatPeriodeNilai() {
-  const auth = authAdmin_();
-  const sh   = sheetNilai_();
-  const rows = sh.getDataRange().getValues();
-  const h    = rows[0];
-  const idx  = (n) => h.indexOf(n);
+  const auth  = authAdmin_();
+  const index = _nilaiOwnerIndex_(auth.email);
 
   const seen = {};
   const periods = [];
-  rows.slice(1).forEach(r => {
-    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
-    if (!ownerOk) return;
-    const tahun    = String(r[idx('tahun')] || '').trim();
-    const semester = String(r[idx('semester')] || '').trim();
+  index.forEach(r => {
+    const tahun = r.tahun, semester = r.semester;
     if (!tahun || !semester) return;
     const key = tahun + '|' + semester;
     if (seen[key]) return;
@@ -670,19 +707,13 @@ function normalizeSemesterServer_(raw) {
  * supaya tetap bisa mulai input nilai baru.
  */
 function getKelasNilaiUntukPeriode(tahun, semester) {
-  const auth = authAdmin_();
-  const sh   = sheetNilai_();
-  const rows = sh.getDataRange().getValues();
-  const h    = rows[0];
-  const idx  = (n) => h.indexOf(n);
+  const auth  = authAdmin_();
+  const index = _nilaiOwnerIndex_(auth.email);
 
   const kelasSet = new Set();
-  rows.slice(1).forEach(r => {
-    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
-    if (ownerOk
-      && String(r[idx('tahun')]).trim()    === String(tahun).trim()
-      && String(r[idx('semester')]).trim() === String(semester).trim()) {
-      kelasSet.add(String(r[idx('kelas')]).trim());
+  index.forEach(r => {
+    if (r.tahun === String(tahun).trim() && r.semester === String(semester).trim()) {
+      kelasSet.add(r.kelas);
     }
   });
 
@@ -705,20 +736,15 @@ function getKelasNilaiUntukPeriode(tahun, semester) {
  * fallback ke daftar mapel dari Setting (Mata Pelajaran Diampu).
  */
 function getMapelNilaiUntukPeriode(kelas, tahun, semester) {
-  const auth = authAdmin_();
-  const sh   = sheetNilai_();
-  const rows = sh.getDataRange().getValues();
-  const h    = rows[0];
-  const idx  = (n) => h.indexOf(n);
+  const auth  = authAdmin_();
+  const index = _nilaiOwnerIndex_(auth.email);
 
   const mapelSet = new Set();
-  rows.slice(1).forEach(r => {
-    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
-    if (ownerOk
-      && String(r[idx('kelas')]).trim()    === String(kelas).trim()
-      && String(r[idx('tahun')]).trim()    === String(tahun).trim()
-      && String(r[idx('semester')]).trim() === String(semester).trim()) {
-      mapelSet.add(String(r[idx('mapel')]).trim());
+  index.forEach(r => {
+    if (r.kelas === String(kelas).trim()
+      && r.tahun === String(tahun).trim()
+      && r.semester === String(semester).trim()) {
+      mapelSet.add(r.mapel);
     }
   });
 
@@ -740,20 +766,15 @@ function getMapelNilaiUntukPeriode(kelas, tahun, semester) {
  * Digunakan untuk multi-kelas cetak pada modal.
  */
 function getKelasYangAdaNilai(mapel, tahun, semester) {
-  const auth = authAdmin_();
-  const sh   = sheetNilai_();
-  const rows = sh.getDataRange().getValues();
-  const h    = rows[0];
-  const idx  = (n) => h.indexOf(n);
+  const auth  = authAdmin_();
+  const index = _nilaiOwnerIndex_(auth.email);
 
   const kelasList = new Set();
-  rows.slice(1).forEach(r => {
-    const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
-    if (ownerOk
-      && String(r[idx('mapel')]).trim()    === String(mapel).trim()
-      && String(r[idx('tahun')]).trim()    === String(tahun).trim()
-      && String(r[idx('semester')]).trim() === String(semester).trim()) {
-      kelasList.add(String(r[idx('kelas')]).trim());
+  index.forEach(r => {
+    if (r.mapel === String(mapel).trim()
+      && r.tahun === String(tahun).trim()
+      && r.semester === String(semester).trim()) {
+      kelasList.add(r.kelas);
     }
   });
   return [...kelasList].sort();
