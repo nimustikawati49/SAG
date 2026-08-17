@@ -24,6 +24,22 @@
  * auto-provisioned di Drive SuperAdmin) otomatis disalin ke spreadsheet
  * baru ini sekali saat pertama connect, supaya tidak ada data hilang.
  *
+ * ⚠️ PENTING UNTUK SUPERADMIN — GURU "GRANDFATHERED" & SUPERADMIN SENDIRI:
+ * fitur ini JUGA menangani guru yang datanya masih nyangkut di
+ * spreadsheet CENTRAL (didaftarkan sebelum mode per_guru aktif, lihat
+ * _hasExistingCentralTeacherData_ di SuperAdmin.js) — dan SuperAdmin
+ * sendiri, yang sebelumnya SELALU dipetakan ke central biar bisa lihat
+ * data guru lain (lihat cabang khusus SuperAdmin di
+ * _autoProvisionUserSpreadsheet_, Code.js). Untuk kasus ini, migrasinya
+ * TIDAK menyalin/menghapus seisi sheet central (dipakai bersama banyak
+ * akun!) — cuma baris milik email yang bersangkutan, disaring lewat
+ * kolom pemilik (owner_email/email_guru/email/guru), lihat
+ * _migrateLegacyCentralDataForUser_ di bawah. Sheet TANPA kolom pemilik
+ * (SISWA, MasterSiswa, RiwayatKelas, MasterTahunPelajaran) SENGAJA
+ * DILEWATI — baris antar guru di situ tidak bisa dibedakan dengan aman,
+ * jadi masih akan terus terlihat di "Ukuran Data Sheet Central" sampai
+ * ditangani terpisah lewat alat/proses lain.
+ *
  * ⚠️ PENTING UNTUK SUPERADMIN — pembersihan spreadsheet lama OTOMATIS:
  * begitu data berhasil disalin, connectOwnSpreadsheet() MEMVERIFIKASI dulu
  * (jumlah sheet, baris, & kolom di spreadsheet baru harus persis cocok
@@ -48,13 +64,24 @@
  * RESOURCE_MAP) oleh guru itu sendiri, bukan lagi hasil auto-provisioning
  * di Drive SuperAdmin. Dipakai assertLicenseActive() (Auth.js) untuk
  * mewajibkan koneksi Drive pribadi begitu akun guru diaktifkan penuh.
+ *
+ * CATATAN: owner_email cocok SAJA tidak cukup — akun SuperAdmin sendiri
+ * punya entry RESOURCE_MAP dengan owner_email = email-nya sendiri TAPI
+ * resource_id-nya tetap spreadsheet CENTRAL (lihat cabang khusus
+ * SuperAdmin di _autoProvisionUserSpreadsheet_, Code.js). Makanya di sini
+ * juga dipastikan resource_id-nya BUKAN central, supaya SuperAdmin yang
+ * belum connect Drive pribadi tidak salah kedeteksi "sudah terhubung".
  */
 function _isDriveSelfOwned_(email) {
   var targetEmail = String(email || '').toLowerCase().trim();
   if (!targetEmail) return false;
   var entry = _getResourceMapEntryForUser_(targetEmail, 'data_spreadsheet');
   if (!entry) return false;
-  return String(entry.owner_email || '').toLowerCase().trim() === targetEmail;
+  if (String(entry.owner_email || '').toLowerCase().trim() !== targetEmail) return false;
+  try {
+    if (String(entry.resource_id || '').trim() === getCentralSpreadsheet_().getId()) return false;
+  } catch (e) {}
+  return true;
 }
 
 /**
@@ -77,7 +104,7 @@ function _extractSpreadsheetId_(urlOrId) {
  */
 function getDriveConnectInfo() {
   var auth = getAuth();
-  if (auth.role !== 'admin') return { applicable: false };
+  if (auth.role !== 'admin' && auth.role !== 'superadmin') return { applicable: false };
 
   var perGuru = getStorageMode_() === 'per_guru';
   var connected = false;
@@ -121,15 +148,108 @@ function _getResourceMapEntryOwnedByOther_(spreadsheetId, myEmail) {
 }
 
 /**
+ * _LEGACY_CENTRAL_CANDIDATE_SHEETS_
+ * Sheet non-central-only yang MUNGKIN masih menyimpan baris guru
+ * "grandfathered" (atau SuperAdmin sendiri) langsung di central — dicek
+ * satu-satu oleh _migrateLegacyCentralDataForUser_. Sengaja TIDAK termasuk
+ * SISWA/MasterSiswa/RiwayatKelas/MasterTahunPelajaran — sheet-sheet itu
+ * TIDAK PUNYA kolom pemilik sama sekali (lihat _findOwnerColumnIndex_ di
+ * SuperAdmin.js), jadi baris antar guru tidak bisa dibedakan dengan aman;
+ * bagian itu sengaja ditunda, ditangani terpisah lewat alat/review
+ * manual, BUKAN oleh fungsi otomatis ini.
+ */
+var _LEGACY_CENTRAL_CANDIDATE_SHEETS_ = [
+  'JURNAL', 'ABSENSI', 'NILAI_SISWA', 'SETTING_NILAI',
+  'JADWAL_SEMESTER', 'GuruMengajar', 'SETTING', 'ModulAjar', 'Relasi_Modul_Jadwal'
+];
+
+/**
+ * _migrateLegacyCentralDataForUser_(email, newSs)
+ * Bagian dari connectOwnSpreadsheet() — menangani guru "grandfathered"
+ * yang datanya masih nyangkut di spreadsheet CENTRAL (didaftarkan sebelum
+ * mode per_guru aktif, lihat _hasExistingCentralTeacherData_ di
+ * SuperAdmin.js) ATAU SuperAdmin sendiri (yang sebelumnya selalu
+ * dipetakan ke central). Cuma menyasar sheet yang PUNYA kolom pemilik
+ * (owner_email/email_guru/email/guru — lihat _findOwnerColumnIndex_ di
+ * SuperAdmin.js, dipakai juga oleh getCentralDataSizeReport supaya
+ * konsisten). Untuk tiap sheet: salin HANYA baris milik email ini ke
+ * spreadsheet baru, verifikasi jumlah baris yang berhasil ditambahkan
+ * cocok, baru hapus baris ASLINYA (satu-satu, dari bawah ke atas supaya
+ * nomor baris tidak bergeser) dari central — baris guru LAIN di sheet
+ * yang sama sengaja tidak tersentuh sama sekali.
+ */
+function _migrateLegacyCentralDataForUser_(email, newSs) {
+  var centralSs = getCentralSpreadsheet_();
+  var migrated = [];
+
+  _LEGACY_CENTRAL_CANDIDATE_SHEETS_.forEach(function (name) {
+    try {
+      var centralSh = centralSs.getSheetByName(name);
+      if (!centralSh || centralSh.getLastRow() < 2) return;
+
+      var lastCol = centralSh.getLastColumn();
+      var header = centralSh.getRange(1, 1, 1, lastCol).getValues()[0];
+      var ownerIdx = _findOwnerColumnIndex_(header);
+      if (ownerIdx === -1) return; // tidak ada kolom pemilik, lewati (ditangani terpisah)
+
+      var allValues = centralSh.getRange(2, 1, centralSh.getLastRow() - 1, lastCol).getValues();
+      var myRowIdxs = [];
+      allValues.forEach(function (row, i) {
+        if (String(row[ownerIdx] || '').toLowerCase().trim() === email) myRowIdxs.push(i);
+      });
+      if (!myRowIdxs.length) return;
+
+      var targetSh = newSs.getSheetByName(name);
+      if (!targetSh) {
+        targetSh = newSs.insertSheet(name);
+        targetSh.getRange(1, 1, 1, lastCol).setValues([header]);
+        targetSh.setFrozenRows(1);
+      }
+
+      var rowsToCopy = myRowIdxs.map(function (i) { return allValues[i]; });
+      var beforeCount = targetSh.getLastRow();
+      targetSh.getRange(beforeCount + 1, 1, rowsToCopy.length, lastCol).setValues(rowsToCopy);
+      var actuallyAdded = targetSh.getLastRow() - beforeCount;
+
+      // Verifikasi dulu sebelum hapus dari central — kalau jumlah yang
+      // benar-benar tertulis tidak cocok dengan yang seharusnya, JANGAN
+      // hapus apa pun dari central (biar tetap aman, baris aslinya masih
+      // utuh, bisa dicoba lagi lain waktu).
+      if (actuallyAdded !== rowsToCopy.length) return;
+
+      myRowIdxs.slice().reverse().forEach(function (i) {
+        centralSh.deleteRow(i + 2); // +1 header, +1 karena 1-indexed
+      });
+
+      migrated.push(name + ' (' + rowsToCopy.length + ' baris dari central)');
+    } catch (eSheet) {
+      try { logError_('MIGRATE_LEGACY_CENTRAL_DATA', eSheet); } catch (e2) {}
+    }
+  });
+
+  return migrated;
+}
+
+/**
  * connectOwnSpreadsheet(urlOrId)
- * Guru menghubungkan spreadsheet MILIK SENDIRI (sudah dibuat + dishare
- * Editor ke SuperAdmin) sebagai database pribadinya. Data lama (kalau
- * ada di spreadsheet yang sebelumnya dipakai, mis. hasil auto-provision
- * saat trial) otomatis disalin sekali ke spreadsheet baru ini.
+ * Guru (atau SuperAdmin sendiri, kalau dia juga mengajar) menghubungkan
+ * spreadsheet MILIK SENDIRI (sudah dibuat + dishare Editor ke SuperAdmin)
+ * sebagai database pribadinya. Data lama otomatis disalin sekali ke
+ * spreadsheet baru ini lewat DUA jalur berbeda tergantung dari mana asal
+ * data lamanya:
+ *  1. Spreadsheet per-guru EKSKLUSIF (hasil auto-provision, cuma dipakai
+ *     satu orang) → disalin UTUH sheet demi sheet (lihat blok di bawah).
+ *  2. Baris yang masih nyangkut di spreadsheet CENTRAL — dari guru
+ *     "grandfathered" (sudah punya data central sebelum mode per_guru
+ *     aktif) ATAU dari SuperAdmin sendiri (yang sebelumnya SELALU
+ *     dipetakan ke central, lihat _autoProvisionUserSpreadsheet_ di
+ *     Code.js) → disalin PER-BARIS lewat _migrateLegacyCentralDataForUser_
+ *     di bawah, karena central dipakai BERSAMA banyak akun sekaligus,
+ *     tidak boleh disalin/dihapus utuh seperti jalur 1.
  */
 function connectOwnSpreadsheet(urlOrId) {
   var auth = getAuth();
-  if (auth.role !== 'admin') throw new Error('Fitur ini khusus akun guru.');
+  if (auth.role !== 'admin' && auth.role !== 'superadmin') throw new Error('Fitur ini khusus akun guru/SuperAdmin.');
   if (getStorageMode_() !== 'per_guru') throw new Error('Mode storage aplikasi saat ini bukan per-guru, tidak perlu menghubungkan spreadsheet.');
 
   var email = auth.email;
@@ -155,10 +275,18 @@ function connectOwnSpreadsheet(urlOrId) {
     throw new Error('Spreadsheet ini sudah terhubung ke akun guru lain (' + collision + '). Gunakan spreadsheet lain.');
   }
 
+  var centralId = getCentralSpreadsheet_().getId();
   var oldId = resolveSpreadsheetIdForUser_(email);
   var migratedSheets = [];
   var autoTrashed = false;
-  if (oldId && oldId !== id) {
+  // Jalur salin-utuh di bawah ini HANYA aman untuk spreadsheet yang
+  // EKSKLUSIF milik satu guru (hasil auto-provision per_guru) — bukan
+  // untuk central, yang dipakai bersama banyak akun (mis. SuperAdmin
+  // selalu dipetakan ke central). Kalau oldId ternyata central, migrasinya
+  // WAJIB lewat _migrateLegacyCentralDataForUser_ (filter per-email) di
+  // bawah, bukan disalin/di-trash utuh — makanya oldId === centralId
+  // sengaja dikecualikan di sini.
+  if (oldId && oldId !== id && oldId !== centralId) {
     var defaultNames = ['Sheet1', 'Lembar1'];
     var alreadyHasData = newSs.getSheets().some(function (sh) {
       return defaultNames.indexOf(sh.getName()) === -1;
@@ -226,8 +354,26 @@ function connectOwnSpreadsheet(urlOrId) {
     }
   }
 
+  // Baris milik email ini yang masih nyangkut di CENTRAL — dari guru
+  // grandfathered ATAU SuperAdmin sendiri. Berjalan TANPA syarat oldId di
+  // atas (guru grandfathered biasanya tidak punya entry RESOURCE_MAP sama
+  // sekali, jadi oldId kosong), difilter per-baris, tidak menyalin/menyentuh
+  // baris akun lain di sheet central yang sama.
+  var legacyCentralMigrated = _migrateLegacyCentralDataForUser_(email, newSs);
+  migratedSheets = migratedSheets.concat(legacyCentralMigrated);
+
   var oldEntry = _getResourceMapEntryForUser_(email, 'data_spreadsheet');
   if (oldEntry && oldEntry.id) {
+    // PENTING: kalau resource_id entry lama ini adalah spreadsheet CENTRAL
+    // (kasus SuperAdmin, yang sebelumnya selalu dipetakan ke central),
+    // JANGAN PERNAH ditandai 'migrated_to_own_drive'/'trashed_auto' — dua
+    // status itu dibaca getMigratedOldSpreadsheets()/trashOldMigratedSpreadsheet()
+    // sebagai "spreadsheet ini boleh ditinjau lalu DIHAPUS", dan central
+    // TIDAK BOLEH PERNAH masuk kategori itu (bisa menghapus seluruh data
+    // sekolah). Dipakai status khusus yang tidak pernah dibaca fungsi trash
+    // mana pun — central sendiri tidak disentuh sama sekali, cuma mapping
+    // lamanya yang diganti.
+    var oldEntryIsCentral = (String(oldEntry.resource_id || '').trim() === centralId);
     try {
       _upsertResourceMapEntry_({
         id: oldEntry.id,
@@ -237,10 +383,12 @@ function connectOwnSpreadsheet(urlOrId) {
         resource_id: oldEntry.resource_id,
         resource_name: oldEntry.resource_name,
         owner_email: oldEntry.owner_email,
-        status: autoTrashed ? 'trashed_auto' : 'migrated_to_own_drive',
-        catatan: (autoTrashed
-          ? 'Otomatis dipindah ke Trash SuperAdmin setelah migrasi terverifikasi cocok pada '
-          : 'Digantikan spreadsheet pribadi guru pada ') + new Date().toISOString()
+        status: oldEntryIsCentral ? 'central_mapping_replaced' : (autoTrashed ? 'trashed_auto' : 'migrated_to_own_drive'),
+        catatan: (oldEntryIsCentral
+          ? 'Mapping central digantikan spreadsheet pribadi guru pada '
+          : (autoTrashed
+            ? 'Otomatis dipindah ke Trash SuperAdmin setelah migrasi terverifikasi cocok pada '
+            : 'Digantikan spreadsheet pribadi guru pada ')) + new Date().toISOString()
       });
     } catch (e) {}
   }
@@ -279,6 +427,7 @@ function connectOwnSpreadsheet(urlOrId) {
  */
 function getMigratedOldSpreadsheets() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var centralId = getCentralSpreadsheet_().getId();
   var sh = _ensureResourceMapSheet_();
   var rows = sh.getDataRange().getValues();
   var idx = _getHeaderIndexMap_(sh);
@@ -291,6 +440,11 @@ function getMigratedOldSpreadsheets() {
     if (type !== 'data_spreadsheet' || status !== 'migrated_to_own_drive') continue;
 
     var resourceId = String(rows[i][idx.resource_id] || '');
+    // Jaga-jaga (defense-in-depth): spreadsheet CENTRAL tidak boleh pernah
+    // muncul di panel ini apapun yang terjadi — status 'migrated_to_own_drive'
+    // seharusnya memang tidak pernah dipasang untuk resource_id central
+    // (lihat connectOwnSpreadsheet), tapi dicek ulang di sini juga.
+    if (resourceId === centralId) continue;
     var sizeMB = null;
     try {
       var f = DriveApp.getFileById(resourceId);
@@ -323,6 +477,7 @@ function getMigratedOldSpreadsheets() {
  */
 function trashOldMigratedSpreadsheet(resourceMapId) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var centralId = getCentralSpreadsheet_().getId();
   var sh = _ensureResourceMapSheet_();
   var rows = sh.getDataRange().getValues();
   var idx = _getHeaderIndexMap_(sh);
@@ -337,6 +492,12 @@ function trashOldMigratedSpreadsheet(resourceMapId) {
     }
 
     var resourceId = String(rows[i][idx.resource_id] || '');
+    // Jaga-jaga (defense-in-depth): TIDAK PERNAH boleh trash spreadsheet
+    // CENTRAL lewat jalur ini apapun yang terjadi — lihat catatan yang
+    // sama di getMigratedOldSpreadsheets().
+    if (resourceId === centralId) {
+      throw new Error('Spreadsheet ini adalah database CENTRAL — tidak boleh dihapus lewat panel ini.');
+    }
     var emailGuru = String(rows[i][idx.email_guru] || '');
     try {
       DriveApp.getFileById(resourceId).setTrashed(true);
