@@ -18,6 +18,30 @@ function _ensureNotifSheet_() {
 }
 
 /**
+ * _appendNotifToOpenSpreadsheet_(ss, judul, pesan, targetEmail)
+ * Sama seperti _ensureNotifSheet_() + appendRow, tapi menerima spreadsheet
+ * yang SUDAH dibuka oleh caller (bukan resolve lewat getSpreadsheet_()) —
+ * dipakai oleh trigger terjadwal (Trigger.js) yang berjalan sebagai
+ * pemilik script, bukan sebagai guru yang bersangkutan, sehingga sudah
+ * membuka spreadsheet guru target secara eksplisit satu per satu (mode
+ * per_guru). Notifikasi ditarget ke SATU email spesifik (bukan 'all'),
+ * jadi hanya guru itu yang melihatnya lewat getNotifList() seperti biasa.
+ */
+function _appendNotifToOpenSpreadsheet_(ss, judul, pesan, targetEmail) {
+  var sh = ss.getSheetByName(NOTIF_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(NOTIF_SHEET);
+    sh.appendRow(['id', 'waktu', 'from', 'judul', 'pesan', 'target', 'read_by']);
+    sh.setFrozenRows(1);
+  }
+  var id = 'NOTIF_' + new Date().getTime();
+  var tz = Session.getScriptTimeZone();
+  var waktu = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss");
+  sh.appendRow([id, waktu, 'SYSTEM', judul, pesan, String(targetEmail || '').toLowerCase().trim(), '']);
+  return id;
+}
+
+/**
  * broadcastNotif(judul, pesan) — SA only
  * Mengirim notifikasi ke semua guru aktif.
  */

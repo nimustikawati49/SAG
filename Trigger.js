@@ -93,18 +93,63 @@ function getBackupTriggerStatus() {
   return { active: false };
 }
 
-/** Dipanggil otomatis oleh trigger — bukan oleh google.script.run */
+/**
+ * Dipanggil otomatis oleh trigger — bukan oleh google.script.run.
+ *
+ * PERBAIKAN: sebelumnya cuma backup getSpreadsheet_() — di mode per_guru
+ * ini resolve ke spreadsheet milik PEMILIK SCRIPT (trigger terjadwal
+ * berjalan sebagai pemilik script, bukan sebagai guru manapun), jadi
+ * hanya spreadsheet SuperAdmin sendiri (biasanya nyaris kosong karena
+ * SuperAdmin tidak mengajar) yang ke-backup — data guru yang sebenarnya
+ * tidak pernah tersentuh. Sekarang: mode central tetap backup spreadsheet
+ * central seperti biasa; mode per_guru membackup spreadsheet PRIBADI
+ * tiap guru aktif satu per satu.
+ */
 function runDailyBackup_() {
-  const ss     = getSpreadsheet_();
-  const tz     = Session.getScriptTimeZone();
-  const stamp  = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmm');
-  const name   = 'Backup_' + stamp + '_' + ss.getName();
-  let backupEmail = '';
-  try { backupEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim(); } catch (e) {}
-  const folder = getUserResourceFolder_(backupEmail, 'backup_folder', 'BACKUP_JURNAL');
-  const copy   = ss.copy(name);
-  DriveApp.getFileById(copy.getId()).moveTo(folder);
-  logAudit('DAILY_BACKUP', 'SYSTEM', name);
+  const tz    = Session.getScriptTimeZone();
+  const stamp = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmm');
+
+  if (getStorageMode_() !== 'per_guru') {
+    const ss = getCentralSpreadsheet_();
+    const name = 'Backup_' + stamp + '_' + ss.getName();
+    let backupEmail = '';
+    try { backupEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim(); } catch (e) {}
+    const folder = getUserResourceFolder_(backupEmail, 'backup_folder', 'BACKUP_JURNAL');
+    const copy = ss.copy(name);
+    DriveApp.getFileById(copy.getId()).moveTo(folder);
+    logAudit('DAILY_BACKUP', 'SYSTEM', name);
+    return;
+  }
+
+  const shUsersCentral = _getCentralSheetByName_('USERS');
+  if (!shUsersCentral) return;
+  const userData = shUsersCentral.getDataRange().getValues();
+  let backedUp = 0;
+  const failed = [];
+
+  for (let ui = 1; ui < userData.length; ui++) {
+    const email  = String(userData[ui][0] || '').toLowerCase().trim();
+    const role   = String(userData[ui][1] || '').toLowerCase().trim();
+    const status = String(userData[ui][2] || '').toLowerCase().trim();
+    if (!email || role === 'superadmin' || status !== 'active') continue;
+
+    const sid = resolveSpreadsheetIdForUser_(email);
+    if (!sid) continue; // belum ter-provisioning, tidak ada apa pun untuk di-backup
+
+    try {
+      const ss     = SpreadsheetApp.openById(sid);
+      const name   = 'Backup_' + stamp + '_' + ss.getName();
+      const folder = getUserResourceFolder_(email, 'backup_folder', 'BACKUP_JURNAL');
+      const copy   = ss.copy(name);
+      DriveApp.getFileById(copy.getId()).moveTo(folder);
+      backedUp++;
+    } catch (e) {
+      failed.push(email);
+      console.error('[DAILY_BACKUP] Gagal backup ' + email + ': ' + (e.message || e));
+    }
+  }
+
+  logAudit('DAILY_BACKUP', 'SYSTEM', backedUp + ' spreadsheet guru di-backup' + (failed.length ? ' | gagal: ' + failed.join(', ') : ''));
 }
 
 function getOrCreateFolder_(name) {
@@ -158,72 +203,68 @@ function getReminderTriggerStatus() {
 }
 
 /**
- * Dipanggil otomatis oleh trigger — cek guru yang belum isi jurnal 3 hari terakhir
- * dan kirim email pengingat.
+ * Dipanggil otomatis oleh trigger — cek guru yang belum isi jurnal 3 hari
+ * terakhir dan kirim PENGINGAT IN-APP (bukan email — permintaan user:
+ * notifikasi cukup lewat sistem, email cuma dipakai untuk hal yang
+ * butuh bukti otentik seperti aktivasi akun lifetime).
+ *
+ * PERBAIKAN: sebelumnya cuma baca getSpreadsheet_() — di mode per_guru
+ * ini resolve ke spreadsheet PEMILIK SCRIPT (trigger berjalan sebagai
+ * pemilik script, bukan sebagai guru manapun), jadi JURNAL yang dicek
+ * cuma milik SuperAdmin sendiri untuk SEMUA guru — hampir pasti salah
+ * kirim reminder ke semua orang meski mereka sudah rajin mengisi jurnal
+ * di spreadsheet mereka sendiri. Sekarang tiap guru aktif dibuka
+ * spreadsheet-nya sendiri satu per satu.
  */
 function runDailyReminderCheck_() {
-  const ss       = getSpreadsheet_();
-  const shUsers  = ss.getSheetByName('USERS');
-  const shJurnal = ss.getSheetByName('JURNAL');
-  if (!shUsers || !shJurnal) return;
+  const shUsersCentral = _getCentralSheetByName_('USERS');
+  if (!shUsersCentral) return;
+  const userData = shUsersCentral.getDataRange().getValues();
 
-  const users  = shUsers.getDataRange().getValues().slice(1);
-  const jurnal = shJurnal.getDataRange().getValues().slice(1);
+  const now    = new Date();
+  const cutoff = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 hari lalu
+  const tz     = Session.getScriptTimeZone();
+  const modePerGuru = getStorageMode_() === 'per_guru';
 
-  const now     = new Date();
-  const cutoff  = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 hari lalu
-  const tz      = Session.getScriptTimeZone();
-  const appName = 'Sistem Akademik Guru';
-  const appUrl  = ScriptApp.getService().getUrl();
+  for (let ui = 1; ui < userData.length; ui++) {
+    const email  = String(userData[ui][0] || '').toLowerCase().trim();
+    const role   = String(userData[ui][1] || '').toLowerCase().trim();
+    const status = String(userData[ui][2] || '').toLowerCase().trim();
+    if (!email || role === 'superadmin' || status !== 'active') continue;
 
-  users.forEach(u => {
-    const email  = String(u[0] || '').toLowerCase().trim();
-    const role   = String(u[1] || '').toLowerCase().trim();
-    const status = String(u[2] || '').toLowerCase().trim();
-    if (!email || role === 'superadmin' || status !== 'active') return;
+    let ss;
+    if (modePerGuru) {
+      const sid = resolveSpreadsheetIdForUser_(email);
+      if (!sid) continue; // belum ter-provisioning, belum ada jurnal untuk dicek
+      try { ss = SpreadsheetApp.openById(sid); } catch (e) { continue; }
+    } else {
+      ss = getCentralSpreadsheet_();
+    }
 
-    // Cek apakah ada jurnal dalam 3 hari terakhir
-    const adaJurnal = jurnal.some(r => {
+    const shJurnal = ss.getSheetByName('JURNAL');
+    const jurnal = (shJurnal && shJurnal.getLastRow() > 1) ? shJurnal.getDataRange().getValues().slice(1) : [];
+
+    const adaJurnal = jurnal.some(function(r) {
       if (String(r[12] || '').toLowerCase().trim() !== email) return false;
       const tgl = new Date(r[1]);
       return tgl >= cutoff;
     });
 
-    if (adaJurnal) return; // Sudah isi, skip
+    if (adaJurnal) continue; // sudah isi, lewati
 
-    // Kirim email pengingat
     try {
       const tanggal = Utilities.formatDate(now, tz, 'EEEE, d MMMM yyyy');
-      GmailApp.sendEmail(
-        email,
-        `[${appName}] Pengingat: Jurnal Mengajar Belum Diisi`,
-        '',
-        {
-          htmlBody: `
-            <div style="font-family:sans-serif;max-width:520px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-              <div style="background:#6C63FF;padding:20px 24px">
-                <h2 style="margin:0;color:#fff;font-size:18px">🔔 Pengingat Jurnal Mengajar</h2>
-              </div>
-              <div style="padding:24px">
-                <p>Halo, Bapak/Ibu Guru,</p>
-                <p>Kami mendeteksi bahwa Anda <b>belum mengisi jurnal mengajar</b> selama 3 hari terakhir.</p>
-                <p>Tanggal hari ini: <b>${tanggal}</b></p>
-                <p>Mohon segera melengkapi jurnal melalui aplikasi:</p>
-                <a href="${appUrl}" style="display:inline-block;background:#6C63FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0">
-                  📘 Buka Aplikasi
-                </a>
-                <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb">
-                <p style="font-size:12px;color:#9ca3af">Pesan ini dikirim otomatis oleh ${appName}. Jangan balas email ini.</p>
-              </div>
-            </div>
-          `
-        }
+      _appendNotifToOpenSpreadsheet_(
+        ss,
+        '🔔 Pengingat: Jurnal Mengajar Belum Diisi',
+        'Anda belum mengisi jurnal mengajar selama 3 hari terakhir (per ' + tanggal + '). Mohon segera dilengkapi supaya rekap dan laporan tetap akurat.',
+        email
       );
       logAudit('REMINDER_SENT', 'SYSTEM', email);
     } catch(e) {
-      console.error('[REMINDER] Gagal kirim ke ' + email + ': ' + (e.message || e));
+      console.error('[REMINDER] Gagal kirim notif ke ' + email + ': ' + (e.message || e));
     }
-  });
+  }
 }
 
 /* =========================================================
