@@ -1231,7 +1231,8 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
   if (sc.rata) hdr += '<th>Rata</th>';
   if (sc.total) hdr += `<th>${type === 'katrol' ? 'Katrol' : 'Murni'}</th>`;
   if (sc.remedi) hdr += '<th>Remidi</th>';
-  hdr += '<th>Nilai Akhir</th><th>Ket</th>';
+  if (sc.akhir) hdr += '<th>Nilai Akhir</th>';
+  hdr += '<th>Ket</th>';
   if (sc.ranking) hdr += '<th>Rank</th>';
 
   const bodyRows = rows.map((r, i) => {
@@ -1248,7 +1249,8 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
     if (sc.rata) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.rata_uh, true)}</td>`;
     if (sc.total) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.nilai_asli, true)}</td>`;
     if (sc.remedi) tds += `<td>${noteHtml(r.nilai_remedial, true)}</td>`;
-    tds += `<td>${akhirFmt}</td><td>${lulus ? 'T' : 'BT'}</td>`;
+    if (sc.akhir) tds += `<td>${akhirFmt}</td>`;
+    tds += `<td>${lulus ? 'T' : 'BT'}</td>`;
     if (sc.ranking) tds += `<td>${rankMap[r.nis] || '-'}</td>`;
 
     return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
@@ -1283,6 +1285,7 @@ function doCetakNilai(mode = 'print') {
     rata   : document.getElementById('cetakColRata')?.checked,
     total  : document.getElementById('cetakColTotal')?.checked,
     remedi : document.getElementById('cetakColRemedi')?.checked,
+    akhir  : document.getElementById('cetakColAkhir')?.checked,
     ranking: document.getElementById('cetakColRanking')?.checked,
   };
   const paperSize   = document.querySelector('input[name="cetakPaper"]:checked')?.value  || 'a4';
@@ -1476,6 +1479,7 @@ function exportNilaiExcelUI() {
     rata   : document.getElementById('cetakColRata')?.checked,
     total  : document.getElementById('cetakColTotal')?.checked,
     remedi : document.getElementById('cetakColRemedi')?.checked,
+    akhir  : document.getElementById('cetakColAkhir')?.checked,
     ranking: document.getElementById('cetakColRanking')?.checked,
   };
 
@@ -1524,7 +1528,8 @@ function exportNilaiExcelUI() {
       if (sc.rata) colHdr.push('Rata-rata');
       if (sc.total) colHdr.push(type === 'katrol' ? 'Nilai Katrol' : 'Nilai Murni');
       if (sc.remedi) colHdr.push('Remedial');
-      colHdr.push('Nilai Akhir', 'Keterangan');
+      if (sc.akhir) colHdr.push('Nilai Akhir');
+      colHdr.push('Keterangan');
       if (sc.ranking) colHdr.push('Ranking');
 
       const dataRows = rows.map((r, i) => {
@@ -1538,7 +1543,7 @@ function exportNilaiExcelUI() {
         if (sc.rata) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.rata_uh));
         if (sc.total) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.nilai_asli));
         if (sc.remedi) row.push(fmt(r.nilai_remedial));
-        row.push(akhir);
+        if (sc.akhir) row.push(akhir);
         row.push((akhir !== '' && akhir >= kkm) ? 'Tuntas' : 'Belum Tuntas');
         if (sc.ranking) row.push(rankMap2[r.nis] || '-');
         return row;
