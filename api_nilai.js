@@ -16,12 +16,22 @@ function sheetNilai_() {
       'id', 'nis', 'nama_siswa', 'kelas', 'mapel',
       'uh1', 'uh2', 'uh3',
       'tgs1', 'tgs2', 'tgs3',
+      'tgsk1', 'tgsk2', 'tgsk3',
       'pts', 'pas', 'pat',
       'rata_uh', 'rata_tugas', 'nilai_fix', 'nilai_asli', 'nilai_katrol',
       'nilai_remedial', 'nilai_akhir',
       'tahun', 'semester', 'owner_email'
     ]);
     sh.setFrozenRows(1);
+  } else {
+    const lastCol = sh.getLastColumn();
+    const header  = lastCol > 0
+      ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h || '').toLowerCase().trim())
+      : [];
+    const missing = ['tgsk1', 'tgsk2', 'tgsk3'].filter(c => header.indexOf(c) === -1);
+    if (missing.length) {
+      sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+    }
   }
   return sh;
 }
@@ -68,7 +78,7 @@ function hitungNilaiRow_(r) {
   };
 
   const rata_uh     = avg([r.uh1, r.uh2, r.uh3]);
-  const rata_tugas  = avg([r.tgs1, r.tgs2, r.tgs3]);
+  const rata_tugas  = avg([r.tgs1, r.tgs2, r.tgs3, r.tgsk1, r.tgsk2, r.tgsk3]);
 
   let nilai_fix = null;
   if (rata_uh !== null && rata_tugas !== null) {
@@ -255,6 +265,9 @@ function getNilaiSiswa(kelas, mapel, tahun, semester) {
       tgs1          : r[idx('tgs1')],
       tgs2          : r[idx('tgs2')],
       tgs3          : r[idx('tgs3')],
+      tgsk1         : r[idx('tgsk1')],
+      tgsk2         : r[idx('tgsk2')],
+      tgsk3         : r[idx('tgsk3')],
       pts           : r[idx('pts')],
       pas           : r[idx('pas')],
       pat           : r[idx('pat')],
@@ -302,7 +315,7 @@ function simpanNilaiSiswa(payload) {
 
   // 1. Validasi nilai (0–100)
   for (const r of payload.rows) {
-    const fields = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+    const fields = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','pts','pas','pat','nilai_remedial'];
     for (const f of fields) {
       const v = r[f];
       if (v !== null && v !== undefined && v !== '') {
@@ -338,23 +351,34 @@ function simpanNilaiSiswa(payload) {
     return !isTarget;
   });
 
-  // 5. Bangun baris baru
+  // 5. Bangun baris baru — dipetakan lewat nama kolom header (bukan posisi tetap),
+  //    supaya tahan terhadap kolom baru (mis. tgsk1-3) yang ditambahkan di ujung
+  //    header pada sheet lama hasil migrasi, bukan di posisi "logis"-nya.
   const ts = Date.now();
-  const newRows = rows.map((r, i) => [
-    'NL_' + ts + '_' + i,
-    r.nis          || '',
-    r.nama_siswa   || '',
-    payload.kelas,
-    payload.mapel,
-    num_(r.uh1),  num_(r.uh2),  num_(r.uh3),
-    num_(r.tgs1), num_(r.tgs2), num_(r.tgs3),
-    num_(r.pts),  num_(r.pas),  num_(r.pat),
-    rnd2_(r.rata_uh),  rnd2_(r.rata_tugas),
-    rnd2_(r.nilai_fix), rnd2_(r.nilai_asli),  rnd2_(r.nilai_katrol),
-    num_(r.nilai_remedial),
-    rnd2_(r.nilai_akhir),
-    payload.tahun, semester, auth.email
-  ]);
+  const newRows = rows.map((r, i) => {
+    const rec = {
+      id            : 'NL_' + ts + '_' + i,
+      nis           : r.nis        || '',
+      nama_siswa    : r.nama_siswa || '',
+      kelas         : payload.kelas,
+      mapel         : payload.mapel,
+      uh1: num_(r.uh1), uh2: num_(r.uh2), uh3: num_(r.uh3),
+      tgs1: num_(r.tgs1), tgs2: num_(r.tgs2), tgs3: num_(r.tgs3),
+      tgsk1: num_(r.tgsk1), tgsk2: num_(r.tgsk2), tgsk3: num_(r.tgsk3),
+      pts: num_(r.pts), pas: num_(r.pas), pat: num_(r.pat),
+      rata_uh       : rnd2_(r.rata_uh),
+      rata_tugas    : rnd2_(r.rata_tugas),
+      nilai_fix     : rnd2_(r.nilai_fix),
+      nilai_asli    : rnd2_(r.nilai_asli),
+      nilai_katrol  : rnd2_(r.nilai_katrol),
+      nilai_remedial: num_(r.nilai_remedial),
+      nilai_akhir   : rnd2_(r.nilai_akhir),
+      tahun         : payload.tahun,
+      semester      : semester,
+      owner_email   : auth.email
+    };
+    return hdr.map(colName => rec[colName] !== undefined ? rec[colName] : '');
+  });
 
   // 6. Tulis ulang sheet (clear lama, set semua)
   const numCols = hdr.length;
@@ -487,6 +511,9 @@ function importNilaiData(rows) {
     tgs1           : ['tgs1', 'tugas1', 'tugas_1', 'nilai_tugas_1'],
     tgs2           : ['tgs2', 'tugas2', 'tugas_2'],
     tgs3           : ['tgs3', 'tugas3', 'tugas_3'],
+    tgsk1          : ['tgsk1', 'tugas_kelompok_1', 'tugas_kelompok1'],
+    tgsk2          : ['tgsk2', 'tugas_kelompok_2', 'tugas_kelompok2'],
+    tgsk3          : ['tgsk3', 'tugas_kelompok_3', 'tugas_kelompok3'],
     pts            : ['pts', 'penilaian_tengah_semester', 'uts'],
     pas            : ['pas', 'penilaian_akhir_semester', 'uas'],
     pat            : ['pat', 'penilaian_akhir_tahun'],
@@ -517,7 +544,7 @@ function importNilaiData(rows) {
     if (!nama) return; // skip baris kosong
 
     // Validasi nilai numerik
-    const numFields = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+    const numFields = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','pts','pas','pat','nilai_remedial'];
     let rowError = null;
     for (const f of numFields) {
       const v = getVal(row, f);
@@ -541,6 +568,9 @@ function importNilaiData(rows) {
       tgs1          : getVal(row, 'tgs1'),
       tgs2          : getVal(row, 'tgs2'),
       tgs3          : getVal(row, 'tgs3'),
+      tgsk1         : getVal(row, 'tgsk1'),
+      tgsk2         : getVal(row, 'tgsk2'),
+      tgsk3         : getVal(row, 'tgsk3'),
       pts           : getVal(row, 'pts'),
       pas           : getVal(row, 'pas'),
       pat           : getVal(row, 'pat'),

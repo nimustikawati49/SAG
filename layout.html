@@ -1889,6 +1889,9 @@
         <button class="nil-pill" data-key="tgs1"  onclick="setFokusKomponen('tgs1')">TGS 1</button>
         <button class="nil-pill" data-key="tgs2"  onclick="setFokusKomponen('tgs2')">TGS 2</button>
         <button class="nil-pill" data-key="tgs3"  onclick="setFokusKomponen('tgs3')">TGS 3</button>
+        <button class="nil-pill" data-key="tgsk1" onclick="setFokusKomponen('tgsk1')">TGS Kelompok 1</button>
+        <button class="nil-pill" data-key="tgsk2" onclick="setFokusKomponen('tgsk2')">TGS Kelompok 2</button>
+        <button class="nil-pill" data-key="tgsk3" onclick="setFokusKomponen('tgsk3')">TGS Kelompok 3</button>
         <button class="nil-pill" data-key="uh1"   onclick="setFokusKomponen('uh1')">UH 1</button>
         <button class="nil-pill" data-key="uh2"   onclick="setFokusKomponen('uh2')">UH 2</button>
         <button class="nil-pill" data-key="uh3"   onclick="setFokusKomponen('uh3')">UH 3</button>
@@ -1918,7 +1921,8 @@
             <th rowspan="2" style="min-width:32px">No</th>
             <th rowspan="2" style="min-width:68px">NIS</th>
             <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
-            <th colspan="3">Tugas</th>
+            <th colspan="3">Tugas Mandiri</th>
+            <th colspan="3">Tugas Kelompok</th>
             <th colspan="3">Ulangan Harian</th>
             <th rowspan="2" style="min-width:56px">PTS</th>
             <th rowspan="2" style="min-width:56px">SAS</th>
@@ -1930,11 +1934,12 @@
           </tr>
           <tr>
             <th>TGS1</th><th>TGS2</th><th>TGS3</th>
+            <th>TK1</th><th>TK2</th><th>TK3</th>
             <th>UH1</th><th>UH2</th><th>UH3</th>
           </tr>
         </thead>
         <tbody id="tabelNilaiBody">
-          <tr><td colspan="16" style="padding:24px;color:#9ca3af;text-align:center">
+          <tr><td colspan="19" style="padding:24px;color:#9ca3af;text-align:center">
             Pilih filter dan klik &quot;Muat Data Siswa&quot;</td></tr>
         </tbody>
       </table>
@@ -2056,7 +2061,9 @@
       <label style="font-weight:600;display:block;margin-bottom:8px">Kolom yang ditampilkan:</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColTGS" checked> Tugas 1, 2, 3</label>
+          <input type="checkbox" id="cetakColTGS" checked> Tugas Mandiri 1, 2, 3</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="cetakColTGSK" checked> Tugas Kelompok 1, 2, 3</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="cetakColUH" checked> UH 1, 2, 3</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">

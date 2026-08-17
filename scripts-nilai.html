@@ -203,7 +203,7 @@ function updateNilaiKelengkapanInfo_() {
 }
 
 const NILAI_DRAFT_VERSION = 1;
-const NILAI_DRAFT_FIELDS = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+const NILAI_DRAFT_FIELDS = ['uh1','uh2','uh3','tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','pts','pas','pat','nilai_remedial'];
 let _nilaiAutosaveTimer = null;
 
 /** State terpusat untuk tab Input Nilai */
@@ -539,6 +539,7 @@ function muatDataNilai(forceLocked = false) {
         jk            : s.jk,
         uh1           : saved.uh1  ?? '', uh2: saved.uh2 ?? '', uh3: saved.uh3 ?? '',
         tgs1          : saved.tgs1 ?? '', tgs2: saved.tgs2 ?? '', tgs3: saved.tgs3 ?? '',
+        tgsk1         : saved.tgsk1 ?? '', tgsk2: saved.tgsk2 ?? '', tgsk3: saved.tgsk3 ?? '',
         pts           : saved.pts  ?? '',
         pas           : saved.pas  ?? '',
         pat           : saved.pat  ?? '',
@@ -649,7 +650,7 @@ function renderTabelNilai() {
   };
 
   if (!nilaiState.rows.length) {
-    tbody.innerHTML = '<tr><td colspan="16" style="padding:20px;color:#9ca3af;text-align:center">'
+    tbody.innerHTML = '<tr><td colspan="19" style="padding:20px;color:#9ca3af;text-align:center">'
       + '⚠️ Tidak ada data siswa untuk kelas <b>' + (nilaiState.kelas || '-') + '</b>. '
       + 'Pastikan siswa sudah diimport di tab <b>Jurnal → Import Siswa</b> '
       + 'dan email pengupload sesuai akun yang sedang login.</td></tr>';
@@ -704,7 +705,8 @@ function renderTabelNilai() {
         <th rowspan="2" style="min-width:32px">No</th>
         <th rowspan="2" style="min-width:68px">NIS</th>
         <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
-        <th colspan="3">Tugas</th>
+        <th colspan="3">Tugas Mandiri</th>
+        <th colspan="3">Tugas Kelompok</th>
         <th colspan="3">Ulangan Harian</th>
         <th rowspan="2" style="min-width:56px">PTS</th>
         <th rowspan="2" style="min-width:56px">${pasPat}</th>
@@ -716,6 +718,7 @@ function renderTabelNilai() {
       </tr>
       <tr>
         <th>TGS1</th><th>TGS2</th><th>TGS3</th>
+        <th>TK1</th><th>TK2</th><th>TK3</th>
         <th>UH1</th><th>UH2</th><th>UH3</th>
       </tr>`;
   }
@@ -732,6 +735,9 @@ function renderTabelNilai() {
       ${inputCell(i, 'tgs1', r.tgs1, true)}
       ${inputCell(i, 'tgs2', r.tgs2, true)}
       ${inputCell(i, 'tgs3', r.tgs3, true)}
+      ${inputCell(i, 'tgsk1', r.tgsk1, true)}
+      ${inputCell(i, 'tgsk2', r.tgsk2, true)}
+      ${inputCell(i, 'tgsk3', r.tgsk3, true)}
       ${inputCell(i, 'uh1',  r.uh1,  true)}
       ${inputCell(i, 'uh2',  r.uh2,  true)}
       ${inputCell(i, 'uh3',  r.uh3,  true)}
@@ -756,7 +762,7 @@ function nilaiHitungRow_(r, semester) {
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
   const rata_uh    = avg([r.uh1, r.uh2, r.uh3]);
-  const rata_tugas = avg([r.tgs1, r.tgs2, r.tgs3]);
+  const rata_tugas = avg([r.tgs1, r.tgs2, r.tgs3, r.tgsk1, r.tgsk2, r.tgsk3]);
   let nilai_fix = null;
   if (rata_uh !== null && rata_tugas !== null) nilai_fix = (rata_uh + rata_tugas) / 2;
   else if (rata_uh    !== null) nilai_fix = rata_uh;
@@ -948,6 +954,7 @@ function simpanSemuaNilai() {
       nis: r.nis, nama_siswa: r.nama_siswa,
       uh1: r.uh1, uh2: r.uh2, uh3: r.uh3,
       tgs1: r.tgs1, tgs2: r.tgs2, tgs3: r.tgs3,
+      tgsk1: r.tgsk1, tgsk2: r.tgsk2, tgsk3: r.tgsk3,
       pts: r.pts, pas: r.pas, pat: r.pat,
       nilai_remedial: r.nilai_remedial
     }))
@@ -1007,7 +1014,7 @@ function importNilaiExcelUI(btnEl) {
           nilaiState.rows.forEach(r => {
             const imp = importMap[String(r.nis || '').trim()];
             if (!imp) return;
-            ['uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'].forEach(fk => {
+            ['uh1','uh2','uh3','tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','pts','pas','pat','nilai_remedial'].forEach(fk => {
               if (imp[fk] !== undefined && imp[fk] !== '') r[fk] = imp[fk];
             });
             const calc = nilaiHitungRow_(r, nilaiState.semester);
@@ -1036,7 +1043,7 @@ function importNilaiExcelUI(btnEl) {
 /** Download template Excel kosong */
 function downloadTemplateNilai() {
   if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap, coba lagi sebentar'); return; }
-  const header = ['nis','nama_siswa','kelas','uh1','uh2','uh3','tgs1','tgs2','tgs3','pts','pas','pat','nilai_remedial'];
+  const header = ['nis','nama_siswa','kelas','uh1','uh2','uh3','tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','pts','pas','pat','nilai_remedial'];
   const ws = XLSX.utils.aoa_to_sheet([header]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
@@ -1159,6 +1166,7 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
   // Build header
   let hdr = '<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th>';
   if (sc.tgs) hdr += '<th>TGS1</th><th>TGS2</th><th>TGS3</th>';
+  if (sc.tgsk) hdr += '<th>TK1</th><th>TK2</th><th>TK3</th>';
   if (sc.uh)  hdr += '<th>UH1</th><th>UH2</th><th>UH3</th>';
   if (sc.pts) hdr += '<th>PTS</th>';
   if (sc.pas) hdr += `<th>${isGenap ? 'ASAT' : 'SAS'}</th>`;
@@ -1175,6 +1183,7 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
 
     let tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>`;
     if (sc.tgs)  tds += `<td>${noteHtml(r.tgs1, true)}</td><td>${noteHtml(r.tgs2, true)}</td><td>${noteHtml(r.tgs3, true)}</td>`;
+    if (sc.tgsk) tds += `<td>${noteHtml(r.tgsk1, true)}</td><td>${noteHtml(r.tgsk2, true)}</td><td>${noteHtml(r.tgsk3, true)}</td>`;
     if (sc.uh)   tds += `<td>${noteHtml(r.uh1, true)}</td><td>${noteHtml(r.uh2, true)}</td><td>${noteHtml(r.uh3, true)}</td>`;
     if (sc.pts)  tds += `<td>${noteHtml(r.pts, true)}</td>`;
     if (sc.pas)  tds += `<td>${noteHtml(isGenap ? r.pat : r.pas, true)}</td>`;
@@ -1209,6 +1218,7 @@ function doCetakNilai(mode = 'print') {
   const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
   const sc = {
     tgs    : document.getElementById('cetakColTGS')?.checked,
+    tgsk   : document.getElementById('cetakColTGSK')?.checked,
     uh     : document.getElementById('cetakColUH')?.checked,
     pts    : document.getElementById('cetakColPTS')?.checked,
     pas    : document.getElementById('cetakColPAS')?.checked,
@@ -1387,6 +1397,7 @@ function exportNilaiExcelUI() {
   const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
   const sc = {
     tgs    : document.getElementById('cetakColTGS')?.checked,
+    tgsk   : document.getElementById('cetakColTGSK')?.checked,
     uh     : document.getElementById('cetakColUH')?.checked,
     pts    : document.getElementById('cetakColPTS')?.checked,
     pas    : document.getElementById('cetakColPAS')?.checked,
@@ -1434,6 +1445,7 @@ function exportNilaiExcelUI() {
       ];
       let colHdr = ['No','NIS','Nama Siswa'];
       if (sc.tgs) colHdr = colHdr.concat(['TGS1','TGS2','TGS3']);
+      if (sc.tgsk) colHdr = colHdr.concat(['TK1','TK2','TK3']);
       if (sc.uh)  colHdr = colHdr.concat(['UH1','UH2','UH3']);
       if (sc.pts) colHdr.push('PTS');
       if (sc.pas) colHdr.push(pasPat);
@@ -1447,6 +1459,7 @@ function exportNilaiExcelUI() {
         const akhir = fmt(r.nilai_akhir);
         let row = [i + 1, r.nis || '', r.nama_siswa || ''];
         if (sc.tgs)  row = row.concat([fmt(r.tgs1), fmt(r.tgs2), fmt(r.tgs3)]);
+        if (sc.tgsk) row = row.concat([fmt(r.tgsk1), fmt(r.tgsk2), fmt(r.tgsk3)]);
         if (sc.uh)   row = row.concat([fmt(r.uh1), fmt(r.uh2), fmt(r.uh3)]);
         if (sc.pts)  row.push(fmt(r.pts));
         if (sc.pas)  row.push(fmt(isGenap ? r.pat : r.pas));
@@ -1500,7 +1513,7 @@ function exportNilaiExcelUI() {
    ========================================================= */
 (function(){
   // Ordered input fields in the nilai table (remedial removed from UI)
-  const NILAI_FIELDS = ['tgs1','tgs2','tgs3','uh1','uh2','uh3','pts','pas','pat'];
+  const NILAI_FIELDS = ['tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','uh1','uh2','uh3','pts','pas','pat'];
 
   function parseNilaiPaste_(raw) {
     const cleaned = String(raw ?? '')
