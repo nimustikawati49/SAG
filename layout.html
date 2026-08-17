@@ -1527,23 +1527,9 @@
      terpenuhi", jadi aman dihapus. -->
 
       <hr style="margin:28px 0">
-<div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
-  ⚠️ <b>Peringatan Storage:</b> Folder arsip telah menggunakan <b id="arsipWarnUsed">-</b> MB, melebihi batas <b id="arsipWarnThreshold">-</b> MB. Pertimbangkan untuk menghapus arsip lama.
-</div>
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-    <div>
-      <h3 style="margin:0">📦 Arsip Semua Guru</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Arsip jurnal dari seluruh guru. Total pemakaian Drive: <b id="arsipTotalMB">⏳</b></p>
-    </div>
-    <button onclick="loadArsipDriveUsage()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🔄 Refresh</button>
-  </div>
-  <div id="arsipAllUserBox">
-    <p class="muted">⏳ Memuat arsip...</p>
-  </div>
-</div>
-
-<!-- Modal: Forward Arsip ke Email -->
+<!-- Modal: Forward Arsip ke Email — tetap di luar #saAdvancedPanels (sudah
+     tersembunyi sendiri lewat display:none sampai dibuka), kartu-kartu
+     arsipnya sendiri dipindah ke dalam Pengaturan Lanjutan di bawah. -->
 <div id="forwardArsipModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
   <div style="background:#fff;width:90%;max-width:420px;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <h3 style="margin:0 0 12px">📧 Kirim Arsip ke Email</h3>
@@ -1552,50 +1538,6 @@
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="document.getElementById('forwardArsipModal').style.display='none'" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:8px 16px;cursor:pointer">Batal</button>
       <button id="forwardArsipBtn" onclick="_doForwardArsip_()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">📤 Kirim</button>
-    </div>
-  </div>
-</div>
-<div class="card">
-  <h3>📈 Statistik Global Lintas Guru</h3>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>No</th>
-          <th>Nama Guru</th>
-          <th>Email Guru</th>
-          <th>Total Jurnal</th>
-          <th>Total Kelas</th>
-          <th>Terakhir Aktif</th>
-        </tr>
-      </thead>
-      <tbody id="globalStatBody">
-        <tr>
-          <td colspan="6" class="muted">⏳ Memuat statistik...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  </div>
-  <!-- KONFIGURASI FOLDER ARSIP -->
-<div class="card">
-  <h3>📁 Konfigurasi Folder Arsip</h3>
-  <p class="muted" style="font-size:13px">Tentukan folder Google Drive tujuan penyimpanan arsip jurnal. Biarkan kosong untuk menggunakan folder default <b>JURNAL_ARSIP</b> di My Drive.</p>
-  <div id="arsipFolderInfo" style="margin-bottom:10px;font-size:13px;color:#374151">⏳ Memuat konfigurasi...</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-    <div style="flex:1;min-width:220px">
-      <label style="font-size:12px;color:#6b7280">URL atau Folder ID Google Drive</label>
-      <input id="arsipFolderInput" type="text" placeholder="https://drive.google.com/drive/folders/... atau folder ID" style="width:100%;box-sizing:border-box">
-    </div>
-    <button onclick="saveArsipFolderConfig()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">💾 Simpan</button>
-    <button onclick="resetArsipFolderConfig()" class="ghost" style="font-size:13px;padding:8px 14px">↩️ Reset Default</button>
-  </div>
-  <div style="border-top:1px solid #e5e7eb;padding-top:12px">
-    <label style="font-size:12px;color:#6b7280">Threshold Peringatan Storage (MB)</label>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-      <input id="arsipWarnMbInput" type="number" min="50" max="10000" placeholder="500" style="width:120px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
-      <span class="muted" style="font-size:12px">MB — tampilkan warning jika arsip melebihi batas ini</span>
-      <button onclick="saveArsipFolderConfig()" style="padding:6px 14px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600">💾</button>
     </div>
   </div>
 </div>
@@ -1658,23 +1600,96 @@
   <div id="saNotifHistory"><div class="muted">⏳ Memuat riwayat notifikasi…</div></div>
 </div>
 
-<!-- ===== PENGATURAN LANJUTAN (Registry/Storage/Sync/Release) =====
+<!-- ===== PENGATURAN LANJUTAN (Arsip/Registry/Storage/Sync/Release) =====
      Digabung di balik satu toggle atas permintaan user supaya menu
-     SuperAdmin tidak terlalu padat — 4 panel di bawah ini teknis dan
-     jarang perlu dibuka sehari-hari (sebagian besar interaksi harian
-     ada di Aktivasi Akun Guru / Arsip / Broadcast di atas). Tetap
-     dimuat otomatis di background (setTimeout di loadDashboardSuperAdmin)
-     walau tersembunyi, jadi begitu dibuka datanya sudah siap. -->
+     SuperAdmin tidak terlalu padat — 5 panel di bawah ini jarang perlu
+     dibuka sehari-hari (sebagian besar interaksi harian ada di Aktivasi
+     Akun Guru / Broadcast di atas). Arsip Jurnal Tahunan ikut dipindah
+     ke sini karena kartunya sering kosong (belum tentu tiap guru sudah
+     sampai ke masa arsip tahunan) — TETAP fitur aktif, bukan dihapus,
+     lihat komentar di dalam #saAdvancedPanels. Tetap dimuat otomatis di
+     background (setTimeout di loadDashboardSuperAdmin) walau
+     tersembunyi, jadi begitu dibuka datanya sudah siap. -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSuperAdminAdvanced_()">
     <div>
       <h3 style="margin:0">⚙️ Pengaturan Lanjutan</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Registry, mode storage, summary sync, dan release/update — panel teknis, biasanya jarang perlu dibuka.</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Arsip jurnal tahunan, registry, mode storage, summary sync, dan release/update — panel teknis, biasanya jarang perlu dibuka.</p>
     </div>
     <span id="saAdvancedToggleIcon" style="font-size:18px;color:#6b7280">▾</span>
   </div>
 </div>
 <div id="saAdvancedPanels" style="display:none">
+
+<!-- ===== ARSIP JURNAL TAHUNAN (lintas guru) =====
+     Tampilan agregat dari fitur "📦 Arsipkan Jurnal Tahun Pelajaran" yang
+     guru pakai sendiri di menu Pengaturan mereka (arsipTahunPelajaranUI,
+     lihat tombol #btnArsipRiwayat di layout.html) — BUKAN dead code,
+     cuma dipindah ke sini karena jarang dibuka sehari-hari, sama seperti
+     3 panel teknis lain di bawah. Kalau kosong, itu artinya belum ada
+     guru yang mengarsipkan jurnal tahunannya, bukan berarti fiturnya
+     tidak berfungsi. -->
+<div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">
+  ⚠️ <b>Peringatan Storage:</b> Folder arsip telah menggunakan <b id="arsipWarnUsed">-</b> MB, melebihi batas <b id="arsipWarnThreshold">-</b> MB. Pertimbangkan untuk menghapus arsip lama.
+</div>
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <div>
+      <h3 style="margin:0">📦 Arsip Semua Guru</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Arsip jurnal dari seluruh guru. Total pemakaian Drive: <b id="arsipTotalMB">⏳</b></p>
+    </div>
+    <button onclick="loadArsipDriveUsage()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🔄 Refresh</button>
+  </div>
+  <div id="arsipAllUserBox">
+    <p class="muted">⏳ Memuat arsip...</p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3>📈 Statistik Global Lintas Guru</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama Guru</th>
+          <th>Email Guru</th>
+          <th>Total Jurnal</th>
+          <th>Total Kelas</th>
+          <th>Terakhir Aktif</th>
+        </tr>
+      </thead>
+      <tbody id="globalStatBody">
+        <tr>
+          <td colspan="6" class="muted">⏳ Memuat statistik...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- KONFIGURASI FOLDER ARSIP -->
+<div class="card" style="margin-top:16px">
+  <h3>📁 Konfigurasi Folder Arsip</h3>
+  <p class="muted" style="font-size:13px">Tentukan folder Google Drive tujuan penyimpanan arsip jurnal. Biarkan kosong untuk menggunakan folder default <b>JURNAL_ARSIP</b> di My Drive.</p>
+  <div id="arsipFolderInfo" style="margin-bottom:10px;font-size:13px;color:#374151">⏳ Memuat konfigurasi...</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+    <div style="flex:1;min-width:220px">
+      <label style="font-size:12px;color:#6b7280">URL atau Folder ID Google Drive</label>
+      <input id="arsipFolderInput" type="text" placeholder="https://drive.google.com/drive/folders/... atau folder ID" style="width:100%;box-sizing:border-box">
+    </div>
+    <button onclick="saveArsipFolderConfig()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">💾 Simpan</button>
+    <button onclick="resetArsipFolderConfig()" class="ghost" style="font-size:13px;padding:8px 14px">↩️ Reset Default</button>
+  </div>
+  <div style="border-top:1px solid #e5e7eb;padding-top:12px">
+    <label style="font-size:12px;color:#6b7280">Threshold Peringatan Storage (MB)</label>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+      <input id="arsipWarnMbInput" type="number" min="50" max="10000" placeholder="500" style="width:120px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px">
+      <span class="muted" style="font-size:12px">MB — tampilkan warning jika arsip melebihi batas ini</span>
+      <button onclick="saveArsipFolderConfig()" style="padding:6px 14px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600">💾</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== DEPLOYMENT TRACKER ===== -->
 <div class="card" style="margin-top:16px;border:1.5px solid #bfdbfe;background:linear-gradient(180deg,#eff6ff,#ffffff)">
