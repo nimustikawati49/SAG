@@ -652,7 +652,8 @@ function _applySettingToHeader_(d){
     tahun_pelajaran: d.tahun_pelajaran  || '',
     semester       : d.semester        || '',
     mata_pelajaran : d.mata_pelajaran   || '',
-    nama_guru      : d.nama_guru        || ''
+    nama_guru      : d.nama_guru        || '',
+    nip_guru       : d.nip_guru         || ''
   };
 
   // 1. Populate hidden meta spans (used by syncSidebarProfile_ / MutationObserver)
@@ -680,6 +681,16 @@ function _applySettingToHeader_(d){
     var el = document.getElementById(id);
     if(el && sbMap[id]) el.textContent = sbMap[id];
   });
+
+  // NIP — update langsung juga (sebelumnya cuma diisi lewat syncSidebarProfile_
+  // yang baca value input form Setting, jadi kalau tab Setting belum pernah
+  // dibuka/di-load duluan, chip NIP di top bar bisa tidak muncul sama sekali).
+  var sbTopNip     = document.getElementById('sbTopNip');
+  var sbTopNipItem = document.getElementById('sbTopNipItem');
+  if (fields.nip_guru && sbTopNip && sbTopNipItem) {
+    sbTopNip.textContent       = fields.nip_guru;
+    sbTopNipItem.style.display = 'flex';
+  }
 
   // Logo
   var img = document.getElementById('appLogo');
