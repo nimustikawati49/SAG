@@ -1187,6 +1187,34 @@ function loadTrialActivationPanel() {
       var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Kode/Nama Sekolah</th><th>Dibuat</th><th>Status</th><th>Drive</th><th>Aksi</th></tr></thead><tbody>';
       rows.forEach(function(r) {
         var statusHtml, statusActionHtml;
+
+        // Baris SuperAdmin sendiri (isSelfSA, lihat getGuruActivationList di
+        // Users.js) — statusnya SELALU dipaksa lifetime oleh server (bypass
+        // gerbang lisensi/trial apapun isi sheet-nya), jadi di sini tidak
+        // ada tombol Aktifkan/Nonaktifkan/ganti role/Hapus yang berisiko
+        // menonaktifkan atau menghapus akun yang sedang dipakai login —
+        // cuma badge status + Drive (berguna kalau SuperAdmin juga
+        // mengajar) + Riwayat (aman, read-only).
+        if (r.isSelfSA) {
+          var saStatusHtml = '<span style="background:#ede9fe;color:#5b21b6;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">👑 SuperAdmin (Lifetime)</span>';
+          var saDriveHtml = '<span class="muted" style="font-size:11px">–</span>';
+          if (r.drive_self_owned === true) {
+            saDriveHtml = '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600" title="Database SuperAdmin sudah di Drive miliknya sendiri">✅ Milik sendiri</span>';
+          } else if (r.drive_self_owned === false) {
+            saDriveHtml = '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600" title="Database SuperAdmin masih di Drive sendiri (default), belum pindah lewat fitur connect">⚠️ Drive SA</span>';
+          }
+          html += '<tr>' +
+            '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
+            '<td style="font-size:12px">superadmin</td>' +
+            '<td class="muted" style="font-size:12px">–</td>' +
+            '<td style="font-size:12px">' + _escSA(r.dibuat) + '</td>' +
+            '<td>' + saStatusHtml + '</td>' +
+            '<td>' + saDriveHtml + '</td>' +
+            '<td><button class="ghost" onclick="openUserAuditModal_(\'' + _escSA(r.email) + '\')" style="background:#eef2ff;color:#4338ca;font-size:12px">📋 Riwayat</button></td>' +
+            '</tr>';
+          return;
+        }
+
         if (r.status === 'trial') {
           statusHtml = r.expired
             ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">⏰ Trial Habis</span>'

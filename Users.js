@@ -91,10 +91,18 @@ function getGuruActivationList() {
   var result = [];
   for (var i = 1; i < data.length; i++) {
     var role = String(data[i][1] || 'admin').toLowerCase();
-    if (role === 'superadmin') continue;
     var email = String(data[i][0] || '').toLowerCase().trim();
     if (!email) continue;
-    var status = String(data[i][2] || 'inactive').toLowerCase().trim();
+    var isSelfSA = (role === 'superadmin');
+    // SuperAdmin SENGAJA ikut ditampilkan (dulu di-skip) — kalau SuperAdmin
+    // juga mengajar, dia perlu lihat status koneksi Drive pribadinya sendiri
+    // di tabel yang sama seperti guru lain (lihat DriveConnect.js, role
+    // superadmin sudah diizinkan connectOwnSpreadsheet()). Statusnya
+    // dipaksa 'active' (lifetime) di sini APAPUN isi kolom status di sheet
+    // — SuperAdmin selalu bypass gerbang lisensi/trial (lihat
+    // assertLicenseActive di Auth.js), jadi tampilannya harus konsisten
+    // dengan itu, bukan ikut nilai mentah yang mungkin belum tentu 'active'.
+    var status = isSelfSA ? 'active' : String(data[i][2] || 'inactive').toLowerCase().trim();
 
     var entry = {
       email: email,
@@ -104,17 +112,18 @@ function getGuruActivationList() {
       kode_sekolah: String(data[i][4] || '').trim(),
       days_left: null,
       expired: false,
-      drive_self_owned: null
+      drive_self_owned: null,
+      isSelfSA: isSelfSA
     };
     if (status === 'trial') {
       var info = _computeTrialInfo_(data[i][3]);
       entry.days_left = info.daysLeft;
       entry.expired = info.expired;
     }
-    // Kepemilikan Drive database — cuma relevan untuk guru (role admin) di
-    // mode per_guru, lihat DriveConnect.js. null = tidak relevan (kepsek,
-    // mode central, dll), bukan false.
-    if (role === 'admin' && typeof getStorageMode_ === 'function' && getStorageMode_() === 'per_guru') {
+    // Kepemilikan Drive database — relevan untuk guru (role admin) DAN
+    // SuperAdmin sendiri (kalau juga mengajar) di mode per_guru, lihat
+    // DriveConnect.js. null = tidak relevan (kepsek, mode central, dll).
+    if ((role === 'admin' || isSelfSA) && typeof getStorageMode_ === 'function' && getStorageMode_() === 'per_guru') {
       try { entry.drive_self_owned = typeof _isDriveSelfOwned_ === 'function' ? _isDriveSelfOwned_(email) : null; } catch (e) { entry.drive_self_owned = null; }
     }
     result.push(entry);
