@@ -1513,25 +1513,18 @@
 </div>
 <!-- ===== END MASTER ROSTER CENTRAL ===== -->
 
-<!-- ===== REMINDER LISENSI SEKOLAH ============================================
-     Trigger harian (08:00) yang mengaktifkan/menonaktifkan tombol di bawah ini
-     memanggil runDailyLicenseReminder_() (Trigger.js) -> delegasi langsung ke
-     checkSchoolLicenseExpiryReminder() (License.js), yang membaca lisensi
-     sekolah AKTIF SAAT INI dari _readSchoolLicense_() (berbasis Script
-     Properties per-sekolah, BUKAN sheet LICENSES lama berbasis per-user) dan
-     kirim email ke SuperAdmin di H-60/H-30/H-7 sebelum expired. Panel ini
-     masih benar-benar terpakai — jangan dihapus.
-     ============================================================================ -->
-<div class="card" style="margin-top:16px">
-  <h4 style="margin:0 0 6px;font-size:13px">🔔 Reminder Renewal Otomatis</h4>
-  <p class="muted" style="font-size:12px;margin:0 0 8px">Email ke SuperAdmin saat lisensi H-60, H-30, H-7 sebelum expired.</p>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <span id="licReminderStatus" style="font-size:12px;color:#6b7280">⏳ Mengecek...</span>
-    <button onclick="activateLicenseReminderTrigger_()" id="btnSetLicReminder" style="font-size:12px">🔔 Aktifkan</button>
-    <button onclick="deactivateLicenseReminderTrigger_()" class="ghost" id="btnDelLicReminder" style="font-size:12px">🗑️ Nonaktifkan</button>
-  </div>
-</div>
-<!-- ===== END REMINDER LISENSI SEKOLAH ===== -->
+<!-- NOTE: Panel "🔔 Reminder Renewal Otomatis" (reminder H-60/H-30/H-7
+     sebelum lisensi expired) dulu ada di sini, dihapus. Sebelumnya sempat
+     dipertahankan karena terverifikasi TERHUBUNG ke kode yang benar-benar
+     jalan (runDailyLicenseReminder_ -> checkSchoolLicenseExpiryReminder,
+     lihat komentar lama di sini) — tapi setelah dicek lebih dalam,
+     TIDAK ADA satu pun jalur di aplikasi ini yang pernah mengisi
+     SCHOOL_LICENSE_EXPIRES ke ScriptProperties, jadi fungsi itu tidak
+     akan PERNAH benar-benar mengirim apa pun berapa pun lama trigger-nya
+     aktif — lisensi sekolah di sistem ini selalu default lifetime (lihat
+     komentar header License.js). Beda dengan kasus "wired tapi belum
+     pernah dites" — ini "wired tapi kondisinya tidak akan pernah
+     terpenuhi", jadi aman dihapus. -->
 
       <hr style="margin:28px 0">
 <div id="arsipStorageWarning" style="display:none;background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px">

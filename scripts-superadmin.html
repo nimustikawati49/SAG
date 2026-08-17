@@ -40,7 +40,7 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadSuperAdminEmailUI, 1100);
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadTrialActivationPanel, 1600);
-      setTimeout(loadLicenseReminderTriggerStatus_, 1700);    setTimeout(loadSANotifHistory, 1900);
+      setTimeout(loadSANotifHistory, 1900);
     setTimeout(loadArsipFolderConfig, 2400);
       setTimeout(loadCentralRegistryOverview, 2700);
       setTimeout(loadStorageModeConfig, 2750);
@@ -1145,45 +1145,12 @@ function sendLicenseEmailUI(email){
   );
 }
 
-/* ---- Reminder Trigger untuk Lisensi Aplikasi ---- */
-function loadLicenseReminderTriggerStatus_() {
-  var el = document.getElementById('licReminderStatus');
-  if (!el) return;
-  google.script.run
-    .withSuccessHandler(function(s) {
-      if (!el) return;
-      el.textContent = s && s.active ? '✅ Aktif (08:00 harian)' : '⚫ Tidak aktif';
-      el.style.color = s && s.active ? '#059669' : '#6b7280';
-    })
-    .withFailureHandler(function() {})
-    .getLicenseReminderTriggerStatus();
-}
-
-function activateLicenseReminderTrigger_() {
-  google.script.run
-    .withSuccessHandler(function(res) {
-      if (typeof showToast === 'function')
-        showToast(res.status === 'already_set' ? 'ℹ️ Sudah aktif' : '✅ Reminder lisensi diaktifkan', 'success');
-      loadLicenseReminderTriggerStatus_();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-    })
-    .setupLicenseReminderTrigger();
-}
-
-function deactivateLicenseReminderTrigger_() {
-  if (!confirm('Nonaktifkan reminder renewal lisensi aplikasi?')) return;
-  google.script.run
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('Reminder dinonaktifkan', 'warning');
-      loadLicenseReminderTriggerStatus_();
-    })
-    .withFailureHandler(function(err) {
-      if (typeof showToast === 'function') showToast('❌ ' + err.message, 'error');
-    })
-    .removeLicenseReminderTrigger();
-}
+// NOTE: Panel "Reminder Renewal Otomatis" (loadLicenseReminderTriggerStatus_/
+// activateLicenseReminderTrigger_/deactivateLicenseReminderTrigger_) dulu
+// ada di sini, dihapus bersama panel & server function-nya — diverifikasi
+// tidak ada jalur mana pun di aplikasi ini yang pernah mengisi
+// SCHOOL_LICENSE_EXPIRES, jadi reminder-nya tidak akan pernah benar-benar
+// mengirim apa pun (lihat komentar header License.js).
 
 /* =====================================================================
    BROADCAST NOTIF — Superadmin kirim notif ke semua guru

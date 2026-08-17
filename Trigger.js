@@ -3,55 +3,16 @@
  * Dipecah dari Code.js untuk kemudahan pemeliharaan.
  */
 
-/* =========================================================
-  LICENSE RENEWAL REMINDER TRIGGER
-  Kirim email ke SA saat lisensi aplikasi hampir habis (H-60/30/7)
-  ========================================================= */
-
-function setupLicenseReminderTrigger() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  const triggers = ScriptApp.getProjectTriggers();
-  for (const t of triggers) {
-    if (t.getHandlerFunction() === 'runDailyLicenseReminder_') {
-      return { status: 'already_set', message: 'Trigger reminder lisensi sudah aktif' };
-    }
-  }
-  ScriptApp.newTrigger('runDailyLicenseReminder_')
-    .timeBased()
-    .everyDays(1)
-    .atHour(8)
-    .create();
-  logAudit('SETUP_LICENSE_REMINDER_TRIGGER', getLoginEmail(), 'Reminder lisensi aplikasi aktif (08:00)');
-  return { status: true, message: 'Trigger reminder lisensi berhasil diaktifkan (08:00)' };
-}
-
-function removeLicenseReminderTrigger() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  const triggers = ScriptApp.getProjectTriggers();
-  let removed = 0;
-  for (const t of triggers) {
-    if (t.getHandlerFunction() === 'runDailyLicenseReminder_') {
-      ScriptApp.deleteTrigger(t);
-      removed++;
-    }
-  }
-  logAudit('REMOVE_LICENSE_REMINDER_TRIGGER', getLoginEmail(), removed + ' trigger dihapus');
-  return { status: true, removed };
-}
-
-function getLicenseReminderTriggerStatus() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  const triggers = ScriptApp.getProjectTriggers();
-  for (const t of triggers) {
-    if (t.getHandlerFunction() === 'runDailyLicenseReminder_') return { active: true };
-  }
-  return { active: false };
-}
-
-/** Dipanggil otomatis oleh trigger — delegasi ke License.js */
-function runDailyLicenseReminder_() {
-  checkSchoolLicenseExpiryReminder();
-}
+// NOTE: Trigger reminder renewal lisensi (setupLicenseReminderTrigger/
+// removeLicenseReminderTrigger/getLicenseReminderTriggerStatus/
+// runDailyLicenseReminder_) dulu ada di sini, dihapus — diverifikasi
+// TIDAK ADA satu pun jalur di seluruh kode (UI maupun server) yang
+// pernah menulis SCHOOL_LICENSE_EXPIRES ke ScriptProperties, jadi
+// checkSchoolLicenseExpiryReminder() (License.js) tidak akan pernah
+// benar-benar mengirim apa pun — lisensi sekolah di sistem ini SELALU
+// default ke lifetime (lihat _readSchoolLicense_ di License.js) sejak
+// model aktivasi lifetime per-akun guru diperkenalkan. Trigger ini
+// tidak sedang aktif saat dihapus (dicek dulu lewat panel SuperAdmin).
 
 function setupBackupTrigger() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
