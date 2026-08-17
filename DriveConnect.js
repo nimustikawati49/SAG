@@ -165,6 +165,22 @@ function connectOwnSpreadsheet(urlOrId) {
         } catch (e3) {}
       }
     }
+
+    // Spreadsheet lama (bekas auto-provision di Drive SuperAdmin) SENGAJA
+    // TIDAK dihapus otomatis di sini — cuma ditandai lewat prefix nama
+    // supaya gampang dikenali kalau SuperAdmin browse Drive-nya sendiri,
+    // dan supaya kelihatan di panel "Spreadsheet Lama (Sudah Dipindah
+    // Guru)" (getMigratedOldSpreadsheets/trashOldMigratedSpreadsheet di
+    // bawah). SuperAdmin yang meninjau & menghapus manual kalau sudah
+    // yakin datanya aman di spreadsheet baru guru — supaya tidak ada
+    // risiko data hilang karena penghapusan otomatis yang keliru.
+    try {
+      var oldFile = DriveApp.getFileById(oldId);
+      var oldName = oldFile.getName();
+      if (oldName.indexOf('[SUDAH PINDAH]') !== 0) {
+        oldFile.setName('[SUDAH PINDAH] ' + oldName);
+      }
+    } catch (eRename) {}
   }
 
   var oldEntry = _getResourceMapEntryForUser_(email, 'data_spreadsheet');
@@ -202,4 +218,89 @@ function connectOwnSpreadsheet(urlOrId) {
   logAudit('CONNECT_OWN_SPREADSHEET', email, id + (migratedSheets.length ? (' | migrated: ' + migratedSheets.join(',')) : ' | no migration'));
 
   return { success: true, spreadsheetId: id, spreadsheetName: newSs.getName(), migratedSheets: migratedSheets };
+}
+
+/**
+ * getMigratedOldSpreadsheets()
+ * SuperAdmin only — daftar spreadsheet BEKAS auto-provisioning yang sudah
+ * digantikan guru dengan spreadsheet pribadinya sendiri (lihat
+ * connectOwnSpreadsheet di atas). File-file ini masih fisik ada di Drive
+ * SuperAdmin (sengaja tidak dihapus otomatis saat migrasi) — panel ini
+ * dipakai SuperAdmin untuk meninjau lalu menghapusnya manual satu-satu
+ * lewat trashOldMigratedSpreadsheet() begitu yakin datanya sudah aman di
+ * spreadsheet baru guru.
+ */
+function getMigratedOldSpreadsheets() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var id = String(rows[i][idx.id] || '').trim();
+    if (!id) continue;
+    var type = String(rows[i][idx.resource_type] || '').toLowerCase().trim();
+    var status = String(rows[i][idx.status] || '').toLowerCase().trim();
+    if (type !== 'data_spreadsheet' || status !== 'migrated_to_own_drive') continue;
+
+    var resourceId = String(rows[i][idx.resource_id] || '');
+    var sizeMB = null;
+    try {
+      var f = DriveApp.getFileById(resourceId);
+      sizeMB = Math.round((f.getSize() / (1024 * 1024)) * 100) / 100;
+    } catch (e) {}
+
+    result.push({
+      id: id,
+      email_guru: String(rows[i][idx.email_guru] || ''),
+      resource_id: resourceId,
+      resource_name: String(rows[i][idx.resource_name] || ''),
+      updated_at: String(rows[i][idx.updated_at] || ''),
+      catatan: String(rows[i][idx.catatan] || ''),
+      url: 'https://docs.google.com/spreadsheets/d/' + resourceId,
+      sizeMB: sizeMB
+    });
+  }
+  result.sort(function (a, b) { return String(b.updated_at || '').localeCompare(String(a.updated_at || '')); });
+  return result;
+}
+
+/**
+ * trashOldMigratedSpreadsheet(resourceMapId)
+ * SuperAdmin only — pindahkan SATU spreadsheet lama (bekas auto-provision,
+ * sudah digantikan guru dengan Drive pribadinya) ke Trash. Masih bisa
+ * dipulihkan lewat Trash Drive SuperAdmin (retensi standar Google, biasa
+ * ~30 hari) kalau ternyata ada yang keliru. Dibatasi cuma boleh menyasar
+ * entry berstatus 'migrated_to_own_drive' — bukan sembarang resource_id —
+ * supaya tidak mungkin salah trash spreadsheet yang masih aktif dipakai.
+ */
+function trashOldMigratedSpreadsheet(resourceMapId) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var sh = _ensureResourceMapSheet_();
+  var rows = sh.getDataRange().getValues();
+  var idx = _getHeaderIndexMap_(sh);
+  for (var i = 1; i < rows.length; i++) {
+    var id = String(rows[i][idx.id] || '').trim();
+    if (id !== String(resourceMapId || '').trim()) continue;
+
+    var type = String(rows[i][idx.resource_type] || '').toLowerCase().trim();
+    var status = String(rows[i][idx.status] || '').toLowerCase().trim();
+    if (type !== 'data_spreadsheet' || status !== 'migrated_to_own_drive') {
+      throw new Error('Entry ini bukan spreadsheet lama hasil migrasi — dibatalkan demi keamanan.');
+    }
+
+    var resourceId = String(rows[i][idx.resource_id] || '');
+    var emailGuru = String(rows[i][idx.email_guru] || '');
+    try {
+      DriveApp.getFileById(resourceId).setTrashed(true);
+    } catch (e) {
+      throw new Error('Gagal memindahkan ke Trash: ' + e.message);
+    }
+
+    sh.getRange(i + 1, idx.status + 1).setValue('trashed_by_sa');
+    sh.getRange(i + 1, idx.updated_at + 1).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
+    logAudit('TRASH_OLD_MIGRATED_SPREADSHEET', emailGuru, resourceId);
+    return { success: true };
+  }
+  throw new Error('Entry tidak ditemukan');
 }

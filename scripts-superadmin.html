@@ -1405,4 +1405,54 @@ function activateGuruLifetimeUI(email) {
     .updateUser(email, { status: 'active' });
 }
 
+/**
+ * loadMigratedOldSpreadsheetsPanel()
+ * Panel "Spreadsheet Lama (Sudah Dipindah Guru)" — lihat komentar di
+ * layout.html dan DriveConnect.js (getMigratedOldSpreadsheets).
+ */
+function loadMigratedOldSpreadsheetsPanel() {
+  var el = document.getElementById('migratedOldSpreadsheetsList');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:60px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Tidak ada spreadsheet lama yang menunggu ditinjau — semua guru yang sudah pindah Drive pribadi bersih, atau memang belum ada yang pindah.</div>';
+        return;
+      }
+      var totalMB = rows.reduce(function(sum, r) { return sum + (r.sizeMB || 0); }, 0);
+      var html = '<p class="muted" style="font-size:12px;margin:0 0 8px">' + rows.length + ' spreadsheet lama menunggu ditinjau &middot; total &plusmn; ' + totalMB.toFixed(1) + ' MB di Drive SuperAdmin</p>';
+      html += '<div class="table-wrap"><table><thead><tr><th>Guru</th><th>Nama Spreadsheet</th><th>Ukuran</th><th>Dipindah Pada</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        html += '<tr>' +
+          '<td style="font-size:12px"><b>' + _escSA(r.email_guru) + '</b></td>' +
+          '<td style="font-size:12px"><a href="' + _escSA(r.url) + '" target="_blank" rel="noopener">' + _escSA(r.resource_name) + '</a></td>' +
+          '<td style="font-size:12px">' + (r.sizeMB != null ? r.sizeMB + ' MB' : '-') + '</td>' +
+          '<td style="font-size:12px">' + _escSA(r.updated_at) + '</td>' +
+          '<td><button class="ghost" onclick="trashOldMigratedSpreadsheetUI(\'' + _escSA(r.id) + '\',\'' + _escSA(r.email_guru) + '\')" style="font-size:12px;color:#dc2626">🗑️ Hapus (Trash)</button></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
+    })
+    .getMigratedOldSpreadsheets();
+}
+
+function trashOldMigratedSpreadsheetUI(resourceMapId, emailGuru) {
+  if (!confirm('Pindahkan spreadsheet lama milik ' + emailGuru + ' ke Trash?\n\nPastikan sudah dicek datanya benar-benar aman di spreadsheet baru guru tsb. Masih bisa dipulihkan dari Trash Drive SuperAdmin kalau ternyata keliru.')) return;
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('🗑️ Spreadsheet lama ' + emailGuru + ' dipindah ke Trash', 'success');
+      loadMigratedOldSpreadsheetsPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .trashOldMigratedSpreadsheet(resourceMapId);
+}
+
 </script>
