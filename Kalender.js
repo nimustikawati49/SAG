@@ -8,11 +8,13 @@
  *
  * Dua sumber data:
  *  1. 'nasional' — ditarik otomatis dari kalender publik resmi Google
- *     ("Holidays in Indonesia", ID: en.indonesian#holiday@group.v.calendar.google.com)
- *     lewat syncKalenderNasional() (SuperAdmin only, manual trigger —
- *     BUKAN otomatis tiap hari, supaya tidak membebani kuota Calendar API
- *     tanpa perlu). Kalender publik ini TIDAK mencakup hal spesifik
- *     sekolah (libur semester, hari raya lokal, dst).
+ *     ("Holidays in Indonesia") lewat syncKalenderNasional() (SuperAdmin
+ *     only, manual trigger — BUKAN otomatis tiap hari, supaya tidak
+ *     membebani kuota Calendar API tanpa perlu). ID kalender publik ini
+ *     TIDAK selalu sama persis di semua akun/region, jadi dicoba
+ *     beberapa kandidat (KALENDER_NASIONAL_ID_CANDIDATES_) sampai dapat
+ *     yang benar-benar punya event. Kalender publik ini TIDAK mencakup
+ *     hal spesifik sekolah (libur semester, hari raya lokal, dst).
  *  2. 'sekolah' — ditambah manual oleh SuperAdmin lewat addHariLiburManual()
  *     untuk hari libur yang tidak ada di kalender nasional. Entry
  *     'sekolah' TIDAK PERNAH ditimpa oleh sync nasional (lihat
@@ -21,7 +23,15 @@
  */
 
 var HARI_LIBUR_SHEET_ = 'HARI_LIBUR';
-var KALENDER_NASIONAL_ID_ = 'en.indonesian#holiday@group.v.calendar.google.com';
+// Beberapa kemungkinan ID kalender publik resmi Google untuk hari libur
+// Indonesia — dicoba satu-satu oleh syncKalenderNasional() sampai ketemu
+// yang benar-benar punya event (Google kadang mengubah/menduplikasi ID
+// ini antar akun/region, jadi tidak cukup andalkan 1 ID saja).
+var KALENDER_NASIONAL_ID_CANDIDATES_ = [
+  'en.indonesian#holiday@group.v.calendar.google.com',
+  'id.indonesian#holiday@group.v.calendar.google.com',
+  'en.indonesian.official#holiday@group.v.calendar.google.com'
+];
 
 function _ensureHariLiburSheet_() {
   var ss = getCentralSpreadsheet_();
@@ -47,29 +57,38 @@ function _formatTanggalISO_(d) {
  * Upsert per tanggal: kalau sudah ada baris 'sekolah' untuk tanggal itu,
  * DILEWATI (tidak ditimpa) — entry manual sekolah selalu menang. Kalau
  * sudah ada baris 'nasional' lama, keterangannya diperbarui kalau beda.
+ *
+ * Coba tiap ID di KALENDER_NASIONAL_ID_CANDIDATES_ sampai dapat kalender
+ * yang benar-benar punya event di rentang tsb — kalau SEMUA kandidat
+ * gagal/kosong, error yang dilempar berisi ID mana saja yang sudah
+ * dicoba supaya gampang didiagnosis (bukan cuma "gagal" tanpa detail).
  */
 function syncKalenderNasional() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-
-  var cal;
-  try {
-    cal = CalendarApp.getCalendarById(KALENDER_NASIONAL_ID_);
-  } catch (e) {
-    throw new Error('Gagal membuka kalender nasional: ' + e.message);
-  }
-  if (!cal) {
-    throw new Error('Kalender publik "Holidays in Indonesia" tidak ditemukan/tidak bisa diakses.');
-  }
 
   var now = new Date();
   var start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   var end = new Date(now.getTime() + 400 * 24 * 60 * 60 * 1000);
 
-  var events;
-  try {
-    events = cal.getEvents(start, end);
-  } catch (e) {
-    throw new Error('Gagal membaca event kalender nasional: ' + e.message);
+  var events = null;
+  var usedId = '';
+  var attempts = [];
+
+  for (var ci = 0; ci < KALENDER_NASIONAL_ID_CANDIDATES_.length; ci++) {
+    var candidateId = KALENDER_NASIONAL_ID_CANDIDATES_[ci];
+    try {
+      var cal = CalendarApp.getCalendarById(candidateId);
+      if (!cal) { attempts.push(candidateId + ': tidak ditemukan'); continue; }
+      var ev = cal.getEvents(start, end);
+      attempts.push(candidateId + ': ' + ev.length + ' event');
+      if (ev.length > 0) { events = ev; usedId = candidateId; break; }
+    } catch (e) {
+      attempts.push(candidateId + ': error - ' + e.message);
+    }
+  }
+
+  if (!events) {
+    throw new Error('Tidak ada kalender nasional yang menghasilkan data. Detail percobaan: ' + attempts.join(' | ') + '. Coba tambah hari libur manual dulu di bawah, atau cek ID kalender publik yang benar untuk akun ini.');
   }
 
   var sh = _ensureHariLiburSheet_();
@@ -111,8 +130,8 @@ function syncKalenderNasional() {
     sh.getRange(sh.getLastRow() + 1, 1, appendBatch.length, 4).setValues(appendBatch);
   }
 
-  logAudit('SYNC_KALENDER_NASIONAL', getLoginEmail(), 'ditambah: ' + added + ' | diperbarui: ' + updated + ' | dilewati (sudah ada entry sekolah): ' + skipped);
-  return { success: true, added: added, updated: updated, skipped: skipped };
+  logAudit('SYNC_KALENDER_NASIONAL', getLoginEmail(), 'ID: ' + usedId + ' | ditambah: ' + added + ' | diperbarui: ' + updated + ' | dilewati (sudah ada entry sekolah): ' + skipped);
+  return { success: true, added: added, updated: updated, skipped: skipped, usedId: usedId, totalEvents: events.length };
 }
 
 /**

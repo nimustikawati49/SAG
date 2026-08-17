@@ -1551,7 +1551,7 @@ function syncKalenderNasionalUI() {
   google.script.run
     .withSuccessHandler(function(res) {
       if (stopElapsed) stopElapsed();
-      var msg = '✅ Sinkron selesai — ditambah: ' + res.added + ', diperbarui: ' + res.updated +
+      var msg = '✅ Sinkron selesai (kalender: ' + res.usedId + ', total ' + res.totalEvents + ' event ditemukan) — ditambah: ' + res.added + ', diperbarui: ' + res.updated +
         (res.skipped ? ', dilewati (sudah ada entry sekolah): ' + res.skipped : '') + '.';
       if (resultEl) resultEl.textContent = msg;
       if (typeof showToast === 'function') showToast(msg, 'success', 8000);
