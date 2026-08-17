@@ -176,13 +176,13 @@ function renewLicense(email, years = 1){
   return { expired: base }; 
 } 
 
-function sendActivationEmail(email, expired){ 
-  const subject = 'Lisensi Jurnal Guru Digital Aktif'; 
-  const body = `Halo Ibu/Bapak, \n\nLisensi Jurnal Guru Digital Anda telah berhasil diaktifkan.\n\nDetail:\n- Email : ${email}\n- Status : Aktif\n- Berlaku : sampai ${expired}\n\nSilakan lanjutkan penggunaan aplikasi.\n\nSalam, Jurnal Guru Digital`; 
-  GmailApp.sendEmail(email, subject, body); 
-} 
+// NOTE: sendActivationEmail() (kirim email berbasis expired date tahunan,
+// sisa model lisensi-per-key lama) dulu ada di sini — TIDAK PERNAH ada
+// pemanggilnya di mana pun (dicek grep di seluruh .js), jadi dihapus.
+// Email aktivasi/perubahan role akun sekarang lewat
+// _sendLifetimeActivationEmail_/_sendRoleChangeEmail_ (Users.js).
 
-function getLicenseByEmail(email){ 
+function getLicenseByEmail(email){
   const sh = sheet('LICENSES'); 
   const rows = sh.getDataRange().getValues(); 
   email = String(email).toLowerCase().trim(); 

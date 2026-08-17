@@ -135,6 +135,76 @@ function getGuruActivationList() {
 }
 
 /**
+ * _sendAccountEmail_(email, subject, headerColor, headerEmoji, headerTitle, bodyHtml)
+ * Helper kirim email "bukti autentik" perubahan akun — SATU-SATUNYA
+ * tempat email masih dipakai untuk notifikasi akun guru (lihat komentar
+ * runDailyReminderCheck_ di Trigger.js: reminder harian & backup sudah
+ * pindah ke notifikasi in-app, BUKAN email — email cuma dipertahankan
+ * untuk 2 momen yang butuh bukti tertulis: aktivasi lifetime & perubahan
+ * role, keduanya HANYA dipicu aksi eksplisit SuperAdmin, bukan trigger
+ * terjadwal, jadi tidak akan pernah spam berulang). Gagal kirim tidak
+ * boleh menggagalkan aksi utamanya (fail-soft, dibungkus try/catch di
+ * pemanggil).
+ */
+function _sendAccountEmail_(email, subject, headerColor, headerEmoji, headerTitle, bodyHtml) {
+  var appUrl = ScriptApp.getService().getUrl();
+  var htmlBody =
+    '<div style="font-family:sans-serif;max-width:520px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">' +
+    '<div style="background:' + headerColor + ';padding:20px 24px">' +
+    '<h2 style="margin:0;color:#fff;font-size:18px">' + headerEmoji + ' ' + headerTitle + '</h2>' +
+    '</div>' +
+    '<div style="padding:24px">' + bodyHtml +
+    '<a href="' + appUrl + '" style="display:inline-block;background:#6C63FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0">🚀 Buka Aplikasi</a>' +
+    '</div></div>';
+  GmailApp.sendEmail(email, subject, '', { htmlBody: htmlBody });
+}
+
+/**
+ * _sendLifetimeActivationEmail_(email)
+ * Dipanggil dari approveTrialAccount() DAN updateUser() (saat status
+ * diset 'active') — dua jalur berbeda yang sama-sama berarti "SuperAdmin
+ * mengaktifkan akun ini permanen" dari sudut pandang guru.
+ */
+function _sendLifetimeActivationEmail_(email) {
+  try {
+    _sendAccountEmail_(
+      email,
+      '✅ Akun Diaktifkan Permanen — Sistem Akademik Guru',
+      '#16a34a',
+      '✅',
+      'Akun Anda Aktif Permanen',
+      '<p>Halo,</p>' +
+      '<p>Akun Anda (<b>' + email + '</b>) telah diaktifkan <b>permanen (lifetime)</b> oleh SuperAdmin — tidak lagi terikat batas masa uji coba.</p>' +
+      '<p style="color:#6b7280;font-size:12px">Email ini adalah bukti autentik aktivasi akun Anda.</p>'
+    );
+  } catch (e) {
+    try { logError_('SEND_LIFETIME_ACTIVATION_EMAIL', e); } catch (e2) {}
+  }
+}
+
+/**
+ * _sendRoleChangeEmail_(email, newRole)
+ * Dipanggil dari updateUser() saat payload.role diubah.
+ */
+function _sendRoleChangeEmail_(email, newRole) {
+  try {
+    var roleLabel = { admin: 'Guru', kepsek: 'Kepala Sekolah', superadmin: 'SuperAdmin' }[newRole] || newRole;
+    _sendAccountEmail_(
+      email,
+      '👤 Role Akun Diubah — Sistem Akademik Guru',
+      '#6C63FF',
+      '👤',
+      'Role Akun Anda Diubah',
+      '<p>Halo,</p>' +
+      '<p>Role akun Anda (<b>' + email + '</b>) telah diubah oleh SuperAdmin menjadi <b>' + roleLabel + '</b>.</p>' +
+      '<p style="color:#6b7280;font-size:12px">Email ini adalah bukti autentik perubahan role akun Anda.</p>'
+    );
+  } catch (e) {
+    try { logError_('SEND_ROLE_CHANGE_EMAIL', e); } catch (e2) {}
+  }
+}
+
+/**
  * approveTrialAccount(email)
  * SuperAdmin only — ubah status akun jadi 'active' permanen.
  * HANYA mengubah baris USERS (dan memastikan ada baris LICENSES aktif
@@ -181,6 +251,7 @@ function approveTrialAccount(email) {
 
   if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
   logAudit('APPROVE_TRIAL_ACCOUNT', email, 'Aktivasi lifetime oleh SuperAdmin');
+  _sendLifetimeActivationEmail_(email);
   return { success: true, email: email };
 }
 
@@ -191,22 +262,23 @@ function updateUser(email, payload){
   email = email.toLowerCase().trim(); 
   for(let i=1;i<data.length;i++){ 
     if(String(data[i][0]).toLowerCase().trim() === email){ 
-      if(payload.role){ 
-        sh.getRange(i+1,2).setValue(payload.role); 
-        logAudit('UPDATE_ROLE', email, payload.role); 
-      } 
-      if(payload.status){ 
-        sh.getRange(i+1,3).setValue(payload.status); 
+      if(payload.role){
+        sh.getRange(i+1,2).setValue(payload.role);
+        logAudit('UPDATE_ROLE', email, payload.role);
+        _sendRoleChangeEmail_(email, payload.role);
+      }
+      if(payload.status){
+        sh.getRange(i+1,3).setValue(payload.status);
         const licSheet = sheet('LICENSES');
-        const lic = licSheet.getDataRange().getValues(); 
+        const lic = licSheet.getDataRange().getValues();
         let licFound = false;
-        for(let j=1;j<lic.length;j++){ 
-          if(String(lic[j][1]).toLowerCase() === email){ 
-            licSheet.getRange(j+1,4).setValue(payload.status); 
+        for(let j=1;j<lic.length;j++){
+          if(String(lic[j][1]).toLowerCase() === email){
+            licSheet.getRange(j+1,4).setValue(payload.status);
             if(payload.status === 'active') licSheet.getRange(j+1,3).setValue('');
             licFound = true;
-          } 
-        } 
+          }
+        }
         if(!licFound && (payload.status === 'active' || payload.status === 'inactive')){
           const key = 'JGD-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
           licSheet.appendRow([key, email, payload.status === 'active' ? '' : '', payload.status, new Date(), '', '']);
@@ -217,6 +289,7 @@ function updateUser(email, payload){
               _autoProvisionUserSpreadsheet_(email);
             }
           } catch (e) {}
+          _sendLifetimeActivationEmail_(email);
         }
         logAudit('UPDATE_STATUS', email, payload.status);
       }

@@ -1607,10 +1607,21 @@
   </div>
 </div>
 
+<!-- ===== BACKUP OTOMATIS & REMINDER PENGISIAN JURNAL =========================
+     Keduanya sudah TIDAK pakai email sama sekali — backup ya memang tidak
+     pernah lewat email (salin spreadsheet ke folder Drive), dan reminder
+     jurnal sejak runDailyReminderCheck_() (Trigger.js) ditulis ulang jadi
+     notifikasi IN-APP (lonceng 🔔 di header, lihat Notif.js), bukan email.
+     Email akun HANYA dipertahankan untuk 2 momen yang butuh bukti
+     tertulis: aktivasi lifetime & perubahan role (keduanya dipicu aksi
+     eksplisit SuperAdmin di panel "Aktivasi Akun Guru", bukan trigger
+     terjadwal) — lihat _sendLifetimeActivationEmail_/_sendRoleChangeEmail_
+     di Users.js.
+     ============================================================================ -->
 <div class="card">
   <!-- BACKUP OTOMATIS -->
   <h3>💾 Backup Otomatis</h3>
-  <p class="muted">Trigger harian (pukul 01:00) yang menyalin spreadsheet ke folder <b>BACKUP_JURNAL</b> di Drive Anda.</p>
+  <p class="muted">Trigger harian (pukul 01:00) yang menyalin spreadsheet ke folder <b>BACKUP_JURNAL</b> di Drive guru masing-masing (atau Drive SuperAdmin kalau guru itu belum connect Drive pribadi).</p>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
     <span id="backupTriggerStatus" style="font-size:13px">⏳ Mengecek status...</span>
     <button onclick="activateBackupTrigger()" id="btnSetBackup">✅ Aktifkan Backup Harian</button>
@@ -1619,13 +1630,14 @@
 
   <!-- REMINDER PENGISIAN JURNAL -->
   <h3 style="margin-top:24px">🔔 Reminder Pengisian Jurnal</h3>
-  <p class="muted">Trigger harian (pukul 07:00) yang mengirim email pengingat ke guru yang belum mengisi jurnal selama 3 hari terakhir.</p>
+  <p class="muted">Trigger harian (pukul 07:00) yang mengirim notifikasi in-app (bukan email) ke guru yang belum mengisi jurnal selama 3 hari terakhir.</p>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
     <span id="reminderTriggerStatus" style="font-size:13px">⏳ Mengecek status...</span>
     <button onclick="activateReminderTrigger()" id="btnSetReminder">🔔 Aktifkan Reminder</button>
     <button class="ghost" onclick="deactivateReminderTrigger()" id="btnDelReminder">🗑️ Nonaktifkan</button>
   </div>
 </div>
+<!-- ===== END BACKUP OTOMATIS & REMINDER PENGISIAN JURNAL ===== -->
 
 <!-- SUPERADMIN EMAIL MANAGEMENT -->
 <div class="card">
