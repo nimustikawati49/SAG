@@ -248,9 +248,16 @@ function _dashDefaultSampai(){
 
 /* ===== JADWAL RENDERER – defined here so it always loads with dashboard ===== */
 /**
- * Render jadwal grid. Defined in scripts-dashboard.html (not scripts-jadwal-wali.html)
- * so it's guaranteed to be available even if the jadwal-wali script block fails.
- * scripts-jadwal-wali.html may also define this; whichever loads last wins.
+ * Render jadwal grid. Definisi TUNGGAL (kanonik) — dulu ada salinan kedua
+ * yang hampir identik di scripts-jadwal-wali.html (last-loaded-wins jadi
+ * salinan itu yang sebenarnya aktif, sementara salinan di sini jadi dead
+ * code kecuali skenario gagal-muat — dua salinan itu sudah mulai berbeda
+ * kecil seiring waktu, risiko perbaikan di satu sisi tidak ikut kepakai).
+ * Sudah digabung jadi satu di sini: scripts-dashboard.html dimuat LEBIH
+ * DULU dari scripts-jadwal-wali.html (lihat urutan include() di
+ * index.html), jadi fungsi ini sudah tersedia secara global sebelum
+ * scripts-jadwal-wali.html sempat memanggilnya — sekaligus tetap jadi
+ * fail-safe kalau script block lain gagal parse.
  */
 function _renderJadwalGrid_(obj, container){
   try { window._lastJadwalData = obj; } catch(e){}
@@ -323,7 +330,7 @@ function _renderJadwalGrid_(obj, container){
   var hariIni   = _hMap[now.getDay()] || null;
   var curMin    = now.getHours()*60 + now.getMinutes();
   var todayDate = _pad_(now.getDate())+'/'+_pad_(now.getMonth()+1);
-  var _abbr     = {SENIN:'Senin',SELASA:'Selasa',RABU:'Rabu',KAMIS:'Kamis',Jumat:'Jumat',SABTU:'Sabtu',JUMAT:'Jumat'};
+  var _abbr     = {SENIN:'Senin',SELASA:'Selasa',RABU:'Rabu',KAMIS:'Kamis',JUMAT:'Jumat',SABTU:'Sabtu'};
 
   var palette = [
     {bg:'#6366f1',light:'#ede9fe',text:'#4338ca'},
