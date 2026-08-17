@@ -1790,7 +1790,26 @@
 </style>
 <div id="inputNilai" class="card tab" data-tabid="inputNilai" style="display:none">
   <h2>📊 Daftar Nilai Siswa</h2>
-  <p class="muted" style="margin-bottom:20px">Modul khusus Admin / Superadmin – Input, pengolahan, dan cetak daftar nilai.</p>
+  <p class="muted" style="margin-bottom:10px">Bisa diakses semua akun guru terdaftar (tidak khusus admin/superadmin) — untuk input, pengolahan, dan cetak daftar nilai.</p>
+  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px;font-size:12.5px;line-height:1.75">
+    <h4 style="margin-top:0">ℹ️ Panduan Singkat</h4>
+    <b>Kolom yang tersedia:</b>
+    <ul style="margin:4px 0 10px 18px">
+      <li><b>TGS1–TGS3</b>: nilai tugas mandiri harian</li>
+      <li><b>TK1–TK3</b> (Tugas Kelompok): opsional, muncul otomatis kalau sudah ada isinya atau bisa dimunculkan lewat toggle "Tampilkan kolom"</li>
+      <li><b>UH1–UH3</b>: nilai ulangan harian</li>
+      <li><b>PTS</b>: Penilaian Tengah Semester &nbsp;•&nbsp; <b>SAS/ASAT</b>: Sumatif Akhir Semester (ganjil) / Sumatif Akhir Tahun (genap)</li>
+    </ul>
+    <b>Cara nilai dihitung:</b>
+    <ul style="margin:4px 0 10px 18px">
+      <li><b>Rata Tugas</b> = rata-rata semua nilai tugas mandiri &amp; kelompok yang sudah terisi (tidak wajib penuh)</li>
+      <li><b>Rata UH</b> = rata-rata nilai UH1–UH3 yang sudah terisi</li>
+      <li><b>Rata Total</b> = rata-rata dari Rata Tugas &amp; Rata UH</li>
+      <li><b>Total Nilai</b> (nilai murni) = 40% Rata Total + 30% PTS + 30% SAS/ASAT</li>
+      <li><b>Nilai Akhir</b> = Total Nilai yang sudah disesuaikan lewat <b>Katrol</b> (lihat kartu "⚙️ Pengaturan Nilai" di bawah untuk detail rumusnya)</li>
+    </ul>
+    <b>Cetak / Export:</b> tersedia pilihan nilai murni atau katrol, kolom mana saja yang ditampilkan, ukuran kertas A4/F4 dengan orientasi potrait/landscape (header tabel berulang otomatis tiap halaman), dan export ke Excel.
+  </div>
 
   <!-- Filter -->
   <div class="card" style="margin-bottom:16px">
@@ -1967,7 +1986,8 @@
     <!-- Pengaturan Nilai (Katrol & KKM) -->
     <div class="card" style="margin-bottom:14px">
       <h3>⚙️ Pengaturan Nilai (Katrol &amp; KKM)</h3>
-      <div class="alert-banner info" style="font-size:12px;line-height:1.7;margin-top:8px">
+      <div style="background:#eff6ff;border-left:4px solid #3b82f6;color:#1e40af;
+        border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.7;margin-top:8px">
         <b>Nilai Total</b> (murni) dihitung dari <b>40% rata-rata harian</b> (gabungan Rata Tugas &amp; Rata UH) + <b>30% PTS</b> + <b>30% SAS/ASAT</b> — kolom <b>Total Nilai</b> di tabel.<br>
         <b>Nilai Katrol</b> lalu menyesuaikan Nilai Total tadi secara proporsional per kelas: siswa dengan Nilai Total <i>terendah</i> di kelas dinaikkan tepat ke <b>Nilai Terendah Target</b> di bawah ini, siswa dengan Nilai Total <i>tertinggi</i> dinaikkan ke <b>Nilai Tertinggi Target</b> — urutan/selisih nilai asli antar siswa tetap terjaga, tidak ada nilai yang dikarang.<br>
         <b>KKM</b> hanya dipakai untuk menandai baris/nilai yang masih di bawah standar (warna kuning) — nilai di bawah KKM tetap tersimpan apa adanya, tidak otomatis diubah.
