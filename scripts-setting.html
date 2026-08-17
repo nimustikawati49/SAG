@@ -699,6 +699,9 @@ function connectOwnSpreadsheetUI(){
       if(res.migratedSheets && res.migratedSheets.length){
         msg += ' Data lama disalin: ' + res.migratedSheets.join(', ') + '.';
       }
+      if(res.autoTrashed){
+        msg += ' Spreadsheet lama sudah otomatis dibersihkan.';
+      }
       if(resultEl) resultEl.textContent = msg;
       if(typeof showToast === 'function') showToast(msg, 'success', 8000);
       loadDriveConnectStatus_();

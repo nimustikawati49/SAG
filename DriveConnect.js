@@ -23,6 +23,23 @@
  * Data lama (kalau ada, mis. dari masa trial yang sudah lebih dulu
  * auto-provisioned di Drive SuperAdmin) otomatis disalin ke spreadsheet
  * baru ini sekali saat pertama connect, supaya tidak ada data hilang.
+ *
+ * ⚠️ PENTING UNTUK SUPERADMIN — pembersihan spreadsheet lama OTOMATIS:
+ * begitu data berhasil disalin, connectOwnSpreadsheet() MEMVERIFIKASI dulu
+ * (jumlah sheet, baris, & kolom di spreadsheet baru harus persis cocok
+ * dengan yang lama) — kalau cocok, spreadsheet LAMA (bekas auto-provision)
+ * langsung DIPINDAH KE TRASH Drive SuperAdmin secara otomatis, tidak
+ * menunggu ditinjau manual. Ini AMAN karena Trash Google punya masa
+ * retensi standar (biasanya ~30 hari) sebelum benar-benar terhapus
+ * permanen — kalau ternyata ada yang keliru, masih bisa dipulihkan lewat
+ * Trash di Drive akun SuperAdmin sendiri selama masih dalam masa itu.
+ * Kalau verifikasi TIDAK cocok (jarang — mis. ada sheet yang gagal
+ * tersalin), spreadsheet lama TIDAK ditrash otomatis — cuma ditandai
+ * prefix "[SUDAH PINDAH]" dan masuk antrean panel SuperAdmin "🗑️
+ * Spreadsheet Lama (Sudah Dipindah Guru)" untuk ditinjau & dihapus manual
+ * (lihat getMigratedOldSpreadsheets/trashOldMigratedSpreadsheet di bawah).
+ * Jadi panel itu SEHARUSNYA jarang/hampir selalu kosong — kalau ada isinya,
+ * itu tandanya ada migrasi yang perlu dicek lebih teliti, bukan hal rutin.
  */
 
 /**
@@ -140,47 +157,73 @@ function connectOwnSpreadsheet(urlOrId) {
 
   var oldId = resolveSpreadsheetIdForUser_(email);
   var migratedSheets = [];
+  var autoTrashed = false;
   if (oldId && oldId !== id) {
     var defaultNames = ['Sheet1', 'Lembar1'];
     var alreadyHasData = newSs.getSheets().some(function (sh) {
       return defaultNames.indexOf(sh.getName()) === -1;
     });
-    if (!alreadyHasData) {
-      var oldSs = null;
-      try { oldSs = SpreadsheetApp.openById(oldId); } catch (e) {}
-      if (oldSs) {
-        oldSs.getSheets().forEach(function (sh) {
-          var name = sh.getName();
-          if (_isCentralOnlySheet_(name)) return;
-          if (newSs.getSheetByName(name)) return;
-          try {
-            var copied = sh.copyTo(newSs);
-            copied.setName(name);
-            migratedSheets.push(name);
-          } catch (e2) {}
-        });
+
+    var oldSs = null;
+    try { oldSs = SpreadsheetApp.openById(oldId); } catch (e) {}
+
+    if (!alreadyHasData && oldSs) {
+      var candidateNames = [];
+      oldSs.getSheets().forEach(function (sh) {
+        var name = sh.getName();
+        if (_isCentralOnlySheet_(name)) return;
+        candidateNames.push(name);
+        if (newSs.getSheetByName(name)) return; // sudah ada, tidak perlu disalin ulang
         try {
-          var defaultSh = newSs.getSheetByName('Sheet1') || newSs.getSheetByName('Lembar1');
-          if (defaultSh && newSs.getSheets().length > 1) newSs.deleteSheet(defaultSh);
-        } catch (e3) {}
+          var copied = sh.copyTo(newSs);
+          copied.setName(name);
+          migratedSheets.push(name);
+        } catch (e2) {}
+      });
+      try {
+        var defaultSh = newSs.getSheetByName('Sheet1') || newSs.getSheetByName('Lembar1');
+        if (defaultSh && newSs.getSheets().length > 1) newSs.deleteSheet(defaultSh);
+      } catch (e3) {}
+
+      // Verifikasi sebelum boleh auto-trash: SEMUA sheet non-central dari
+      // spreadsheet lama harus ada di spreadsheet baru dengan jumlah baris
+      // & kolom PERSIS SAMA. Kalau ada yang tidak cocok (mis. copyTo() di
+      // atas gagal diam-diam kena try/catch), JANGAN auto-trash — supaya
+      // tidak berisiko membuang spreadsheet yang datanya belum benar-benar
+      // tersalin sempurna. Fallback-nya turun ke jalur "tandai + tinjau
+      // manual" di bawah, sama seperti sebelum auto-trash ini ada.
+      var verified = candidateNames.length > 0 && candidateNames.every(function (name) {
+        var oldSh = oldSs.getSheetByName(name);
+        var newSh = newSs.getSheetByName(name);
+        return oldSh && newSh &&
+          oldSh.getLastRow() === newSh.getLastRow() &&
+          oldSh.getLastColumn() === newSh.getLastColumn();
+      });
+
+      if (verified) {
+        try {
+          DriveApp.getFileById(oldId).setTrashed(true);
+          autoTrashed = true;
+        } catch (eTrash) {}
       }
     }
 
-    // Spreadsheet lama (bekas auto-provision di Drive SuperAdmin) SENGAJA
-    // TIDAK dihapus otomatis di sini — cuma ditandai lewat prefix nama
-    // supaya gampang dikenali kalau SuperAdmin browse Drive-nya sendiri,
-    // dan supaya kelihatan di panel "Spreadsheet Lama (Sudah Dipindah
-    // Guru)" (getMigratedOldSpreadsheets/trashOldMigratedSpreadsheet di
-    // bawah). SuperAdmin yang meninjau & menghapus manual kalau sudah
-    // yakin datanya aman di spreadsheet baru guru — supaya tidak ada
-    // risiko data hilang karena penghapusan otomatis yang keliru.
-    try {
-      var oldFile = DriveApp.getFileById(oldId);
-      var oldName = oldFile.getName();
-      if (oldName.indexOf('[SUDAH PINDAH]') !== 0) {
-        oldFile.setName('[SUDAH PINDAH] ' + oldName);
-      }
-    } catch (eRename) {}
+    if (!autoTrashed) {
+      // Spreadsheet lama TIDAK bisa dipastikan aman untuk dibuang otomatis
+      // (verifikasi di atas gagal / gagal dibuka / spreadsheet baru sudah
+      // ada isinya sebelum connect, jadi tidak ada yang disalin sama
+      // sekali) — sengaja dibiarkan, cuma ditandai prefix nama supaya
+      // gampang dikenali, lalu masuk antrean review manual SuperAdmin
+      // lewat panel "Spreadsheet Lama (Sudah Dipindah Guru)" (lihat
+      // getMigratedOldSpreadsheets/trashOldMigratedSpreadsheet di bawah).
+      try {
+        var oldFile = DriveApp.getFileById(oldId);
+        var oldName = oldFile.getName();
+        if (oldName.indexOf('[SUDAH PINDAH]') !== 0) {
+          oldFile.setName('[SUDAH PINDAH] ' + oldName);
+        }
+      } catch (eRename) {}
+    }
   }
 
   var oldEntry = _getResourceMapEntryForUser_(email, 'data_spreadsheet');
@@ -194,8 +237,10 @@ function connectOwnSpreadsheet(urlOrId) {
         resource_id: oldEntry.resource_id,
         resource_name: oldEntry.resource_name,
         owner_email: oldEntry.owner_email,
-        status: 'migrated_to_own_drive',
-        catatan: 'Digantikan spreadsheet pribadi guru pada ' + new Date().toISOString()
+        status: autoTrashed ? 'trashed_auto' : 'migrated_to_own_drive',
+        catatan: (autoTrashed
+          ? 'Otomatis dipindah ke Trash SuperAdmin setelah migrasi terverifikasi cocok pada '
+          : 'Digantikan spreadsheet pribadi guru pada ') + new Date().toISOString()
       });
     } catch (e) {}
   }
@@ -215,9 +260,11 @@ function connectOwnSpreadsheet(urlOrId) {
   invalidateCache_('JURNAL');
   invalidateDashboardCache_();
   if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
-  logAudit('CONNECT_OWN_SPREADSHEET', email, id + (migratedSheets.length ? (' | migrated: ' + migratedSheets.join(',')) : ' | no migration'));
+  logAudit('CONNECT_OWN_SPREADSHEET', email, id +
+    (migratedSheets.length ? (' | migrated: ' + migratedSheets.join(',')) : ' | no migration') +
+    (autoTrashed ? ' | old spreadsheet auto-trashed' : ''));
 
-  return { success: true, spreadsheetId: id, spreadsheetName: newSs.getName(), migratedSheets: migratedSheets };
+  return { success: true, spreadsheetId: id, spreadsheetName: newSs.getName(), migratedSheets: migratedSheets, autoTrashed: autoTrashed };
 }
 
 /**

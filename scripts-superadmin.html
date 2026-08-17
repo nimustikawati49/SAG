@@ -1418,7 +1418,7 @@ function loadMigratedOldSpreadsheetsPanel() {
   google.script.run
     .withSuccessHandler(function(rows) {
       if (!rows || !rows.length) {
-        el.innerHTML = '<div class="alert-banner info">Tidak ada spreadsheet lama yang menunggu ditinjau — semua guru yang sudah pindah Drive pribadi bersih, atau memang belum ada yang pindah.</div>';
+        el.innerHTML = '<div class="alert-banner info">✅ Kosong — normal. Migrasi yang berhasil terverifikasi sudah otomatis dibersihkan sendiri (masuk Trash Drive SuperAdmin), tidak butuh tindakan apa pun di sini.</div>';
         return;
       }
       var totalMB = rows.reduce(function(sum, r) { return sum + (r.sizeMB || 0); }, 0);

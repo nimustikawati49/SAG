@@ -1461,22 +1461,28 @@
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
 <!-- ===== SPREADSHEET LAMA (SUDAH DIPINDAH GURU) ===============================
-     Saat guru menghubungkan Drive pribadinya (kartu "Google Drive Pribadi
-     Saya" di menu Pengaturan guru → connectOwnSpreadsheet di
-     DriveConnect.js), data lamanya disalin ke spreadsheet baru, tapi
-     spreadsheet LAMA (bekas auto-provision, masih di Drive SuperAdmin)
-     SENGAJA TIDAK dihapus otomatis — supaya tidak ada risiko data hilang
-     kalau migrasinya ternyata bermasalah. Panel ini tempat SuperAdmin
-     meninjau file-file "bangkai" itu (namanya sudah ditandai prefix
-     "[SUDAH PINDAH]") lalu menghapusnya manual satu-satu begitu yakin
-     datanya sudah aman di spreadsheet baru guru — baru setelah dihapus,
-     kuota Drive SuperAdmin yang terpakai file itu benar-benar berkurang.
+     ⚠️ CATATAN SUPERADMIN: sejak connectOwnSpreadsheet() (DriveConnect.js)
+     bisa memverifikasi hasil salin data, spreadsheet lama (bekas
+     auto-provision di Drive SuperAdmin) OTOMATIS dipindah ke Trash begitu
+     migrasi guru terverifikasi cocok (jumlah sheet/baris/kolom sama
+     persis) — TIDAK perlu ditinjau manual lagi untuk kasus normal. Trash
+     Google punya masa retensi standar (~30 hari) sebelum benar-benar
+     terhapus permanen, jadi masih bisa dipulihkan dari Trash Drive
+     SuperAdmin sendiri kalau ternyata ada yang keliru.
+
+     Panel di bawah ini HANYA menampilkan pengecualian: migrasi yang
+     verifikasinya GAGAL cocok (jarang terjadi, mis. ada sheet yang gagal
+     tersalin) — spreadsheet-nya sengaja TIDAK ditrash otomatis, cuma
+     ditandai prefix nama "[SUDAH PINDAH]" dan menunggu ditinjau manual di
+     sini sebelum SuperAdmin memutuskan hapus sendiri. Jadi PANEL INI
+     SEHARUSNYA HAMPIR SELALU KOSONG — kalau ada isinya, itu tanda ada
+     migrasi guru yang perlu dicek lebih teliti, bukan pekerjaan rutin.
      ============================================================================ -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
     <div>
       <h3 style="margin:0">🗑️ Spreadsheet Lama (Sudah Dipindah Guru)</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Bekas database guru di Drive SuperAdmin yang sudah digantikan spreadsheet pribadi guru sendiri. Tinjau isinya dulu sebelum dihapus — masih bisa dipulihkan dari Trash Drive SuperAdmin kalau ternyata keliru.</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Migrasi yang berhasil diverifikasi sudah otomatis dibersihkan sendiri (masuk Trash Drive SuperAdmin) — daftar di bawah ini cuma pengecualian yang gagal terverifikasi otomatis dan butuh ditinjau manual. Kosong = tidak ada yang perlu dikerjakan.</p>
     </div>
     <button class="ghost" onclick="loadMigratedOldSpreadsheetsPanel()" style="font-size:12px">🔄 Muat</button>
   </div>
