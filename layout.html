@@ -1463,51 +1463,13 @@
   <div id="dataSizeReportBox"><div class="muted">Klik "Cek Sekarang" untuk memuat laporan.</div></div>
   <div id="cleanupAllGuruResult" style="margin-top:10px"></div>
 </div>
-<!-- ===== AKTIVASI AKUN GURU (TRIAL 30 HARI) ============================
-     CARA MEMBAGIKAN SISTEM INI KE SEKOLAH/GURU LAIN — tidak ada alur
-     "tambah user" manual (tidak ada tombol invite/undang), karena akun
-     didaftarkan OTOMATIS begitu orangnya login pertama kali. Tahapannya:
-
-     1. Bagikan URL Web App ini (Deploy > Manage Deployments, di Apps
-        Script Editor) ke calon guru/kepsek. Mereka cukup buka link itu
-        pakai akun Google masing-masing — tidak perlu didaftarkan dulu
-        oleh SuperAdmin.
-     2. Begitu login pertama kali, akun otomatis terdaftar di sheet USERS
-        dengan role 'admin' (guru) dan status 'trial' (masa coba 30 hari,
-        lihat _autoRegisterTrialUser_ di Users.js) — dashboard langsung
-        bisa dipakai tanpa menunggu approval apa pun.
-     3. Akun baru itu akan muncul di tabel bawah ini (badge kuning =
-        masih trial). Kalau sistem ini dipakai lebih dari satu sekolah
-        dalam SATU deployment yang sama, isi kolom "Kode/Nama Sekolah"
-        supaya Rekap Sekolah & Rekap Guru Wali milik Kepsek sekolah itu
-        cuma menghitung guru dari sekolah yang sama (lihat
-        updateUserSekolah di Users.js).
-     4. Kalau akun itu untuk kepala sekolah (bukan guru biasa), ubah
-        role-nya jadi Kepsek lewat tombol "🏫 Jadikan Kepsek" di baris
-        akun tsb — Kepsek melihat rekap lintas guru, bukan jurnal harian
-        sendiri. Role SuperAdmin ("👑 Jadikan SA") HANYA untuk pemegang
-        kendali penuh sistem — jangan dibagikan sembarangan, SA bisa
-        mengubah lisensi, menghapus akun siapa pun, dan melihat semua
-        data semua sekolah.
-     5. Klik "✅ Aktifkan Penuh" supaya akun itu permanen (lifetime,
-        tidak lagi terikat batas 30 hari) — lihat approveTrialAccount di
-        Users.js. Data yang sudah dibuat guru selama masa trial TIDAK
-        ikut terhapus/berubah saat diaktifkan.
-     6. SETELAH diaktifkan, guru WAJIB menghubungkan Google Drive
-        pribadinya sendiri lewat menu Pengaturan → "🔐 Google Drive
-        Pribadi Saya" sebelum bisa menyimpan data baru lagi (lihat
-        DriveConnect.js + assertLicenseActive di Auth.js) — supaya
-        database guru itu memakai kuota Drive-nya sendiri, bukan Drive
-        SuperAdmin. Progresnya kelihatan lewat kolom "Drive" di tabel
-        bawah (✅ Milik sendiri / ⚠️ Drive SA). Masa trial TIDAK
-        digerbang ini, biar bisa dicoba dulu tanpa friksi.
-
-     Lisensi aplikasi (beda dari status akun di atas) berlaku untuk
-     SATU DEPLOYMENT ini secara keseluruhan (bukan per akun/per sekolah)
-     — kalau belum pernah diset sama sekali, otomatis dianggap lifetime
-     aktif (lihat _readSchoolLicense_ di License.js), jadi biasanya tidak
-     perlu tindakan tambahan saat membagikan ke sekolah baru.
-     ============================================================================ -->
+<!-- ===== AKTIVASI AKUN GURU (TRIAL 30 HARI) =====
+     Panduan lengkapnya sekarang TERLIHAT LANGSUNG di UI (elemen <details>
+     "📌 Cara Membagikan Sistem Ini" di bawah, collapsed by default supaya
+     tidak memenuhi layar tiap buka panel ini) — bukan cuma komentar kode
+     seperti sebelumnya. Isi panduan tetap sama, cuma dipindah supaya
+     SuperAdmin (bukan cuma developer yang baca source) bisa langsung
+     lihat tanpa perlu buka kode. -->
 <div class="card" style="margin-top:16px;border:2px solid #f59e0b">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
     <div>
@@ -1520,6 +1482,23 @@
       <button class="ghost" onclick="loadTrialActivationPanel()" style="font-size:12px">🔄</button>
     </div>
   </div>
+
+  <details style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin-bottom:14px">
+    <summary style="cursor:pointer;font-weight:700;font-size:13px;color:#92400e">📌 Cara Membagikan Sistem Ini ke Sekolah/Guru Lain (klik untuk buka)</summary>
+    <div style="font-size:12.5px;line-height:1.8;margin-top:10px;color:#374151">
+      <p style="margin:0 0 8px">Tidak ada tombol "tambah user" manual — akun terdaftar <b>otomatis</b> begitu orangnya login pertama kali. Tahapannya:</p>
+      <ol style="margin:0 0 10px 18px">
+        <li>Bagikan <b>URL Web App</b> ini ke calon guru/kepsek. Mereka cukup buka link itu pakai akun Google masing-masing — tidak perlu didaftarkan dulu oleh SuperAdmin.</li>
+        <li>Begitu login pertama kali, akun otomatis terdaftar sebagai guru dengan masa coba <b>30 hari (trial)</b> — dashboard langsung bisa dipakai tanpa menunggu persetujuan apa pun.</li>
+        <li>Akun baru muncul di tabel bawah (badge kuning = masih trial). Kalau sistem ini dipakai <b>lebih dari 1 sekolah</b> dalam satu link yang sama, isi kolom "Kode/Nama Sekolah" supaya Rekap Sekolah &amp; Rekap Guru Wali milik Kepsek sekolah itu cuma menghitung guru dari sekolah yang sama.</li>
+        <li>Kalau akun itu untuk kepala sekolah, ubah role-nya jadi <b>Kepsek</b> lewat tombol "🏫 Jadikan Kepsek" di baris akun tsb. Role <b>SuperAdmin</b> ("👑 Jadikan SA") HANYA untuk pemegang kendali penuh sistem — jangan dibagikan sembarangan, karena SA bisa mengubah lisensi, menghapus akun siapa pun, dan melihat semua data semua sekolah.</li>
+        <li>Klik <b>✅ Aktifkan Penuh</b> supaya akun itu permanen (lifetime, tidak lagi terikat batas 30 hari). Data yang sudah dibuat guru selama masa trial tidak ikut hilang/berubah.</li>
+        <li>SETELAH diaktifkan, guru <b>wajib</b> menghubungkan Google Drive pribadinya sendiri lewat menu Pengaturan mereka → kartu "🔐 Google Drive Pribadi Saya" — 3 langkah singkat: buat 1 spreadsheet kosong (mis. lewat <a href="https://sheet.new" target="_blank" rel="noopener">sheet.new</a>), <b>Bagikan (Share)</b> spreadsheet itu ke email SuperAdmin sebagai <b>Editor</b>, lalu tempel link-nya di kartu tsb dan klik Hubungkan. Ini supaya database guru itu memakai kuota Drive-nya sendiri, bukan Drive SuperAdmin. Progresnya kelihatan lewat kolom "Drive" di tabel bawah (✅ Milik sendiri / ⚠️ Drive SA). Masa trial TIDAK digerbang langkah ini, biar bisa dicoba dulu tanpa friksi.</li>
+      </ol>
+      <p style="margin:0;color:#6b7280">Lisensi aplikasi (beda dari status akun di atas) berlaku untuk seluruh sistem ini, bukan per akun/sekolah — kalau belum pernah diset sama sekali, otomatis dianggap lifetime aktif, jadi biasanya tidak perlu tindakan tambahan saat membagikan ke sekolah baru.</p>
+    </div>
+  </details>
+
   <div id="sekolahSummaryBox" style="margin-bottom:14px"></div>
   <datalist id="kodeSekolahDatalist"></datalist>
   <div id="trialActivationList"><div class="muted">⏳ Memuat…</div></div>
