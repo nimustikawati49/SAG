@@ -690,6 +690,7 @@ function _applySettingToHeader_(d){
 
   // Sync greeting
   if(typeof updateGreeting_ === 'function') updateGreeting_();
+  if(typeof _applyKepsekTopBarTweaks_ === 'function') _applyKepsekTopBarTweaks_();
 }
 
 function editSettingUI(){

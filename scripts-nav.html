@@ -130,6 +130,23 @@ function doLogout_() {
 }
 
 /**
+ * _applyKepsekTopBarTweaks_()
+ * Kepsek tidak mengajar mapel apa pun, jadi chip "Mapel" di top bar tidak
+ * relevan (selalu kosong) — disembunyikan. Chip "Guru" juga relabel jadi
+ * "Kepsek" karena nilainya diisi dari field Nama Guru yang sama (dipakai
+ * ulang, bukan field terpisah). Dipanggil dari syncSidebarProfile_() dan
+ * _applySettingToHeader_() supaya konsisten lewat jalur mana pun top bar
+ * di-update.
+ */
+function _applyKepsekTopBarTweaks_() {
+  var isKepsek  = window._currentUserRole === 'kepsek';
+  var mapelItem = document.getElementById('sbTopMapelItem');
+  if (mapelItem) mapelItem.style.display = isKepsek ? 'none' : '';
+  var guruLabel = document.getElementById('sbTopGuruLabel');
+  if (guruLabel) guruLabel.textContent = isKepsek ? 'Kepsek' : 'Guru';
+}
+
+/**
  * Sync profile info from existing (hidden) header meta spans
  * into the sidebar profile section and top bar chips.
  * Called after initApp() populates the meta spans.
@@ -170,6 +187,7 @@ function syncSidebarProfile_() {
     sbLogo.style.display = 'block';
     if (sbLogoIco) sbLogoIco.style.display = 'none';
   }
+  _applyKepsekTopBarTweaks_();
   updateGreeting_();
 }
 
