@@ -287,14 +287,14 @@
 
     <!-- MENU UTAMA (KIRI) -->
     <div class="menu" style="width:100%">
-      <button onclick="showTab('dashboard'); initDashboardMeta();">📊 Dashboard</button>
+      <button data-tab="dashboard" onclick="showTab('dashboard'); initDashboardMeta();">📊 Dashboard</button>
       <button onclick="showTab('jurnalku')">📘 Jurnalku</button>
       <button onclick="showTab('riwayat')">📑 Riwayat Jurnal</button>
       <button onclick="showTab('jurnalGuruWali')">👨‍🏫 Jurnal Guru Wali</button>
       <button onclick="showTab('rekap')">📊 Rekap Absensi</button>
       <button class="admin-only"
               onclick="showTab('inputNilai'); initTabNilai();">📊 Input Nilai</button>
-      <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
+      <button data-tab="setting" onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
       <button class="superadmin-only"
               onclick="showTab('DashboardSuperAdmin'); loadDashboardSuperAdmin();">
         👑 SuperAdmin
@@ -411,11 +411,11 @@
       margin-top:20px;
       flex-wrap:wrap;
     ">
-      <button class="ghost" onclick="goHelperTab('dashboard')">📊 Dashboard</button>
+      <button class="ghost" data-tab="dashboard" onclick="goHelperTab('dashboard')">📊 Dashboard</button>
       <button class="ghost" onclick="goHelperTab('jurnalku')">📘 Jurnalku</button>
       <button class="ghost" onclick="goHelperTab('riwayat')">📑 Riwayat Jurnal</button>
       <button class="ghost" onclick="goHelperTab('rekap')">📊 Rekap Absensi</button>
-      <button onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
+      <button data-tab="setting" onclick="showTab('setting'); loadSettingForm()">⚙️ Setting</button>
       <button onclick="haptic('light'); openJurnalFocus()">+</button>
       <button onclick="haptic('medium'); simpan()">💾 Simpan</button>
     </div>
