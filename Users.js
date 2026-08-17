@@ -102,18 +102,9 @@ function getGuruActivationList() {
       status: status,
       dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
       kode_sekolah: String(data[i][4] || '').trim(),
-      license_status: null,
-      license_expired: null,
       days_left: null,
       expired: false
     };
-    try {
-      var lic = getLicenseByEmail(email);
-      if (lic) {
-        entry.license_status = lic.status || null;
-        entry.license_expired = lic.expired ? Utilities.formatDate(new Date(lic.expired), Session.getScriptTimeZone(), 'yyyy-MM-dd') : null;
-      }
-    } catch (e) {}
     if (status === 'trial') {
       var info = _computeTrialInfo_(data[i][3]);
       entry.days_left = info.daysLeft;
@@ -258,32 +249,7 @@ function updateUserSekolah(email, kodeSekolah) {
   throw new Error('User tidak ditemukan');
 }
 
-/**
- * Set tanggal expired lisensi untuk user tertentu.
- * expiredDate: string 'yyyy-MM-dd' atau '' (lifetime/kosong)
- */
-function setUserExpiry(email, expiredDate) {
-  if (!isSuperAdmin()) throw new Error('Akses ditolak');
-  email = String(email).trim().toLowerCase();
-  if (!email) throw new Error('Email tidak valid');
-
-  const shLic = sheet('LICENSES');
-  const lics  = shLic.getDataRange().getValues();
-  for (let i = 1; i < lics.length; i++) {
-    if (String(lics[i][1] || '').toLowerCase().trim() === email) {
-      const expVal = expiredDate ? new Date(expiredDate) : '';
-      shLic.getRange(i + 1, 3).setValue(expVal);
-      // Pastikan status active
-      shLic.getRange(i + 1, 4).setValue('active');
-      logAudit('SET_EXPIRY', email,
-        expiredDate ? ('expired=' + expiredDate) : 'lifetime');
-      return true;
-    }
-  }
-  throw new Error('Lisensi untuk ' + email + ' tidak ditemukan');
-}
-
-function getUsers(){ 
+function getUsers(){
   if(!isSuperAdmin()) throw new Error('Akses ditolak'); 
   const users = sheet('USERS').getDataRange().getValues(); 
   if(users.length <= 1) return []; 
@@ -381,169 +347,4 @@ function deleteInactiveUsers(){
     logAudit('DELETE_INACTIVE_USERS', auth.email, deletedEmails.length + ' user: ' + deletedEmails.join(', '));
   }
   return { success: true, deleted: deletedEmails.length, emails: deletedEmails };
-}
-
-function createLicense(email){
-  const sh = sheet('LICENSES'); 
-  email = String(email).toLowerCase().trim(); 
-  if(!email.includes('@')){ throw new Error('Email tidak valid'); } 
-  const key = 'JGD-' + Utilities.getUuid().slice(0,8).toUpperCase(); 
-  const now = new Date(); 
-  const expired = new Date(now); 
-  expired.setFullYear(expired.getFullYear() + 1); 
-  sh.appendRow([ key, email, expired, 'inactive', now, '', '' ]); 
-  logAudit('CREATE_LICENSE', email, 'Lisensi dibuat (belum aktif)'); 
-  return { key, expired }; 
-} 
-
-function generateLicense(email, years){
-  if(!isSuperAdmin()) throw new Error('Akses ditolak');
-  email = String(email).toLowerCase().trim();
-  if(!email.includes('@')) throw new Error('Email tidak valid');
-  const sh = sheet('LICENSES');
-  const rows = sh.getDataRange().getValues();
-  const key = 'JGD-' + Utilities.getUuid().slice(0,8).toUpperCase();
-  const now = new Date();
-  const expired = new Date(now);
-  expired.setFullYear(expired.getFullYear() + (Number(years) || 1));
-  const expiredStr = Utilities.formatDate(expired, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  for(let i=1; i<rows.length; i++){
-    if(String(rows[i][1]).toLowerCase().trim() === email){
-      sh.getRange(i+1,1).setValue(key);
-      sh.getRange(i+1,3).setValue(expired);
-      sh.getRange(i+1,4).setValue('active');
-      sh.getRange(i+1,6).setValue(now);
-      logAudit('GENERATE_LICENSE', email, key + ' exp:' + expiredStr);
-      return { key, expired: expiredStr };
-    }
-  }
-  sh.appendRow([ key, email, expired, 'active', now, now, '' ]);
-  logAudit('GENERATE_LICENSE', email, key + ' exp:' + expiredStr);
-  return { key, expired: expiredStr };
-}
-
-function regenerateLicense(email){
-
-  const auth = getAuth();
-  if(auth.role !== 'superadmin'){
-    throw new Error('AKSES_DITOLAK');
-  }
-
-  email = String(email).toLowerCase().trim();
-
-  const sh = sheet('LICENSES');
-  const data = sh.getDataRange().getValues();
-
-  for(let i=1;i<data.length;i++){
-
-    if(String(data[i][1]).toLowerCase().trim() === email){
-
-      const newKey = 'JGD-' +
-        Utilities.getUuid()
-          .replace(/-/g,'')
-          .substring(0,10)
-          .toUpperCase();
-
-      sh.getRange(i+1,1).setValue(newKey);
-      sh.getRange(i+1,3).setValue('');
-      sh.getRange(i+1,4).setValue('inactive');
-      sh.getRange(i+1,6).setValue('');
-
-      logAudit('REGENERATE_LICENSE', email, newKey);
-
-      return {
-        key:newKey
-      };
-    }
-  }
-
-  throw new Error('Lisensi tidak ditemukan');
-}
-
-function addAdminUser(payload){
-
-  const auth = getAuth();
-  if(auth.role !== 'superadmin'){
-    throw new Error('AKSES_DITOLAK');
-  }
-
-  let email      = '';
-  let masaAktif  = '1year';  // default: 1 tahun
-  let role       = 'admin';
-
-  if(typeof payload === 'object'){
-    email     = payload.email     || '';
-    masaAktif = payload.masaAktif || '1year';
-    role      = payload.role      || 'admin';
-  }else{
-    email = payload;
-  }
-
-  email = String(email).trim().toLowerCase();
-
-  if(!email){
-    throw new Error('Email tidak boleh kosong');
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if(!emailRegex.test(email)){
-    throw new Error('Format email tidak valid');
-  }
-
-  // Validasi role
-  const allowedRoles = ['admin','kepsek'];
-  if(!allowedRoles.includes(role)) role = 'admin';
-
-  const shUser = sheet('USERS');
-  const shLic  = sheet('LICENSES');
-
-  const users = shUser.getDataRange().getValues();
-  for(let i=1;i<users.length;i++){
-    if(String(users[i][0]).toLowerCase().trim() === email){
-      throw new Error('User sudah terdaftar');
-    }
-  }
-
-  shUser.appendRow([
-    email,
-    role,
-    'active',
-    new Date()
-  ]);
-
-  const licenseKey = 'JGD-' +
-    Utilities.getUuid()
-      .replace(/-/g,'')
-      .substring(0,10)
-      .toUpperCase();
-
-  // Hitung expired berdasarkan masaAktif
-  let expiredValue = '';
-  let expiredStr   = 'Seumur Hidup';
-  if(masaAktif === '1year'){
-    const exp = new Date();
-    exp.setFullYear(exp.getFullYear() + 1);
-    expiredValue = exp;
-    expiredStr   = Utilities.formatDate(exp, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  }
-
-  shLic.appendRow([
-    licenseKey,
-    email,
-    expiredValue,
-    'active',
-    new Date(),
-    new Date(),
-    ''
-  ]);
-
-  logAudit('ADD_ADMIN_WITH_LICENSE', email,
-    licenseKey + ' | role=' + role + ' | masaAktif=' + masaAktif + ' | exp=' + expiredStr);
-
-  return {
-    status:  true,
-    key:     licenseKey,
-    expired: expiredStr,
-    role:    role
-  };
 }
