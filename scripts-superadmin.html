@@ -1212,11 +1212,15 @@ function loadTrialActivationPanel() {
     .withSuccessHandler(function(rows) {
       var trialCount = (rows || []).filter(function(r) { return r.status === 'trial'; }).length;
       if (badge) badge.textContent = trialCount;
+
+      _renderSekolahSummary_(rows || []);
+      _renderKodeSekolahDatalist_(rows || []);
+
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="alert-banner info">Belum ada akun guru.</div>';
         return;
       }
-      var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Dibuat</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+      var html = '<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Kode/Nama Sekolah</th><th>Dibuat</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
       rows.forEach(function(r) {
         var statusHtml, statusActionHtml;
         if (r.status === 'trial') {
@@ -1250,9 +1254,19 @@ function loadTrialActivationPanel() {
             '<button class="ghost" onclick="openUserAuditModal_(\'' + _escSA(r.email) + '\')" style="background:#eef2ff;color:#4338ca;font-size:12px">📋 Riwayat</button>' +
           '</div>';
 
+        var kodeSekolahHtml =
+          '<div style="display:flex;gap:4px;align-items:center">' +
+            '<input type="text" list="kodeSekolahDatalist" value="' + _escSA(r.kode_sekolah || '') + '" ' +
+              'placeholder="Belum diisi" id="kodeSekolah_' + _escSA(r.email).replace(/[^a-z0-9]/gi,'_') + '" ' +
+              'style="width:120px;font-size:12px;padding:4px 6px">' +
+            '<button class="ghost" style="padding:4px 8px;font-size:11px" ' +
+              'onclick="saveKodeSekolahUI(\'' + _escSA(r.email) + '\')" title="Simpan sekolah">💾</button>' +
+          '</div>';
+
         html += '<tr>' +
           '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
           '<td style="font-size:12px">' + _escSA(r.role) + '</td>' +
+          '<td>' + kodeSekolahHtml + '</td>' +
           '<td style="font-size:12px">' + _escSA(r.dibuat) + '</td>' +
           '<td>' + statusHtml + '</td>' +
           '<td>' + actionHtml + '</td>' +
@@ -1265,6 +1279,86 @@ function loadTrialActivationPanel() {
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar guru') + '</div>';
     })
     .getGuruActivationList();
+}
+
+/**
+ * saveKodeSekolahUI(email)
+ * Simpan pengelompokan sekolah untuk satu akun guru/kepsek — dipakai supaya
+ * Rekap Sekolah & Rekap Guru Wali milik Kepsek sekolah itu cuma menghitung
+ * guru dengan kode/nama sekolah yang sama (lihat _kepsekActiveGuruEmails_
+ * di Kepsek.js).
+ */
+function saveKodeSekolahUI(email) {
+  var inputId = 'kodeSekolah_' + email.replace(/[^a-z0-9]/gi, '_');
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  var kode = input.value.trim();
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof showToast === 'function') showToast('✅ Sekolah untuk ' + email + ' tersimpan', 'success');
+      loadTrialActivationPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menyimpan'), 'error');
+    })
+    .updateUserSekolah(email, kode);
+}
+
+/**
+ * _renderSekolahSummary_(rows)
+ * Ringkasan "berapa banyak sistem ini dipakai" per sekolah — dihitung
+ * langsung dari data yang sudah diambil getGuruActivationList(), tidak
+ * perlu request tambahan ke server.
+ */
+function _renderSekolahSummary_(rows) {
+  var box = document.getElementById('sekolahSummaryBox');
+  if (!box) return;
+
+  var bySekolah = {};
+  var belumDiisi = 0;
+  rows.forEach(function(r) {
+    var kode = String(r.kode_sekolah || '').trim();
+    if (!kode) { belumDiisi++; return; }
+    if (!bySekolah[kode]) bySekolah[kode] = { total: 0, aktif: 0 };
+    bySekolah[kode].total++;
+    if (r.status === 'active') bySekolah[kode].aktif++;
+  });
+
+  var kodeList = Object.keys(bySekolah).sort();
+  if (!kodeList.length) {
+    box.innerHTML = '<div class="alert-banner info" style="font-size:12px">Belum ada guru yang dikelompokkan ke sekolah manapun. Isi kolom "Kode/Nama Sekolah" di tabel bawah supaya Rekap Sekolah tiap Kepsek terpisah per sekolah.</div>';
+    return;
+  }
+
+  var html = '<div style="font-weight:600;font-size:13px;margin-bottom:8px">🏫 Ringkasan Pemakaian per Sekolah (' + kodeList.length + ' sekolah terdaftar)</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:6px">';
+  kodeList.forEach(function(kode) {
+    var s = bySekolah[kode];
+    html += '<div class="card" style="margin:0;padding:10px 14px;border-left:4px solid #6C63FF">' +
+      '<div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _escSA(kode) + '">' + _escSA(kode) + '</div>' +
+      '<div class="muted" style="font-size:12px">' + s.total + ' guru terdaftar &middot; ' + s.aktif + ' aktif</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  if (belumDiisi > 0) {
+    html += '<div class="muted" style="font-size:12px">⚠️ ' + belumDiisi + ' akun belum dikelompokkan ke sekolah manapun.</div>';
+  }
+  box.innerHTML = html;
+}
+
+function _renderKodeSekolahDatalist_(rows) {
+  var dl = document.getElementById('kodeSekolahDatalist');
+  if (!dl) return;
+  var seen = {};
+  var html = '';
+  rows.forEach(function(r) {
+    var kode = String(r.kode_sekolah || '').trim();
+    if (!kode || seen[kode]) return;
+    seen[kode] = true;
+    html += '<option value="' + _escSA(kode) + '">';
+  });
+  dl.innerHTML = html;
 }
 
 function approveTrialAccountUI(email) {

@@ -12,6 +12,28 @@
 ───────────────────────────────────────────────────────────── */
 var TRIAL_DAYS_ = 30;
 
+/**
+ * _ensureUsersKodeSekolahColumn_()
+ * Sheet USERS (central) dibuat manual di awal (bukan lewat kode), jadi
+ * migrasi kolom baru harus idempoten & defensif seperti pola ensureXSheet_
+ * lain di codebase ini — cek header dulu, baru tambahkan di ujung kalau
+ * belum ada. Kolom ini dipakai untuk mengelompokkan guru per sekolah
+ * (multi-sekolah dalam satu deployment yang sama) — SuperAdmin yang
+ * mengisi lewat updateUserSekolah(), bukan diisi guru sendiri.
+ */
+function _ensureUsersKodeSekolahColumn_() {
+  var sh = sheet('USERS');
+  if (!sh) return null;
+  var lastCol = sh.getLastColumn();
+  var header = lastCol > 0
+    ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
+    : [];
+  if (header.indexOf('kode_sekolah') === -1) {
+    sh.getRange(1, lastCol + 1).setValue('kode_sekolah');
+  }
+  return sh;
+}
+
 function _computeTrialInfo_(dibuatDate) {
   var created = dibuatDate ? new Date(dibuatDate) : new Date();
   var elapsedDays = Math.floor((Date.now() - created.getTime()) / 86400000);
@@ -29,7 +51,7 @@ function _computeTrialInfo_(dibuatDate) {
  * paralel dari akun yang sama tidak membuat baris dobel.
  */
 function _autoRegisterTrialUser_(email) {
-  var sh = sheet('USERS');
+  var sh = _ensureUsersKodeSekolahColumn_();
   if (!sh) return null;
 
   var lock = LockService.getScriptLock();
@@ -63,7 +85,7 @@ function _autoRegisterTrialUser_(email) {
  */
 function getGuruActivationList() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  var sh = sheet('USERS');
+  var sh = _ensureUsersKodeSekolahColumn_();
   if (!sh) return [];
   var data = sh.getDataRange().getValues();
   var result = [];
@@ -79,6 +101,7 @@ function getGuruActivationList() {
       role: role,
       status: status,
       dibuat: data[i][3] ? Utilities.formatDate(new Date(data[i][3]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '-',
+      kode_sekolah: String(data[i][4] || '').trim(),
       license_status: null,
       license_expired: null,
       days_left: null,
@@ -202,6 +225,35 @@ function updateUser(email, payload){
       if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
       return true;
     }
+  }
+  throw new Error('User tidak ditemukan');
+}
+
+/**
+ * updateUserSekolah(email, kodeSekolah)
+ * SuperAdmin only — kelompokkan akun guru/kepsek ke sekolah tertentu.
+ * Dipakai supaya satu deployment aplikasi ini bisa melayani beberapa
+ * sekolah sekaligus: Rekap Sekolah & Rekap Guru Wali milik seorang
+ * Kepsek cuma menghitung guru dengan kode_sekolah yang SAMA dengan
+ * Kepsek itu sendiri (lihat _kepsekActiveGuruEmails_ di Kepsek.js).
+ * kodeSekolah boleh nama sekolah biasa (bukan kode formal) — cuma
+ * dipakai sebagai label pengelompokan, bukan divalidasi ke database
+ * sekolah resmi manapun.
+ */
+function updateUserSekolah(email, kodeSekolah) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  email = String(email || '').toLowerCase().trim();
+  if (!email) throw new Error('Email tidak valid');
+  var kode = String(kodeSekolah || '').trim();
+
+  var sh = _ensureUsersKodeSekolahColumn_();
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0] || '').toLowerCase().trim() !== email) continue;
+    sh.getRange(i + 1, 5).setValue(kode);
+    logAudit('UPDATE_KODE_SEKOLAH', email, kode || '(dikosongkan)');
+    if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(email);
+    return { success: true, email: email, kode_sekolah: kode };
   }
   throw new Error('User tidak ditemukan');
 }

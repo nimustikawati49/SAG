@@ -38,20 +38,44 @@ function assertKepsek_() {
  * sekarang bisa datang dari banyak spreadsheet sekaligus.
  */
 
-/** Daftar email guru/admin berstatus aktif, dari sheet USERS (selalu central). */
+/**
+ * Daftar email guru/admin berstatus aktif, dari sheet USERS (selalu central).
+ * Satu deployment ini bisa melayani BEBERAPA sekolah sekaligus — SuperAdmin
+ * mengelompokkan tiap akun ke kode_sekolah lewat updateUserSekolah(). Kalau
+ * pemanggilnya seorang Kepsek, daftar guru otomatis DIPERSEMPIT ke guru
+ * dengan kode_sekolah yang SAMA dengan Kepsek itu — kalau Kepsek-nya sendiri
+ * belum di-assign sekolah, hasilnya sengaja dikosongkan (bukan malah
+ * menampilkan guru yang juga belum di-assign) supaya tidak bocor data
+ * sekolah lain. SuperAdmin (bukan kepsek) tetap melihat semua sekolah
+ * sekaligus seperti sebelumnya.
+ */
 function _kepsekActiveGuruEmails_() {
-  var shUsers = _getCentralSheetByName_('USERS');
+  var auth  = getAuth();
+  var shUsers = _ensureUsersKodeSekolahColumn_() || _getCentralSheetByName_('USERS');
   var guruEmails = [];
-  if (shUsers) {
-    var userData = shUsers.getDataRange().getValues();
-    for (var ui = 1; ui < userData.length; ui++) {
-      var uEmail = String(userData[ui][0] || '').toLowerCase().trim();
-      var uRole  = String(userData[ui][1] || '').toLowerCase().trim();
-      var uStatus= String(userData[ui][2] || '').toLowerCase().trim();
-      if (uEmail && (uRole === 'admin' || uRole === 'guru') && uStatus === 'active') {
-        guruEmails.push(uEmail);
+  if (!shUsers) return guruEmails;
+
+  var userData = shUsers.getDataRange().getValues();
+
+  var scopeToSchool = auth.role === 'kepsek';
+  var callerKode = '';
+  if (scopeToSchool) {
+    for (var ci = 1; ci < userData.length; ci++) {
+      if (String(userData[ci][0] || '').toLowerCase().trim() === auth.email) {
+        callerKode = String(userData[ci][4] || '').trim();
+        break;
       }
     }
+    if (!callerKode) return guruEmails; // Kepsek belum di-assign sekolah — kosongkan, jangan tebak
+  }
+
+  for (var ui = 1; ui < userData.length; ui++) {
+    var uEmail = String(userData[ui][0] || '').toLowerCase().trim();
+    var uRole  = String(userData[ui][1] || '').toLowerCase().trim();
+    var uStatus= String(userData[ui][2] || '').toLowerCase().trim();
+    if (!uEmail || !(uRole === 'admin' || uRole === 'guru') || uStatus !== 'active') continue;
+    if (scopeToSchool && String(userData[ui][4] || '').trim() !== callerKode) continue;
+    guruEmails.push(uEmail);
   }
   return guruEmails;
 }
