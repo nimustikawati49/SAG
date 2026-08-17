@@ -1455,4 +1455,55 @@ function trashOldMigratedSpreadsheetUI(resourceMapId, emailGuru) {
     .trashOldMigratedSpreadsheet(resourceMapId);
 }
 
+/**
+ * loadMasterRosterCleanupPanel()
+ * Panel "Master Roster Central" — lihat komentar di layout.html dan
+ * DriveConnect.js (getCentralMasterRosterCleanupStatus).
+ */
+function loadMasterRosterCleanupPanel() {
+  var el = document.getElementById('masterRosterCleanupBox');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:50px;border-radius:10px"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(status) {
+      if (!status) { el.innerHTML = '<div class="alert-banner error">Gagal memuat status.</div>'; return; }
+
+      var rosterRows = status.roster.map(function(r) {
+        return '<li>' + _escSA(r.sheet) + ': <b>' + r.rows + '</b> baris</li>';
+      }).join('');
+
+      var html = '<ul style="margin:0 0 10px 18px;font-size:13px">' + rosterRows + '</ul>';
+
+      if (status.safeToClean) {
+        html += '<div class="alert-banner success" style="margin-bottom:10px">✅ SISWA central sudah kosong — aman dibersihkan, tidak ada guru yang masih bergantung pada roster ini.</div>';
+        html += '<button onclick="clearRedundantCentralMasterRosterUI()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">🧹 Bersihkan Sekarang</button>';
+      } else {
+        html += '<div class="alert-banner info">⏳ Belum aman — SISWA central masih punya <b>' + status.siswaRowsRemaining + '</b> baris. Tunggu sampai semua guru grandfathered + SuperAdmin sendiri connect Drive pribadi lewat menu Pengaturan masing-masing.</div>';
+      }
+
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat status') + '</div>';
+    })
+    .getCentralMasterRosterCleanupStatus();
+}
+
+function clearRedundantCentralMasterRosterUI() {
+  if (!confirm('Bersihkan MasterSiswa/RiwayatKelas/MasterTahunPelajaran di CENTRAL sekarang?\n\nSemua baris datanya akan dihapus (header tetap ada). Pastikan sudah yakin tidak ada guru yang masih bergantung padanya.')) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var msg = res && res.cleared && res.cleared.length
+        ? '🧹 Dibersihkan: ' + res.cleared.join(', ')
+        : '🧹 Tidak ada yang perlu dibersihkan (sudah kosong).';
+      if (typeof showToast === 'function') showToast(msg, 'success', 8000);
+      loadMasterRosterCleanupPanel();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+    })
+    .clearRedundantCentralMasterRoster();
+}
+
 </script>

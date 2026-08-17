@@ -1490,6 +1490,29 @@
 </div>
 <!-- ===== END SPREADSHEET LAMA (SUDAH DIPINDAH GURU) ===== -->
 
+<!-- ===== MASTER ROSTER CENTRAL (MasterSiswa/RiwayatKelas) =====================
+     MasterSiswa/RiwayatKelas/MasterTahunPelajaran di central TIDAK punya
+     kolom pemilik (beda dari SISWA), jadi tidak bisa dipisah otomatis
+     per-guru saat guru connect Drive pribadi (lihat DriveConnect.js).
+     TAPI begitu SISWA central sudah kosong sepenuhnya (semua guru
+     grandfathered + SuperAdmin sudah connect), 3 sheet ini jadi REDUNDAN
+     — tiap guru sudah punya salinannya sendiri, dibangun ulang otomatis
+     dari SISWA miliknya sendiri saat connect. Panel ini cuma bisa
+     membersihkan kalau SISWA central benar-benar 0 baris — tombolnya
+     nonaktif/disembunyikan selama masih ada sisa.
+     ============================================================================ -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+    <div>
+      <h3 style="margin:0">🧹 Master Roster Central (MasterSiswa/RiwayatKelas)</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Sheet tanpa kolom pemilik, jadi tidak ikut dipisah otomatis saat guru connect Drive pribadi. Baru aman dibersihkan setelah SISWA central kosong (semua guru sudah pindah).</p>
+    </div>
+    <button class="ghost" onclick="loadMasterRosterCleanupPanel()" style="font-size:12px">🔄 Muat</button>
+  </div>
+  <div id="masterRosterCleanupBox"><div class="muted">Klik "Muat" untuk cek status.</div></div>
+</div>
+<!-- ===== END MASTER ROSTER CENTRAL ===== -->
+
 <!-- ===== REMINDER LISENSI SEKOLAH ============================================
      Trigger harian (08:00) yang mengaktifkan/menonaktifkan tombol di bawah ini
      memanggil runDailyLicenseReminder_() (Trigger.js) -> delegasi langsung ke

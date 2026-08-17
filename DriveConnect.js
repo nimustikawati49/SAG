@@ -33,12 +33,21 @@
  * _autoProvisionUserSpreadsheet_, Code.js). Untuk kasus ini, migrasinya
  * TIDAK menyalin/menghapus seisi sheet central (dipakai bersama banyak
  * akun!) — cuma baris milik email yang bersangkutan, disaring lewat
- * kolom pemilik (owner_email/email_guru/email/guru), lihat
- * _migrateLegacyCentralDataForUser_ di bawah. Sheet TANPA kolom pemilik
- * (SISWA, MasterSiswa, RiwayatKelas, MasterTahunPelajaran) SENGAJA
- * DILEWATI — baris antar guru di situ tidak bisa dibedakan dengan aman,
- * jadi masih akan terus terlihat di "Ukuran Data Sheet Central" sampai
- * ditangani terpisah lewat alat/proses lain.
+ * kolom pemilik (owner_email/email_guru/email/guru, ATAU kolom pemilik
+ * tetap SISWA — lihat _migrateLegacyCentralDataForUser_ di bawah).
+ *
+ * MasterSiswa/RiwayatKelas TIDAK dimigrasi langsung (sheet itu memang
+ * TIDAK punya kolom pemilik sama sekali) — begitu SISWA guru ini selesai
+ * dipindah, connectOwnSpreadsheet() memicu ensureAcademicSchema_() di
+ * spreadsheet BARU-nya, yang otomatis MEMBANGUN ULANG MasterSiswa/
+ * RiwayatKelas miliknya sendiri dari SISWA yang baru dipindah itu (lewat
+ * migrateLegacyData_() di AcademicYear.js — fungsi yang sama yang dulu
+ * membuat baris-baris itu di central). MasterSiswa/RiwayatKelas/
+ * MasterTahunPelajaran di CENTRAL sendiri baru jadi benar-benar redundan
+ * (aman dibersihkan) setelah SISWA central kosong sepenuhnya (semua guru
+ * grandfathered + SuperAdmin sudah pindah) — dicek lewat
+ * getCentralMasterRosterCleanupStatus()/clearRedundantCentralMasterRoster()
+ * di bawah, harus dikonfirmasi manual oleh SuperAdmin, tidak otomatis.
  *
  * ⚠️ PENTING UNTUK SUPERADMIN — pembersihan spreadsheet lama OTOMATIS:
  * begitu data berhasil disalin, connectOwnSpreadsheet() MEMVERIFIKASI dulu
@@ -152,16 +161,34 @@ function _getResourceMapEntryOwnedByOther_(spreadsheetId, myEmail) {
  * Sheet non-central-only yang MUNGKIN masih menyimpan baris guru
  * "grandfathered" (atau SuperAdmin sendiri) langsung di central — dicek
  * satu-satu oleh _migrateLegacyCentralDataForUser_. Sengaja TIDAK termasuk
- * SISWA/MasterSiswa/RiwayatKelas/MasterTahunPelajaran — sheet-sheet itu
- * TIDAK PUNYA kolom pemilik sama sekali (lihat _findOwnerColumnIndex_ di
- * SuperAdmin.js), jadi baris antar guru tidak bisa dibedakan dengan aman;
- * bagian itu sengaja ditunda, ditangani terpisah lewat alat/review
- * manual, BUKAN oleh fungsi otomatis ini.
+ * MasterSiswa/RiwayatKelas/MasterTahunPelajaran — sheet-sheet itu TIDAK
+ * PUNYA kolom pemilik sama sekali. Tapi bukan berarti tidak tertangani:
+ * begitu SISWA (yang PUNYA kolom pemilik, lihat _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_
+ * di bawah) berhasil dimigrasi, connectOwnSpreadsheet() memicu
+ * ensureAcademicSchema_() di spreadsheet BARU guru itu — yang otomatis
+ * MEMBANGUN ULANG MasterSiswa/RiwayatKelas miliknya sendiri dari SISWA
+ * yang baru dipindah (lihat migrateLegacyData_() di AcademicYear.js, ini
+ * memang fungsi yang sama yang tadinya membuat baris-baris itu di
+ * central). Jadi tidak perlu logika pemisahan terpisah untuk 2 sheet itu.
  */
 var _LEGACY_CENTRAL_CANDIDATE_SHEETS_ = [
-  'JURNAL', 'ABSENSI', 'NILAI_SISWA', 'SETTING_NILAI',
+  'JURNAL', 'ABSENSI', 'SISWA', 'NILAI_SISWA', 'SETTING_NILAI',
   'JADWAL_SEMESTER', 'GuruMengajar', 'SETTING', 'ModulAjar', 'Relasi_Modul_Jadwal'
 ];
+
+/**
+ * _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_
+ * Sheet SISWA (roster legacy) SEBENARNYA punya kolom pemilik — index
+ * tetap 5 ("owner guru", lihat komentar SISWA_TAHUN_COL_ di Jurnal.js) —
+ * tapi sheet ini dibuat manual dulu (bukan lewat kode), jadi teks header
+ * barisnya tidak selalu cocok dengan kandidat generik di
+ * _findOwnerColumnIndex_ (SuperAdmin.js), yang mencari berdasarkan TEKS
+ * header, bukan posisi. Dipetakan manual di sini supaya SISWA tetap bisa
+ * ikut dimigrasi otomatis per-guru seperti sheet lain.
+ */
+var _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_ = {
+  'SISWA': 5
+};
 
 /**
  * _migrateLegacyCentralDataForUser_(email, newSs)
@@ -172,11 +199,12 @@ var _LEGACY_CENTRAL_CANDIDATE_SHEETS_ = [
  * dipetakan ke central). Cuma menyasar sheet yang PUNYA kolom pemilik
  * (owner_email/email_guru/email/guru — lihat _findOwnerColumnIndex_ di
  * SuperAdmin.js, dipakai juga oleh getCentralDataSizeReport supaya
- * konsisten). Untuk tiap sheet: salin HANYA baris milik email ini ke
- * spreadsheet baru, verifikasi jumlah baris yang berhasil ditambahkan
- * cocok, baru hapus baris ASLINYA (satu-satu, dari bawah ke atas supaya
- * nomor baris tidak bergeser) dari central — baris guru LAIN di sheet
- * yang sama sengaja tidak tersentuh sama sekali.
+ * konsisten — atau kolom tetap khusus, lihat
+ * _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_). Untuk tiap sheet: salin HANYA
+ * baris milik email ini ke spreadsheet baru, verifikasi jumlah baris yang
+ * berhasil ditambahkan cocok, baru hapus baris ASLINYA (satu-satu, dari
+ * bawah ke atas supaya nomor baris tidak bergeser) dari central — baris
+ * guru LAIN di sheet yang sama sengaja tidak tersentuh sama sekali.
  */
 function _migrateLegacyCentralDataForUser_(email, newSs) {
   var centralSs = getCentralSpreadsheet_();
@@ -189,8 +217,10 @@ function _migrateLegacyCentralDataForUser_(email, newSs) {
 
       var lastCol = centralSh.getLastColumn();
       var header = centralSh.getRange(1, 1, 1, lastCol).getValues()[0];
-      var ownerIdx = _findOwnerColumnIndex_(header);
-      if (ownerIdx === -1) return; // tidak ada kolom pemilik, lewati (ditangani terpisah)
+      var ownerIdx = _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_.hasOwnProperty(name)
+        ? _LEGACY_CENTRAL_FIXED_OWNER_COLUMN_[name]
+        : _findOwnerColumnIndex_(header);
+      if (ownerIdx === -1 || ownerIdx >= lastCol) return; // tidak ada kolom pemilik, lewati
 
       var allValues = centralSh.getRange(2, 1, centralSh.getLastRow() - 1, lastCol).getValues();
       var myRowIdxs = [];
@@ -404,6 +434,31 @@ function connectOwnSpreadsheet(urlOrId) {
       (migratedSheets.length ? (' | disalin: ' + migratedSheets.join(', ')) : ' | tidak ada data lama untuk disalin')
   });
 
+  // Bersihkan cache schema/migrasi akademik SEBELUM memicu ulang di bawah
+  // — cache key-nya per-email (bukan per-spreadsheet, lihat
+  // ensureAcademicSchema_/migrateLegacyData_ di AcademicYear.js), jadi
+  // kalau tidak dibersihkan dulu, sistem bisa menganggap "sudah pernah
+  // jalan" dari sesi sebelumnya (saat masih di spreadsheet/central lama)
+  // dan TIDAK regenerasi MasterSiswa/RiwayatKelas dari SISWA yang baru
+  // saja dipindah.
+  try {
+    var emailSlug = email.replace(/[^a-z0-9]/gi, '_');
+    CacheService.getScriptCache().remove('ACADEMIC_SCHEMA_READY_' + emailSlug);
+    CacheService.getScriptCache().remove('ACADEMIC_MIGRATED_' + emailSlug);
+  } catch (eCacheClear) {}
+
+  // Picu ulang ensureAcademicSchema_() SEKARANG (bukan menunggu interaksi
+  // guru berikutnya) — resolve otomatis ke spreadsheet BARU (RESOURCE_MAP
+  // sudah diperbarui di atas), dan migrateLegacyData_() di dalamnya akan
+  // membangun ulang MasterSiswa/RiwayatKelas milik guru ini dari SISWA
+  // yang baru saja dipindah (lihat AcademicYear.js) — jadi TIDAK perlu
+  // logika pemisahan terpisah untuk 2 sheet tanpa kolom pemilik itu.
+  try {
+    if (typeof ensureAcademicSchema_ === 'function') ensureAcademicSchema_();
+  } catch (eSchema) {
+    try { logError_('CONNECT_OWN_SPREADSHEET_REBUILD_ROSTER', eSchema); } catch (e2) {}
+  }
+
   invalidateCache_('SETTING');
   invalidateCache_('JURNAL');
   invalidateDashboardCache_();
@@ -511,4 +566,76 @@ function trashOldMigratedSpreadsheet(resourceMapId) {
     return { success: true };
   }
   throw new Error('Entry tidak ditemukan');
+}
+
+/**
+ * _MASTER_ROSTER_CENTRAL_SHEETS_
+ * Sheet tanpa kolom pemilik yang jadi redundan (bisa dibangun ulang) begitu
+ * SISWA central sudah kosong — lihat getCentralMasterRosterCleanupStatus.
+ */
+var _MASTER_ROSTER_CENTRAL_SHEETS_ = ['MasterSiswa', 'RiwayatKelas', 'MasterTahunPelajaran'];
+
+/**
+ * getCentralMasterRosterCleanupStatus()
+ * SuperAdmin only, READ-ONLY — cek apakah MasterSiswa/RiwayatKelas/
+ * MasterTahunPelajaran di CENTRAL sudah aman dibersihkan. Sheet-sheet ini
+ * TIDAK punya kolom pemilik (tidak bisa dipisah per-guru seperti SISWA),
+ * tapi begitu SISWA central benar-benar kosong (semua guru grandfathered
+ * + SuperAdmin sudah connect Drive pribadi masing-masing — lihat
+ * connectOwnSpreadsheet), sheet-sheet ini jadi REDUNDAN: setiap guru
+ * sudah punya salinannya sendiri, dibangun ulang otomatis dari SISWA
+ * miliknya sendiri lewat ensureAcademicSchema_()/migrateLegacyData_()
+ * (AcademicYear.js) saat mereka connect.
+ */
+function getCentralMasterRosterCleanupStatus() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var centralSs = getCentralSpreadsheet_();
+  var shSiswa = centralSs.getSheetByName('SISWA');
+  var siswaRows = shSiswa ? Math.max(shSiswa.getLastRow() - 1, 0) : 0;
+
+  var rosterInfo = _MASTER_ROSTER_CENTRAL_SHEETS_.map(function (name) {
+    var sh = centralSs.getSheetByName(name);
+    return { sheet: name, rows: sh ? Math.max(sh.getLastRow() - 1, 0) : 0 };
+  });
+
+  return {
+    siswaRowsRemaining: siswaRows,
+    safeToClean: siswaRows === 0,
+    roster: rosterInfo
+  };
+}
+
+/**
+ * clearRedundantCentralMasterRoster()
+ * SuperAdmin only — hapus SEMUA baris data (bukan header) di
+ * MasterSiswa/RiwayatKelas/MasterTahunPelajaran CENTRAL. DIBATALKAN kalau
+ * SISWA central masih ada isinya (berarti masih ada guru yang belum
+ * connect Drive pribadi dan masih bergantung pada roster central ini) —
+ * jangan pernah dipanggil tanpa lolos getCentralMasterRosterCleanupStatus()
+ * dulu (safeToClean === true). Ini BUKAN operasi per-baris seperti
+ * _migrateLegacyCentralDataForUser_ — sengaja menghapus SELURUH isi
+ * (bukan disaring per-guru) karena tahap ini cuma boleh jalan kalau sudah
+ * dipastikan tidak ada satu pun guru yang masih bergantung padanya.
+ */
+function clearRedundantCentralMasterRoster() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  var status = getCentralMasterRosterCleanupStatus();
+  if (!status.safeToClean) {
+    throw new Error('Belum aman dibersihkan — SISWA central masih punya ' + status.siswaRowsRemaining + ' baris (masih ada guru yang belum pindah Drive pribadi).');
+  }
+
+  var centralSs = getCentralSpreadsheet_();
+  var cleared = [];
+  _MASTER_ROSTER_CENTRAL_SHEETS_.forEach(function (name) {
+    var sh = centralSs.getSheetByName(name);
+    if (!sh) return;
+    var lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      sh.deleteRows(2, lastRow - 1);
+      cleared.push(name);
+    }
+  });
+
+  logAudit('CLEAR_REDUNDANT_CENTRAL_MASTER_ROSTER', getLoginEmail(), cleared.join(', ') || '(sudah kosong)');
+  return { success: true, cleared: cleared };
 }
