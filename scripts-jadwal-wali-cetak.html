@@ -144,6 +144,7 @@ async function simpanJurnalWali(){
       if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
       if(res && res.status){
         showToast('✅ Jurnal berhasil disimpan', 'success');
+        gwClearDraft_();
         resetFormGuruWali();
         loadRiwayatGuruWali();
       }else{
@@ -178,6 +179,70 @@ function resetFormGuruWali(){
   gwRemoveFoto_(1);
   gwRemoveFoto_(2);
 }
+
+/* ===================================================================
+   DRAFT AUTO-SAVE — form Jurnal Guru Wali, mirip pola di Jurnalku
+   supaya ketikan tidak hilang kalau internet/laptop bermasalah
+   sebelum sempat klik Simpan.
+   ================================================================= */
+function gwGetDraftKey_() {
+  return 'jurnalWaliDraft_' + (window._currentUserEmail || 'anon');
+}
+
+function gwSaveDraft_() {
+  try {
+    const draft = {
+      tanggal      : (document.getElementById('gwTanggal')      || {}).value || '',
+      waktuMulai   : (document.getElementById('gwWaktuMulai')   || {}).value || '',
+      waktuSelesai : (document.getElementById('gwWaktuSelesai') || {}).value || '',
+      fokus        : (document.getElementById('gwFokus')        || {}).value || '',
+      topik        : (document.getElementById('gwTopik')        || {}).value || '',
+      catatan      : (document.getElementById('gwCatatan')      || {}).value || '',
+      tindak       : (document.getElementById('gwTindakLanjut') || {}).value || '',
+      savedAt      : new Date().toISOString()
+    };
+    localStorage.setItem(gwGetDraftKey_(), JSON.stringify(draft));
+  } catch(e) {}
+}
+
+function gwRestoreDraft_() {
+  try {
+    const raw = localStorage.getItem(gwGetDraftKey_());
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    const map = {
+      gwTanggal: draft.tanggal, gwWaktuMulai: draft.waktuMulai, gwWaktuSelesai: draft.waktuSelesai,
+      gwFokus: draft.fokus, gwTopik: draft.topik, gwCatatan: draft.catatan, gwTindakLanjut: draft.tindak
+    };
+    Object.keys(map).forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el && map[id]) el.value = map[id];
+    });
+    if (draft.tanggal) autoFillHariWali(draft.tanggal);
+    if (draft.topik && typeof showToast === 'function') showToast('💾 Draft jurnal wali dipulihkan', 'info', 2500);
+  } catch(e) {}
+}
+
+function gwClearDraft_() {
+  try { localStorage.removeItem(gwGetDraftKey_()); } catch(e) {}
+}
+
+(function() {
+  const ids = ['gwTanggal','gwWaktuMulai','gwWaktuSelesai','gwFokus','gwTopik','gwCatatan','gwTindakLanjut'];
+  function _attachGwDraftListeners() {
+    ids.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', gwSaveDraft_);
+      el.addEventListener('change', gwSaveDraft_);
+    });
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(_attachGwDraftListeners, 500);
+  } else {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(_attachGwDraftListeners, 500); });
+  }
+})();
 
 let riwayatGuruWaliData = [];
 

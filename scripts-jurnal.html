@@ -201,6 +201,7 @@ function showTab(id){
   // 🔥 LOAD JURNAL GURU WALI
   if(id === 'jurnalGuruWali'){
     loadJurnalGuruWali();
+    setTimeout(function() { if (typeof gwRestoreDraft_ === 'function') gwRestoreDraft_(); }, 300);
   }
 
   // 🔥 DASHBOARD FIX
@@ -920,6 +921,7 @@ function getDraftKey_() {
 function saveDraft_() {
   try {
     const draft = {
+      tanggal   : (document.getElementById('tanggal')   || {}).value || '',
       kelas     : (document.getElementById('kelas')     || {}).value || '',
       pertemuan : (document.getElementById('pertemuan') || {}).value || '',
       jam_ke    : (document.getElementById('jam_ke')    || {}).value || '',
@@ -945,13 +947,39 @@ function restoreDraft_() {
       const el = document.getElementById(id);
       if (el && draft[id]) el.value = draft[id];
     });
-    if (draft.pertemuan) {
-      const sel = document.getElementById('pertemuan');
-      if (sel && draft.pertemuan) sel.value = draft.pertemuan;
+    if (draft.tanggal) {
+      const el = document.getElementById('tanggal');
+      if (el) el.value = draft.tanggal;
     }
     if (draft.jam_ke) {
       const el = document.getElementById('jam_ke');
       if (el) el.value = draft.jam_ke;
+    }
+    // Kelas & pertemuan direstore terakhir: memilih kelas memuat ulang tabel
+    // absensi (loadSiswa), jadi pertemuan baru diisi setelah itu supaya tidak
+    // ikut ter-reset oleh proses muat ulang tersebut.
+    if (draft.kelas) {
+      let kelasRetry = 0;
+      const applyKelas = function() {
+        const selKelas = document.getElementById('kelas');
+        if (!selKelas) return;
+        selKelas.value = draft.kelas;
+        if (selKelas.value === draft.kelas) {
+          if (typeof loadSiswa === 'function') loadSiswa();
+          if (draft.pertemuan) {
+            const sel = document.getElementById('pertemuan');
+            if (sel) sel.value = draft.pertemuan;
+          }
+        } else if (kelasRetry < 6) {
+          // Dropdown kelas (dimuat via loadKelas async) belum siap, coba lagi sebentar
+          kelasRetry++;
+          setTimeout(applyKelas, 500);
+        }
+      };
+      applyKelas();
+    } else if (draft.pertemuan) {
+      const sel = document.getElementById('pertemuan');
+      if (sel) sel.value = draft.pertemuan;
     }
     // Toast ringan
     if (draft.materi && typeof showToast === 'function')
@@ -965,11 +993,12 @@ function clearDraft_() {
 
 // Pasang auto-save listeners setelah DOM siap
 (function() {
-  const ids = ['materi','tujuan','asesmen','refleksi','pertemuan','jam_ke'];
+  const ids = ['tanggal','materi','tujuan','asesmen','refleksi','pertemuan','jam_ke','kelas'];
   function _attachDraftListeners() {
     ids.forEach(function(id) {
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', saveDraft_);
+      if (el) el.addEventListener('change', saveDraft_);
     });
   }
   if (document.readyState === 'complete' || document.readyState === 'interactive') {

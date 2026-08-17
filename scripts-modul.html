@@ -47,7 +47,73 @@ function initModulAjar() {
   _loadMapelOptions_();    // isi dropdown mapel dari setting
   _fillBabSuggestions_();  // isi datalist bab
   loadAllModul_();
+  setTimeout(_modulRestoreDraft_, 400);
 }
+
+/* ---- Draft auto-save form "Tambah Modul", supaya ketikan judul/deskripsi
+   tidak hilang kalau internet/laptop bermasalah sebelum sempat Simpan. ---- */
+function _modulGetDraftKey_() {
+  return 'modulAjarDraft_' + (window._currentUserEmail || 'anon');
+}
+
+function _modulSaveDraft_() {
+  try {
+    const draft = {
+      mapel     : (document.getElementById('modulMapelSelect')    || {}).value || '',
+      kelas     : (document.getElementById('modulKelasSelect')    || {}).value || '',
+      bab       : (document.getElementById('modulBabInput')       || {}).value || '',
+      judul     : (document.getElementById('modulJudulInput')     || {}).value || '',
+      deskripsi : (document.getElementById('modulDeskripsiInput') || {}).value || '',
+      savedAt   : new Date().toISOString()
+    };
+    if (!draft.judul && !draft.deskripsi && !draft.bab) {
+      localStorage.removeItem(_modulGetDraftKey_());
+      return;
+    }
+    localStorage.setItem(_modulGetDraftKey_(), JSON.stringify(draft));
+  } catch(e) {}
+}
+
+function _modulRestoreDraft_() {
+  try {
+    const raw = localStorage.getItem(_modulGetDraftKey_());
+    if (!raw) return;
+    const judulEl = document.getElementById('modulJudulInput');
+    // Jangan timpa kalau form sudah ada isian (mis. user sudah mulai ketik ulang)
+    if (judulEl && judulEl.value) return;
+    const draft = JSON.parse(raw);
+    const map = {
+      modulMapelSelect: draft.mapel, modulKelasSelect: draft.kelas,
+      modulBabInput: draft.bab, modulJudulInput: draft.judul, modulDeskripsiInput: draft.deskripsi
+    };
+    Object.keys(map).forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el && map[id]) el.value = map[id];
+    });
+    if (draft.judul && typeof showToast === 'function') showToast('💾 Draft modul ajar dipulihkan', 'info', 2500);
+  } catch(e) {}
+}
+
+function _modulClearDraft_() {
+  try { localStorage.removeItem(_modulGetDraftKey_()); } catch(e) {}
+}
+
+(function() {
+  const ids = ['modulMapelSelect','modulKelasSelect','modulBabInput','modulJudulInput','modulDeskripsiInput'];
+  function _attachModulDraftListeners() {
+    ids.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', _modulSaveDraft_);
+      el.addEventListener('change', _modulSaveDraft_);
+    });
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(_attachModulDraftListeners, 500);
+  } else {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(_attachModulDraftListeners, 500); });
+  }
+})();
 
 /** Ambil daftar mapel guru dari GAS lalu isi select#modulMapelSelect */
 function _loadMapelOptions_() {
@@ -400,6 +466,7 @@ function submitModul_() {
 }
 
 function _clearModulForm_() {
+  _modulClearDraft_();
   ['modulJudulInput','modulDeskripsiInput'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) el.value = '';

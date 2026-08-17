@@ -7,6 +7,49 @@
 var _catatanKelasAktif = '';
 var _catatanSiswaList  = [];
 var _catatanMode       = 'individu'; // 'individu' | 'grup'
+var _catatanDraftKey   = '';
+
+/* ---- Draft auto-save untuk textarea catatan, supaya ketikan tidak
+   hilang kalau modal tertutup tidak sengaja / internet-laptop bermasalah
+   sebelum sempat klik Simpan. ---- */
+function _catatanBuildDraftKey_(nis) {
+  var email = window._currentUserEmail || 'anon';
+  return 'catatanDraft_' + email + '_' + (nis || (_catatanKelasAktif || 'new'));
+}
+
+function _catatanSaveDraft_() {
+  try {
+    if (!_catatanDraftKey) return;
+    var teksEl = document.getElementById('catatanTeks');
+    var teks = teksEl ? teksEl.value : '';
+    if (!teks) { localStorage.removeItem(_catatanDraftKey); return; }
+    localStorage.setItem(_catatanDraftKey, JSON.stringify({ catatan: teks, savedAt: new Date().toISOString() }));
+  } catch(e) {}
+}
+
+function _catatanReadDraft_() {
+  try {
+    if (!_catatanDraftKey) return null;
+    var raw = localStorage.getItem(_catatanDraftKey);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function _catatanClearDraft_() {
+  try { if (_catatanDraftKey) localStorage.removeItem(_catatanDraftKey); } catch(e) {}
+}
+
+(function() {
+  function _attachCatatanDraftListener() {
+    var el = document.getElementById('catatanTeks');
+    if (el) { el.addEventListener('input', _catatanSaveDraft_); }
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(_attachCatatanDraftListener, 500);
+  } else {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(_attachCatatanDraftListener, 500); });
+  }
+})();
 
 /** Panggil saat tab catatan dibuka */
 function initCatatanSiswa() {
@@ -201,8 +244,20 @@ function openCatatanModal(nis, nama, catatanTeks) {
     if (modeRow) modeRow.style.display = 'flex';
     setCatatanMode_('individu');
   }
+  _catatanDraftKey = _catatanBuildDraftKey_(nis);
   if (teksEl) {
     teksEl.value = catatanTeks || '';
+    if (!catatanTeks) {
+      var draft = _catatanReadDraft_();
+      if (draft && draft.catatan && draft.catatan.trim()) {
+        var stamp = draft.savedAt ? new Date(draft.savedAt).toLocaleString('id-ID') : '';
+        if (confirm('Ditemukan draft catatan yang belum tersimpan' + (stamp ? ' (' + stamp + ')' : '') + '. Lanjutkan?')) {
+          teksEl.value = draft.catatan;
+        } else {
+          _catatanClearDraft_();
+        }
+      }
+    }
     teksEl.focus();
   }
   document.getElementById('catatanModalTitle').textContent = nis ? 'Edit Catatan Siswa' : 'Tambah Catatan Siswa';
@@ -248,6 +303,7 @@ function submitCatatan() {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
     google.script.run
       .withSuccessHandler(function(res) {
+        _catatanClearDraft_();
         closeCatatanModal();
         var msg = '✅ Catatan grup disimpan untuk ' + (res && res.total ? res.total : siswa.length) + ' siswa';
         if (typeof showToast === 'function') showToast(msg, 'success');
@@ -275,6 +331,7 @@ function submitCatatan() {
 
   google.script.run
     .withSuccessHandler(function() {
+      _catatanClearDraft_();
       closeCatatanModal();
       if (typeof showToast === 'function') showToast('✅ Catatan disimpan', 'success');
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
