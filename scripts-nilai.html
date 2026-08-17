@@ -674,7 +674,7 @@ function renderTabelNilai() {
     }
     const n = Number(val);
     if (lowCheck && n < kkm) {
-      return `<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-weight:700">${n.toFixed(2)} • Rendah</span>`;
+      return `<span title="Di bawah KKM (${kkm})" style="display:inline-block;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:999px;font-weight:700">${n.toFixed(2)}</span>`;
     }
     return n.toFixed(2);
   };
@@ -683,6 +683,22 @@ function renderTabelNilai() {
   const showRata = !!nilaiState.colVis.rataDetail;
   // No, NIS, Nama (3) + Tugas Mandiri (3) + UH (3) + PTS + SAS (2) + Rata Total + Total Nilai + Nilai Akhir (3)
   const totalCols = 14 + (showTgsk ? 3 : 0) + (showRata ? 2 : 0);
+
+  // Lebar kolom proporsional (table-layout:fixed) — supaya tabel selalu pas
+  // dengan lebar layar berapa pun jumlah kolom yang sedang ditampilkan.
+  const colWeights = [['no', 3], ['nis', 6], ['nama', 15],
+    ['tgs1', 4.5], ['tgs2', 4.5], ['tgs3', 4.5]];
+  if (showTgsk) colWeights.push(['tk1', 4.5], ['tk2', 4.5], ['tk3', 4.5]);
+  colWeights.push(['uh1', 4.5], ['uh2', 4.5], ['uh3', 4.5], ['pts', 5], ['sas', 5]);
+  if (showRata) colWeights.push(['rataTugas', 5], ['rataUh', 5]);
+  colWeights.push(['rataTotal', 5.5], ['totalNilai', 6], ['nilaiAkhir', 6.5]);
+  const totalWeight = colWeights.reduce((s, c) => s + c[1], 0);
+  const colgroupEl = document.getElementById('tabelNilaiColgroup');
+  if (colgroupEl) {
+    colgroupEl.innerHTML = colWeights
+      .map(c => '<col style="width:' + (c[1] / totalWeight * 100).toFixed(3) + '%">')
+      .join('');
+  }
 
   if (!nilaiState.rows.length) {
     tbody.innerHTML = '<tr><td colspan="' + totalCols + '" style="padding:20px;color:#9ca3af;text-align:center">'
@@ -727,7 +743,7 @@ function renderTabelNilai() {
     const n   = Number(val);
     const red = redBelowKKM && n < kkm;
     return `<td class="ntd-calc" id="${id}">
-      <span ${red ? 'style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-weight:700"' : ''}>${n.toFixed(2)}${red ? ' • Rendah' : ''}</span>
+      <span ${red ? `title="Di bawah KKM (${kkm})" style="display:inline-block;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:999px;font-weight:700"` : ''}>${n.toFixed(2)}</span>
     </td>`;
   };
 
@@ -737,14 +753,14 @@ function renderTabelNilai() {
     const pasPat = isGenap ? 'ASAT' : 'SAS';
     tHead.innerHTML = `
       <tr>
-        <th rowspan="2" style="min-width:28px">No</th>
-        <th rowspan="2" style="min-width:60px">NIS</th>
-        <th rowspan="2" style="min-width:120px;text-align:left;padding-left:8px">Nama Siswa</th>
+        <th rowspan="2">No</th>
+        <th rowspan="2">NIS</th>
+        <th rowspan="2" class="ntd-nama" style="color:#fff">Nama Siswa</th>
         <th colspan="3">Tugas Mandiri</th>
         ${showTgsk ? '<th colspan="3">Tugas Kelompok</th>' : ''}
         <th colspan="3">Ulangan Harian</th>
-        <th rowspan="2" style="min-width:50px">PTS</th>
-        <th rowspan="2" style="min-width:50px">${pasPat}</th>
+        <th rowspan="2">PTS</th>
+        <th rowspan="2">${pasPat}</th>
         ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>' : ''}
         <th rowspan="2">Rata Total</th>
         <th rowspan="2" style="background:#4338ca">Total Nilai</th>
@@ -769,14 +785,14 @@ function renderTabelNilai() {
     const rowEmpty = r.rata_uh === null && r.rata_tugas === null
       && isEmpty_(r.pts) && uasKosong;
     const rowClass = rowRed ? 'row-kkm' : (rowEmpty ? 'row-nildata-empty' : '');
-    const emptyBadge = rowEmpty
-      ? ' <span title="Belum ada nilai yang diinput — tidak wajib, hanya pemberitahuan" style="cursor:help">⚠️</span>'
-      : '';
+    const emptyBadge = rowEmpty ? ' ⚠️' : '';
+    const namaEsc = String(r.nama_siswa || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const namaTitle = namaEsc + (rowEmpty ? ' — belum ada nilai yang diinput (tidak wajib)' : '');
 
     return `<tr class="${rowClass}" id="nilaiTr_${i}">
       <td class="ntd-plain" style="font-weight:600">${i + 1}</td>
       <td class="ntd-plain">${r.nis || '-'}</td>
-      <td class="ntd-plain" style="text-align:left;padding-left:8px;white-space:nowrap">${r.nama_siswa || ''}${emptyBadge}</td>
+      <td class="ntd-nama" title="${namaTitle}">${r.nama_siswa || ''}${emptyBadge}</td>
       ${inputCell(i, 'tgs1', r.tgs1, true)}
       ${inputCell(i, 'tgs2', r.tgs2, true)}
       ${inputCell(i, 'tgs3', r.tgs3, true)}

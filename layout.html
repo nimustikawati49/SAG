@@ -1770,15 +1770,16 @@
   .nil-pill-active{background:#6C63FF!important;color:#fff!important;border-color:#6C63FF!important}
   .nil-pill-all{border-color:#22c55e;color:#22c55e}
   .nil-pill-all.nil-pill-active{background:#22c55e!important;border-color:#22c55e!important}
-  .ntd-inp{padding:3px;text-align:center}
-  .ntd-inp input{width:48px;padding:4px 2px;border:1.5px solid #d1d5db;border-radius:5px;text-align:center;font-size:12px}
+  .ntd-inp{padding:3px 2px;text-align:center;overflow:hidden}
+  .ntd-inp input{width:100%;min-width:0;box-sizing:border-box;padding:4px 2px;border:1.5px solid #d1d5db;border-radius:5px;text-align:center;font-size:12px}
   .ntd-inp input:focus{border-color:#6C63FF;outline:none}
-  .ntd-calc{background:#f0f4ff;font-weight:600;font-size:12px;padding:5px 4px;text-align:center}
-  .ntd-plain{font-size:12px;padding:5px 4px;text-align:center}
+  .ntd-calc{background:#f0f4ff;font-weight:600;font-size:12px;padding:5px 3px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ntd-plain{font-size:12px;padding:5px 3px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ntd-nama{font-size:12px;padding:5px 4px 5px 8px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0}
   body.dark .nil-pill{background:#1f2937;border-color:#4b5563;color:#e5e7eb}
   body.dark .ntd-calc{background:#1e293b}
-  #tabelNilai{width:100%;border-collapse:collapse;table-layout:auto}
-  #tabelNilai th{background:#6C63FF;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;font-size:11.5px}
+  #tabelNilai{width:100%;border-collapse:collapse;table-layout:fixed}
+  #tabelNilai th{background:#6C63FF;color:#fff;padding:6px 3px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:sticky;top:0;z-index:2;font-size:11px}
   #tabelNilai td{border-bottom:1px solid #e5e7eb}
   #tabelNilai tr.row-kkm{background:#fff0f0}
   #tabelNilai tr.row-nildata-empty{background:#fffbeb}
@@ -1927,15 +1928,16 @@
         <span class="muted" style="font-size:11px">Kolom yang tidak dipakai disembunyikan otomatis biar tabel tidak terpotong</span>
       </div>
       <table id="tabelNilai">
+        <colgroup id="tabelNilaiColgroup"></colgroup>
         <thead id="tabelNilaiThead">
           <tr>
-            <th rowspan="2" style="min-width:28px">No</th>
-            <th rowspan="2" style="min-width:60px">NIS</th>
-            <th rowspan="2" style="min-width:120px;text-align:left;padding-left:8px">Nama Siswa</th>
+            <th rowspan="2">No</th>
+            <th rowspan="2">NIS</th>
+            <th rowspan="2" class="ntd-nama" style="color:#fff">Nama Siswa</th>
             <th colspan="3">Tugas Mandiri</th>
             <th colspan="3">Ulangan Harian</th>
-            <th rowspan="2" style="min-width:50px">PTS</th>
-            <th rowspan="2" style="min-width:50px">SAS</th>
+            <th rowspan="2">PTS</th>
+            <th rowspan="2">SAS</th>
             <th rowspan="2">Rata Total</th>
             <th rowspan="2" style="background:#4338ca">Total Nilai</th>
             <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
@@ -1965,6 +1967,11 @@
     <!-- Pengaturan Nilai (Katrol & KKM) -->
     <div class="card" style="margin-bottom:14px">
       <h3>⚙️ Pengaturan Nilai (Katrol &amp; KKM)</h3>
+      <div class="alert-banner info" style="font-size:12px;line-height:1.7;margin-top:8px">
+        <b>Nilai Total</b> (murni) dihitung dari <b>40% rata-rata harian</b> (gabungan Rata Tugas &amp; Rata UH) + <b>30% PTS</b> + <b>30% SAS/ASAT</b> — kolom <b>Total Nilai</b> di tabel.<br>
+        <b>Nilai Katrol</b> lalu menyesuaikan Nilai Total tadi secara proporsional per kelas: siswa dengan Nilai Total <i>terendah</i> di kelas dinaikkan tepat ke <b>Nilai Terendah Target</b> di bawah ini, siswa dengan Nilai Total <i>tertinggi</i> dinaikkan ke <b>Nilai Tertinggi Target</b> — urutan/selisih nilai asli antar siswa tetap terjaga, tidak ada nilai yang dikarang.<br>
+        <b>KKM</b> hanya dipakai untuk menandai baris/nilai yang masih di bawah standar (warna kuning) — nilai di bawah KKM tetap tersimpan apa adanya, tidak otomatis diubah.
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;
                   align-items:flex-end;margin-top:12px">
         <div>
