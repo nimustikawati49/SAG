@@ -456,6 +456,9 @@
 </div>
 
 <!-- ====================CATATAN SISWA============ -->
+<!-- Catatan bebas per siswa BINAAN (bukan seluruh siswa kelas) — cuma
+     relevan untuk guru yang juga wali kelas, lihat tab "Jurnal Guru
+     Wali" untuk mendaftarkan siswa binaan terlebih dulu. -->
 <div id="catatanSiswa" class="card tab admin-only" data-tabid="catatanSiswa" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
@@ -481,24 +484,46 @@
     <h2 style="margin:0">📊 Dashboard</h2>
     <span id="dashSyncTime" style="font-size:11px;color:#9ca3af"></span>
   </div>
-  <!-- PROFILE SUMMARY -->
-      <div class="card" style="margin-top:24px">
-      <h3>📅 Jadwal Mengajar</h3>
-      <div id="jadwalGridContainer">
-        <p class="muted">⏳ Memuat jadwal...</p>
-      </div>
-    </div>
-<div class="profile-summary">
-  <div class="profile-card">
-    <div class="profile-title">📚 Kelas Diampu</div>
-    <div class="profile-value" id="metaKelas">0</div>
+
+  <!-- ===== PANDUAN DASHBOARD =====
+       Halaman ringkasan — hampir semua angka di sini DITURUNKAN dari
+       JURNAL + ABSENSI yang sudah diisi guru di tab "Jurnal Saya", bukan
+       diisi manual di sini. Kartu ini murni teks bantuan, tidak memanggil
+       server mana pun. -->
+  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px">
+    <h4 style="margin-top:0">📌 Cara Membaca Dashboard</h4>
+    <ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.7">
+      <li>Kartu <b>KPI</b> (Total Jurnal, Total Kelas, Rata-rata Hadir, Kelas Risiko) dihitung dari jurnal &amp; absensi dalam rentang tanggal <b>Dari – Sampai</b> di bawah — ubah rentangnya lalu klik <b>Terapkan</b> untuk memfilter ulang.</li>
+      <li><b>Kelas Risiko</b> = kelas dengan rata-rata kehadiran di bawah 80% pada rentang tanggal terpilih — cek kelas ini lebih dulu kalau ada.</li>
+      <li><b>Insight Otomatis</b> di paling bawah merangkum poin-poin di atas secara otomatis, tidak perlu dibaca satu-satu kalau sudah lihat KPI &amp; ranking.</li>
+      <li>Tahun pelajaran &amp; semester yang dipakai selalu mengikuti periode aktif di tab <b>⚙️ Pengaturan</b> — tidak perlu dipilih ulang di sini.</li>
+    </ol>
   </div>
 
-  <div class="profile-card">
-    <div class="profile-title">👨‍🎓 Total Siswa</div>
-    <div class="profile-value" id="metaSiswa">0</div>
+  <!-- JADWAL MENGAJAR — jadwal hari ini s.d. akhir minggu, diambil dari
+       JADWAL_SEMESTER (diisi lewat tab Pengaturan). Kosong = guru belum
+       mengisi jadwal mengajarnya. -->
+  <div class="card" style="margin-top:24px">
+    <h3>📅 Jadwal Mengajar</h3>
+    <div id="jadwalGridContainer">
+      <p class="muted">⏳ Memuat jadwal...</p>
+    </div>
   </div>
-</div>
+
+  <!-- PROFILE SUMMARY — jumlah kelas & siswa yang diampu guru ini,
+       diambil dari data siswa/kelas yang sudah diupload di tab Pengaturan. -->
+  <div class="profile-summary">
+    <div class="profile-card">
+      <div class="profile-title">📚 Kelas Diampu</div>
+      <div class="profile-value" id="metaKelas">0</div>
+    </div>
+
+    <div class="profile-card">
+      <div class="profile-title">👨‍🎓 Total Siswa</div>
+      <div class="profile-value" id="metaSiswa">0</div>
+    </div>
+  </div>
+
   <!-- FILTER (tahun/semester selalu mengikuti periode aktif di Setting, tidak perlu dipilih ulang di sini) -->
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
     <div>
@@ -514,7 +539,7 @@
     </div>
   </div>
 
-  <!-- KPI CARDS -->
+  <!-- KPI CARDS — lihat "Cara Membaca Dashboard" di atas untuk arti tiap kartu. -->
   <div class="grid-dashboard">
     <div class="card stat blue">
       <div class="label">📘 Total Jurnal</div>
@@ -537,6 +562,8 @@
     </div>
   </div>
 
+  <!-- Grafik kehadiran per kelas (stacked H/S/I/A) + ranking kelas berdasar
+       persentase hadir, keduanya dari rentang tanggal filter yang sama. -->
   <div class="dash-grid" style="margin-top:28px">
 
     <div class="card">
@@ -551,6 +578,9 @@
 
   </div>
 
+  <!-- Ringkasan otomatis (kelas terbaik, jumlah kelas risiko, dst) — teks
+       dihasilkan server dari data yang sama seperti KPI di atas, bukan
+       dianalisis ulang. -->
   <div class="card" style="margin-top:24px">
     <h3>🧠 Insight Otomatis</h3>
     <ul id="insightBox"></ul>
@@ -559,9 +589,23 @@
 </div>
 
 
-  <!-- ================= JURNALKU ================= -->
+  <!-- ================= JURNALKU =================
+       Form isi jurnal HARIAN per pertemuan — satu submit = satu baris di
+       sheet JURNAL (+ baris absensi per siswa di sheet ABSENSI). Data
+       siswa di tabel Absensi Kehadiran otomatis muncul begitu Kelas
+       dipilih (diambil dari data siswa yang diupload di tab Pengaturan). -->
   <div class="card tab" id="jurnalku" data-tabid="jurnalku" style="display:none">
     <h3>Jurnalku</h3>
+    <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:14px">
+      <h4 style="margin-top:0">📌 Cara Mengisi Jurnal</h4>
+      <ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.7">
+        <li>Isi <b>Tanggal</b> &amp; pilih <b>Kelas</b> — daftar siswa kelas itu otomatis muncul di tabel Absensi Kehadiran.</li>
+        <li>Isi <b>Materi</b> (bisa pakai tombol 📋 Pilih Template kalau sudah pernah menyimpan template sebelumnya), <b>Tujuan</b>, dan <b>Asesmen</b> — isi "-" kalau memang tidak ada asesmen pada pertemuan ini.</li>
+        <li>Centang/ubah <b>Status</b> kehadiran tiap siswa di tabel Absensi.</li>
+        <li>Upload 1–3 <b>foto dokumentasi</b> pembelajaran (opsional tapi disarankan) dan isi <b>Refleksi</b> singkat.</li>
+        <li>Klik <b>💾 Simpan Jurnal</b> — begitu tersimpan, jurnal ini langsung bisa dilihat di tab 📑 Riwayat Jurnal.</li>
+      </ol>
+    </div>
     <label>Tanggal</label>
     <input type="date" id="tanggal">
     <label>Kelas</label>
@@ -623,6 +667,7 @@
   <!-- ================= RIWAYAT JURNAL ================= -->
   <div class="card tab" id="riwayat" data-tabid="riwayat" style="display:none">
     <h3>📑 Riwayat Jurnal</h3>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Semua jurnal yang sudah disimpan lewat tab Jurnalku — filter berdasarkan tanggal/kelas/kata kunci materi, edit atau hapus lewat kolom Aksi, atau download rekap semester/bulanan di bagian bawah.</p>
 
     <!-- FILTER BAR -->
     <div id="riwayatFilterBar">
@@ -710,6 +755,10 @@
       </div>
       <div id="exportBulanInfo" style="margin-top:8px"></div>
 
+      <!-- Arsip tahunan HANYA aktif (tombol tidak disabled) kalau tahun
+           pelajaran aktif sekarang sudah lewat/berakhir — cek kelayakannya
+           dilakukan server (arsipTahunPelajaranUI -> arsipTahunPelajaran
+           di SuperAdmin.js), bukan sekadar tanggal hari ini. -->
       <hr style="margin:28px 0">
       <h3>📦 Arsip Jurnal Tahunan</h3>
       <p id="infoArsipRiwayat" class="muted">⏳ Mengecek kelayakan arsip...</p>
@@ -726,10 +775,14 @@
     </div>
   </div>
 
-  <!-- ================= REKAP ABSENSI ================= -->
+  <!-- ================= REKAP ABSENSI =================
+       Dua sub-bagian: rekap jurnal per rentang tanggal bebas (atas), dan
+       rekap kehadiran per SISWA dalam 1 kelas (bawah) — keduanya baca
+       data yang sama (JURNAL+ABSENSI), cuma sudut pandangnya beda
+       (per pertemuan vs per siswa). -->
   <div class="card tab" id="rekap" data-tabid="rekap" style="display:none">
     <h3>📊 Rekap Absensi</h3>
-    <p class="muted">Daftar jurnal &amp; absensi pada rentang tanggal bebas.</p>
+    <p class="muted">Daftar jurnal &amp; absensi pada rentang tanggal bebas — pilih Dari/Sampai lalu klik Tampilkan, atau Export PDF untuk cetak.</p>
     <label>Dari</label>
     <input type="date" id="dari">
     <label>Sampai</label>
@@ -795,6 +848,7 @@
   <!-- ================= JURNAL GURU WALI ================= -->
   <div class="card tab" id="jurnalGuruWali" data-tabid="jurnalGuruWali" style="display:none">
     <h3>👨‍🏫 Jurnal Guru Wali</h3>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px">Menu khusus untuk guru yang menjabat WALI KELAS — terpisah dari "Jurnalku" biasa. Di sini Anda mendata sampai 20 "siswa binaan" (siswa perwalian) dan mencatat perkembangan/bimbingan mereka, bukan jurnal mengajar mapel harian.</p>
 
     <!-- 1. INFO GURU WALI -->
     <div class="card" style="background:#f8fafc;border-left:6px solid #6C63FF;margin-bottom:18px">
