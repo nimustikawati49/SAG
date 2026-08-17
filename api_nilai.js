@@ -380,7 +380,26 @@ function simpanNilaiSiswa(payload) {
 }
 
 /**
+ * Ambil tingkat (jenjang) dari nama kelas, mis. "7B" -> "7", "XI IPA 1" -> "XI".
+ * Dipakai untuk menebak KKM default per jenjang saat belum ada setting tersimpan.
+ */
+function _extractTingkatNilai_(kelasName) {
+  const s = String(kelasName || '').trim();
+  if (!s) return '';
+  const mNum = s.match(/^(\d+)/);
+  if (mNum) return mNum[1];
+  const mRoman = s.match(/^([IVX]+)\b/i);
+  if (mRoman) return mRoman[1].toUpperCase();
+  return s;
+}
+
+/** KKM default per jenjang (SMP), dipakai kalau guru belum pernah simpan setting nilai. */
+const KKM_DEFAULT_PER_TINGKAT_ = { '7': 76, '8': 77, '9': 78 };
+
+/**
  * Ambil pengaturan nilai (KKM + target katrol) untuk filter tertentu.
+ * Kalau belum pernah disimpan, KKM & batas bawah katrol ditebak otomatis
+ * dari jenjang kelas (7/8/9) supaya guru tidak perlu isi manual tiap kelas.
  */
 function getSettingNilai(kelas, mapel, tahun, semester) {
   const auth = authAdmin_();
@@ -397,7 +416,11 @@ function getSettingNilai(kelas, mapel, tahun, semester) {
     && String(r[idx('owner_email')]).toLowerCase().trim() === auth.email
   );
 
-  if (!found) return { nilai_min_target: 60, nilai_max_target: 95, kkm: 70 };
+  if (!found) {
+    const tingkat    = _extractTingkatNilai_(kelas);
+    const kkmDefault = KKM_DEFAULT_PER_TINGKAT_[tingkat] || 70;
+    return { nilai_min_target: kkmDefault, nilai_max_target: 95, kkm: kkmDefault };
+  }
 
   return {
     nilai_min_target: num_(found[idx('nilai_min_target')]) || 60,
