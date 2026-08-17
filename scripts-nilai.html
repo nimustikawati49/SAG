@@ -219,8 +219,18 @@ let nilaiState = {
   lastAutosaveAt : 0,
   focusKomponen  : 'all',    // 'all' | 'uh1' | 'tgs1' | dll
   setting        : {},       // hasil getSettingNilai (kkm, nilai_min_target, dst)
-  cetakPreviewOk : false
+  cetakPreviewOk : false,
+  colVis         : { tgsk: false, rataDetail: false } // kolom opsional yang boleh disembunyikan
 };
+
+/** Dipanggil dari checkbox "Tampilkan kolom" di atas Tabel Nilai */
+function toggleNilaiKolom_() {
+  const tgskEl = document.getElementById('nilaiColTGSK');
+  const rataEl = document.getElementById('nilaiColRataDetail');
+  nilaiState.colVis.tgsk       = !!(tgskEl && tgskEl.checked);
+  nilaiState.colVis.rataDetail = !!(rataEl && rataEl.checked);
+  renderTabelNilai();
+}
 
 function setNilaiAutosaveInfo_(text, color) {
   const el = document.getElementById('nilaiAutosaveInfo');
@@ -347,6 +357,16 @@ function applyNilaiDraftToState_(draft, opts = {}) {
     nilaiState.isDirty = true;
     nilaiState.lastAutosaveAt = Number(draft.savedAt || Date.now());
     nilaiHitungKatrolBatch_UI();
+    // Draft yang dipulihkan mungkin bawa nilai tugas kelompok yang belum ada di data
+    // sebelumnya — pastikan kolomnya ikut tampil supaya tidak ketutupan.
+    if (!nilaiState.colVis.tgsk && nilaiState.rows.some(r =>
+      (r.tgsk1 !== null && r.tgsk1 !== undefined && r.tgsk1 !== '') ||
+      (r.tgsk2 !== null && r.tgsk2 !== undefined && r.tgsk2 !== '') ||
+      (r.tgsk3 !== null && r.tgsk3 !== undefined && r.tgsk3 !== ''))) {
+      nilaiState.colVis.tgsk = true;
+      const tgskEl = document.getElementById('nilaiColTGSK');
+      if (tgskEl) tgskEl.checked = true;
+    }
     setNilaiEditMode_(false);
     updateStatistikUI_nilai();
     const infoText = opts.infoText || ('Autosave: draft dipulihkan (' + restored + ' siswa)');
@@ -560,6 +580,16 @@ function muatDataNilai(forceLocked = false) {
     });
     nilaiHitungKatrolBatch_UI();
 
+    // Deteksi otomatis: kalau ada nilai tugas kelompok tersimpan, langsung tampilkan
+    // kolomnya supaya tidak ketutupan; kalau belum ada, sembunyikan dulu biar ringkas.
+    const adaTgsk = nilaiState.rows.some(r =>
+      (r.tgsk1 !== null && r.tgsk1 !== undefined && r.tgsk1 !== '') ||
+      (r.tgsk2 !== null && r.tgsk2 !== undefined && r.tgsk2 !== '') ||
+      (r.tgsk3 !== null && r.tgsk3 !== undefined && r.tgsk3 !== ''));
+    nilaiState.colVis.tgsk = adaTgsk;
+    const tgskEl = document.getElementById('nilaiColTGSK');
+    if (tgskEl) tgskEl.checked = adaTgsk;
+
     // Isi pengaturan ke form
     document.getElementById('nilaiMinTarget').value = settingData.nilai_min_target ?? 60;
     document.getElementById('nilaiMaxTarget').value = settingData.nilai_max_target ?? 95;
@@ -649,8 +679,13 @@ function renderTabelNilai() {
     return n.toFixed(2);
   };
 
+  const showTgsk = !!nilaiState.colVis.tgsk;
+  const showRata = !!nilaiState.colVis.rataDetail;
+  // No, NIS, Nama (3) + Tugas Mandiri (3) + UH (3) + PTS + SAS (2) + Rata Total + Total Nilai + Nilai Akhir (3)
+  const totalCols = 14 + (showTgsk ? 3 : 0) + (showRata ? 2 : 0);
+
   if (!nilaiState.rows.length) {
-    tbody.innerHTML = '<tr><td colspan="19" style="padding:20px;color:#9ca3af;text-align:center">'
+    tbody.innerHTML = '<tr><td colspan="' + totalCols + '" style="padding:20px;color:#9ca3af;text-align:center">'
       + '⚠️ Tidak ada data siswa untuk kelas <b>' + (nilaiState.kelas || '-') + '</b>. '
       + 'Pastikan siswa sudah diimport di tab <b>Jurnal → Import Siswa</b> '
       + 'dan email pengupload sesuai akun yang sedang login.</td></tr>';
@@ -702,49 +737,56 @@ function renderTabelNilai() {
     const pasPat = isGenap ? 'ASAT' : 'SAS';
     tHead.innerHTML = `
       <tr>
-        <th rowspan="2" style="min-width:32px">No</th>
-        <th rowspan="2" style="min-width:68px">NIS</th>
-        <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
+        <th rowspan="2" style="min-width:28px">No</th>
+        <th rowspan="2" style="min-width:60px">NIS</th>
+        <th rowspan="2" style="min-width:120px;text-align:left;padding-left:8px">Nama Siswa</th>
         <th colspan="3">Tugas Mandiri</th>
-        <th colspan="3">Tugas Kelompok</th>
+        ${showTgsk ? '<th colspan="3">Tugas Kelompok</th>' : ''}
         <th colspan="3">Ulangan Harian</th>
-        <th rowspan="2" style="min-width:56px">PTS</th>
-        <th rowspan="2" style="min-width:56px">${pasPat}</th>
-        <th rowspan="2">Rata Tugas</th>
-        <th rowspan="2">Rata UH</th>
+        <th rowspan="2" style="min-width:50px">PTS</th>
+        <th rowspan="2" style="min-width:50px">${pasPat}</th>
+        ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>' : ''}
         <th rowspan="2">Rata Total</th>
         <th rowspan="2" style="background:#4338ca">Total Nilai</th>
         <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
       </tr>
       <tr>
         <th>TGS1</th><th>TGS2</th><th>TGS3</th>
-        <th>TK1</th><th>TK2</th><th>TK3</th>
+        ${showTgsk ? '<th>TK1</th><th>TK2</th><th>TK3</th>' : ''}
         <th>UH1</th><th>UH2</th><th>UH3</th>
       </tr>`;
   }
+
+  const isEmpty_ = v => v === null || v === undefined || v === '';
 
   tbody.innerHTML = nilaiState.rows.map((r, i) => {
     const nalq   = r.nilai_akhir;
     const rowRed = (nalq !== null && nalq !== undefined && nalq !== ''
       && !isNaN(Number(nalq)) && Number(nalq) < kkm);
 
-    return `<tr class="${rowRed ? 'row-kkm' : ''}" id="nilaiTr_${i}">
+    // Belum ada nilai sama sekali (bukan wajib diisi — cuma pemberitahuan ke guru)
+    const uasKosong = isEmpty_(isGenap ? r.pat : r.pas);
+    const rowEmpty = r.rata_uh === null && r.rata_tugas === null
+      && isEmpty_(r.pts) && uasKosong;
+    const rowClass = rowRed ? 'row-kkm' : (rowEmpty ? 'row-nildata-empty' : '');
+    const emptyBadge = rowEmpty
+      ? ' <span title="Belum ada nilai yang diinput — tidak wajib, hanya pemberitahuan" style="cursor:help">⚠️</span>'
+      : '';
+
+    return `<tr class="${rowClass}" id="nilaiTr_${i}">
       <td class="ntd-plain" style="font-weight:600">${i + 1}</td>
       <td class="ntd-plain">${r.nis || '-'}</td>
-      <td class="ntd-plain" style="text-align:left;padding-left:8px;white-space:nowrap">${r.nama_siswa || ''}</td>
+      <td class="ntd-plain" style="text-align:left;padding-left:8px;white-space:nowrap">${r.nama_siswa || ''}${emptyBadge}</td>
       ${inputCell(i, 'tgs1', r.tgs1, true)}
       ${inputCell(i, 'tgs2', r.tgs2, true)}
       ${inputCell(i, 'tgs3', r.tgs3, true)}
-      ${inputCell(i, 'tgsk1', r.tgsk1, true)}
-      ${inputCell(i, 'tgsk2', r.tgsk2, true)}
-      ${inputCell(i, 'tgsk3', r.tgsk3, true)}
+      ${showTgsk ? inputCell(i, 'tgsk1', r.tgsk1, true) + inputCell(i, 'tgsk2', r.tgsk2, true) + inputCell(i, 'tgsk3', r.tgsk3, true) : ''}
       ${inputCell(i, 'uh1',  r.uh1,  true)}
       ${inputCell(i, 'uh2',  r.uh2,  true)}
       ${inputCell(i, 'uh3',  r.uh3,  true)}
       ${inputCell(i, 'pts',  r.pts,  true)}
       ${isGenap ? inputCell(i, 'pat', r.pat, true) : inputCell(i, 'pas', r.pas, true)}
-      ${calcCell('nRataTGS_' + i, r.rata_tugas)}
-      ${calcCell('nRataUH_'  + i, r.rata_uh)}
+      ${showRata ? calcCell('nRataTGS_' + i, r.rata_tugas) + calcCell('nRataUH_' + i, r.rata_uh) : ''}
       ${calcCell('nFix_'     + i, r.nilai_fix)}
       ${calcCell('nAsli_'    + i, r.nilai_asli)}
       ${calcCell('nAkhir_'   + i, r.nilai_akhir, true)}
@@ -1227,6 +1269,14 @@ function doCetakNilai(mode = 'print') {
     remedi : document.getElementById('cetakColRemedi')?.checked,
     ranking: document.getElementById('cetakColRanking')?.checked,
   };
+  const paperSize   = document.querySelector('input[name="cetakPaper"]:checked')?.value  || 'a4';
+  const paperOrient = document.querySelector('input[name="cetakOrient"]:checked')?.value || 'landscape';
+  // Ukuran fisik kertas (mm) — dipakai untuk @page CSS supaya kolom yang
+  // ditampilkan menyesuaikan lebar kertas, bukan terpotong.
+  const PAPER_MM = { a4: { w: 210, h: 297 }, f4: { w: 215, h: 330 } };
+  const paperDim = PAPER_MM[paperSize] || PAPER_MM.a4;
+  const pageW = paperOrient === 'landscape' ? paperDim.h : paperDim.w;
+  const pageH = paperOrient === 'landscape' ? paperDim.w : paperDim.h;
 
   const btn = document.getElementById(isPreview ? 'btnPreviewCetak' : 'btnDoCetak');
   const defaultBtnLabel = isPreview ? '👁️ Preview' : '🖨️ Print / Simpan PDF';
@@ -1296,10 +1346,11 @@ function doCetakNilai(mode = 'print') {
     }
 
     const cetakStyle =
+      '@page{size:' + pageW + 'mm ' + pageH + 'mm;margin:10mm}' +
       '*{margin:0;padding:0;box-sizing:border-box}' +
       'body{font-family:Arial,sans-serif;font-size:11px;background:#fff;color:#000}' +
-      '.page{padding:18px 22px;max-width:960px;margin:0 auto}' +
-      '.preview-note{max-width:960px;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;' +
+      '.page{padding:18px 22px;width:' + pageW + 'mm;max-width:' + pageW + 'mm;margin:0 auto}' +
+      '.preview-note{max-width:' + pageW + 'mm;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;' +
       '  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}' +
       'h1{display:none}' +
       '.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}' +
@@ -1309,9 +1360,12 @@ function doCetakNilai(mode = 'print') {
       '  ;letter-spacing:1px}' +
       '.info-left{width:50%;padding:5px 10px;vertical-align:top;border-right:1px solid #333}' +
       '.info-right{width:50%;padding:5px 10px;vertical-align:top}' +
-      '.nilai{width:100%;border-collapse:collapse;margin-top:10px;font-size:11px}' +
-      '.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center}' +
+      '.nilai{width:100%;table-layout:auto;border-collapse:collapse;margin-top:10px;font-size:11px}' +
+      '.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center;word-break:break-word}' +
       '.nilai th{background:#dde0f0;font-weight:700}' +
+      '.nilai thead{display:table-header-group}' +
+      // Ulangi header tabel di setiap halaman cetak & jangan potong 1 baris jadi 2 halaman
+      '.nilai tr{page-break-inside:avoid}' +
       '.nilai .tl{text-align:left;min-width:120px}' +
       '.nilai .blt td{background:#ffeeee}' +
       '.note-missing{color:#dc2626;font-weight:700}' +
@@ -1328,7 +1382,7 @@ function doCetakNilai(mode = 'print') {
       '  .preview-note{display:none!important}' +
       '  .pb{height:0}' +
       '  body{font-size:10px}' +
-      '  .page{padding:10px 14px}' +
+      '  .page{padding:10px 14px;width:auto;max-width:none}' +
       '}';
 
     const html = '<!DOCTYPE html><html lang="id"><head>' +
@@ -1343,7 +1397,9 @@ function doCetakNilai(mode = 'print') {
       '</body></html>';
 
     if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
-    const w = window.open('', '_blank', 'width=1000,height=750');
+    // Perbesar jendela preview kalau landscape (kolom lebih banyak, butuh ruang lebih lebar)
+    const popupW = paperOrient === 'landscape' ? 1200 : 850;
+    const w = window.open('', '_blank', 'width=' + popupW + ',height=750');
     if (!w) { alert('Popup diblokir browser. Aktifkan popup dan coba lagi.'); return; }
     w.document.write(html);
     w.document.close();

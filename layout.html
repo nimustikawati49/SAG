@@ -1770,20 +1770,22 @@
   .nil-pill-active{background:#6C63FF!important;color:#fff!important;border-color:#6C63FF!important}
   .nil-pill-all{border-color:#22c55e;color:#22c55e}
   .nil-pill-all.nil-pill-active{background:#22c55e!important;border-color:#22c55e!important}
-  .ntd-inp{padding:4px;text-align:center}
-  .ntd-inp input{width:64px;padding:4px 3px;border:1.5px solid #d1d5db;border-radius:5px;text-align:center;font-size:12px}
+  .ntd-inp{padding:3px;text-align:center}
+  .ntd-inp input{width:48px;padding:4px 2px;border:1.5px solid #d1d5db;border-radius:5px;text-align:center;font-size:12px}
   .ntd-inp input:focus{border-color:#6C63FF;outline:none}
-  .ntd-calc{background:#f0f4ff;font-weight:600;font-size:12px;padding:5px 6px;text-align:center}
-  .ntd-plain{font-size:12px;padding:5px 6px;text-align:center}
+  .ntd-calc{background:#f0f4ff;font-weight:600;font-size:12px;padding:5px 4px;text-align:center}
+  .ntd-plain{font-size:12px;padding:5px 4px;text-align:center}
   body.dark .nil-pill{background:#1f2937;border-color:#4b5563;color:#e5e7eb}
   body.dark .ntd-calc{background:#1e293b}
-  #tabelNilai{width:100%;border-collapse:collapse}
-  #tabelNilai th{background:#6C63FF;color:#fff;padding:6px 5px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;font-size:12px}
+  #tabelNilai{width:100%;border-collapse:collapse;table-layout:auto}
+  #tabelNilai th{background:#6C63FF;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;font-size:11.5px}
   #tabelNilai td{border-bottom:1px solid #e5e7eb}
   #tabelNilai tr.row-kkm{background:#fff0f0}
+  #tabelNilai tr.row-nildata-empty{background:#fffbeb}
   body.dark #tabelNilai th{background:#4f46e5}
   body.dark #tabelNilai td{border-bottom-color:#374151}
   body.dark .ntd-inp input{background:#1f2937;color:#e5e7eb;border-color:#4b5563}
+  body.dark #tabelNilai tr.row-nildata-empty{background:#3f3418}
 </style>
 <div id="inputNilai" class="card tab" data-tabid="inputNilai" style="display:none">
   <h2>📊 Daftar Nilai Siswa</h2>
@@ -1915,31 +1917,36 @@
           ✏️ Mode edit aktif – klik komponen di atas untuk fokus satu kolom
         </span>
       </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px;
+        padding:7px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;font-size:12px">
+        <span class="muted" style="font-weight:600">Tampilkan kolom:</span>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="nilaiColTGSK" onchange="toggleNilaiKolom_()"> Tugas Kelompok</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="nilaiColRataDetail" onchange="toggleNilaiKolom_()"> Rata Tugas &amp; Rata UH</label>
+        <span class="muted" style="font-size:11px">Kolom yang tidak dipakai disembunyikan otomatis biar tabel tidak terpotong</span>
+      </div>
       <table id="tabelNilai">
         <thead id="tabelNilaiThead">
           <tr>
-            <th rowspan="2" style="min-width:32px">No</th>
-            <th rowspan="2" style="min-width:68px">NIS</th>
-            <th rowspan="2" style="min-width:140px;text-align:left;padding-left:8px">Nama Siswa</th>
+            <th rowspan="2" style="min-width:28px">No</th>
+            <th rowspan="2" style="min-width:60px">NIS</th>
+            <th rowspan="2" style="min-width:120px;text-align:left;padding-left:8px">Nama Siswa</th>
             <th colspan="3">Tugas Mandiri</th>
-            <th colspan="3">Tugas Kelompok</th>
             <th colspan="3">Ulangan Harian</th>
-            <th rowspan="2" style="min-width:56px">PTS</th>
-            <th rowspan="2" style="min-width:56px">SAS</th>
-            <th rowspan="2">Rata Tugas</th>
-            <th rowspan="2">Rata UH</th>
+            <th rowspan="2" style="min-width:50px">PTS</th>
+            <th rowspan="2" style="min-width:50px">SAS</th>
             <th rowspan="2">Rata Total</th>
             <th rowspan="2" style="background:#4338ca">Total Nilai</th>
             <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
           </tr>
           <tr>
             <th>TGS1</th><th>TGS2</th><th>TGS3</th>
-            <th>TK1</th><th>TK2</th><th>TK3</th>
             <th>UH1</th><th>UH2</th><th>UH3</th>
           </tr>
         </thead>
         <tbody id="tabelNilaiBody">
-          <tr><td colspan="19" style="padding:24px;color:#9ca3af;text-align:center">
+          <tr><td colspan="14" style="padding:24px;color:#9ca3af;text-align:center">
             Pilih filter dan klik &quot;Muat Data Siswa&quot;</td></tr>
         </tbody>
       </table>
@@ -2054,6 +2061,22 @@
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="cetakType" value="katrol"> Nilai Katrol</label>
       </div>
+    </div>
+
+    <!-- Ukuran Kertas -->
+    <div style="margin-bottom:14px">
+      <label style="font-weight:600;display:block;margin-bottom:6px">Ukuran &amp; Orientasi Kertas:</label>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakPaper" value="a4" checked> A4</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakPaper" value="f4"> F4 / Folio</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakOrient" value="landscape" checked> Landscape</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="cetakOrient" value="portrait"> Potrait</label>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:4px">Landscape disarankan kalau kolom yang ditampilkan banyak, supaya tidak ada kolom terpotong.</p>
     </div>
 
     <!-- Kolom yang ditampilkan -->
