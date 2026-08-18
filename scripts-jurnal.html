@@ -504,6 +504,7 @@ function editJurnal(id){
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
     kelas.value=d.kelas;
+    jam_ke.value=d.jam_ke||'';
     pertemuan.value=d.pertemuan;
     materi.value=d.materi;
     tujuan.value=d.tujuan||'';
@@ -820,11 +821,15 @@ async function simpan(){
     });
 
     // ===== VALIDASI FOTO =====
+    // Minimal 1 foto HANYA wajib untuk jurnal BARU — saat edit, guru boleh
+    // tidak menyentuh foto sama sekali (foto lama otomatis dipertahankan
+    // oleh updateJurnal di server, lihat Jurnal.js), jadi tidak boleh
+    // dipaksa pilih ulang file cuma untuk mengubah teks materi/refleksi.
     const fileInputs = ['foto1','foto2','foto3'];
     const fotoFiles = fileInputs
       .map(id => document.getElementById(id).files[0])
       .filter(f => f);
-    if(fotoFiles.length < 1){
+    if(!editingJurnalId && fotoFiles.length < 1){
       alert('⚠️ Minimal 1 foto dokumentasi wajib diupload');
       throw new Error('Foto wajib');
     }

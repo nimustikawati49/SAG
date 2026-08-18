@@ -487,11 +487,29 @@ function updateJurnal(data){
 
   sh.getRange(rowNumber, 3).setValue(data.kelas);
   sh.getRange(rowNumber, 4).setValue(data.jam_ke);
+  sh.getRange(rowNumber, 5).setValue(data.pertemuan);
   sh.getRange(rowNumber, 6).setValue(data.materi);
   sh.getRange(rowNumber, 7).setValue(data.tujuan);
   sh.getRange(rowNumber, 8).setValue(data.asesmen);
   sh.getRange(rowNumber, 16).setValue(data.refleksi);
 
+  // edit_count (kolom 12) — dulu TIDAK PERNAH bertambah sama sekali di
+  // sini (bug lama), jadi badge "0/3" di Riwayat Jurnal tidak pernah naik
+  // walau sudah diedit berkali-kali. Sekarang benar-benar dinaikkan tiap
+  // edit berhasil.
+  const prevEditCount = Number(values[rowIndex][11]) || 0;
+  sh.getRange(rowNumber, 12).setValue(prevEditCount + 1);
+
+  // Foto — CATATAN PENTING: client (scripts-jurnal.html) SELALU mengirim
+  // foto baru lewat key 'dokumentasi' (array base64), sama persis seperti
+  // simpanJurnal — TIDAK PERNAH mengirim 'keepFotos'/'replaceFotos'/
+  // 'newFotos' (versi lama fungsi ini salah asumsi menunggu key-key itu,
+  // yang tidak pernah ada isinya → finalFotos selalu [] → foto lama
+  // KETIMPA KOSONG tiap kali diedit, itu sebab laporan "foto hilang saat
+  // edit"). Sekarang: kalau ada foto BARU di 'dokumentasi', upload &
+  // GANTIKAN foto lama sepenuhnya (sama seperti simpanJurnal). Kalau
+  // 'dokumentasi' kosong (guru tidak menyentuh foto saat edit), foto LAMA
+  // dipertahankan apa adanya — TIDAK dihapus cuma karena tidak diisi ulang.
   let existingFotos = [];
   try{
     const raw = values[rowIndex][14];
@@ -503,79 +521,60 @@ function updateJurnal(data){
     existingFotos = [];
   }
 
-  let finalFotos = [];
-
-  if(data.keepFotos && Array.isArray(data.keepFotos)){
-    finalFotos = data.keepFotos;
-  }
-
-  const hasReplaceFotos = data.replaceFotos && Array.isArray(data.replaceFotos) && data.replaceFotos.length;
-  const hasNewFotos = data.newFotos && Array.isArray(data.newFotos) && data.newFotos.length;
+  let finalFotos = existingFotos;
   let fotoGagal = false;
 
-  // getGuruFolder_ (butuh DriveApp) cuma dipanggil kalau BENAR-BENAR ada
-  // foto baru/pengganti — dulu dipanggil tanpa syarat di sini, jadi SETIAP
-  // edit jurnal (termasuk yang tidak menyentuh foto sama sekali) ikut
-  // gagal kalau DriveApp diblokir. Dibungkus try/catch juga (sama seperti
-  // simpanJurnal) supaya edit jurnal tetap tersimpan meski upload foto
-  // gagal, bukan gagal total.
-  if(hasReplaceFotos || hasNewFotos){
+  if(data.dokumentasi && data.dokumentasi.length){
     try {
       const folder = getGuruFolder_(getAuth().email);
+      const uploaded = [];
 
-      if(hasReplaceFotos){
-        data.replaceFotos.forEach(r => {
+      data.dokumentasi.forEach(f => {
+        if(!f || !f.data) return;
+        const base64 = f.data.split(',')[1];
+        const blob = Utilities.newBlob(
+          Utilities.base64Decode(base64),
+          f.type || 'image/jpeg',
+          data.jurnalId + '_' + (f.name || 'foto')
+        );
+        const file = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        const url = "https://drive.google.com/uc?id=" + file.getId();
+        uploaded.push({ full: url });
+      });
 
-          if(!r.index && r.index !== 0) return;
-          if(!r.file || !r.file.data) return;
-
-          const base64 = r.file.data.split(',')[1];
-          const blob = compressImage_(base64, r.file.type);
-          const file = folder.createFile(blob);
-
-          finalFotos[r.index] = {
-            full: "https://drive.google.com/uc?id=" + file.getId(),
-            thumb: "https://drive.google.com/uc?id=" + file.getId()
-          };
-
-        });
-      }
-
-      if(hasNewFotos){
-        data.newFotos.forEach(f => {
-
-          if(!f.data) return;
-
-          const base64 = f.data.split(',')[1];
-          const blob = compressImage_(base64, f.type);
-          const file = folder.createFile(blob);
-
-          finalFotos.push({
-            full: "https://drive.google.com/uc?id=" + file.getId(),
-            thumb: "https://drive.google.com/uc?id=" + file.getId()
-          });
-
-        });
-      }
+      // Upload sukses SEMUA baru menggantikan foto lama — kalau ada yang
+      // gagal di tengah jalan, foto lama TETAP dipertahankan (tidak
+      // separuh terganti separuh hilang).
+      finalFotos = uploaded;
     } catch (fotoErr) {
       fotoGagal = true;
+      finalFotos = existingFotos; // gagal upload — foto lama tetap dipertahankan, bukan dihapus
       try { logError_('updateJurnal/uploadFoto', fotoErr); } catch (e2) {}
     }
   }
 
   sh.getRange(rowNumber, 15)
     .setValue(JSON.stringify(finalFotos));
+  sh.getRange(rowNumber, 18)
+    .setValue(finalFotos.map(f => f.full).filter(Boolean).join(','));
 
-  const shAbs = ss.getSheetByName('ABSENSI');
-  const absData = shAbs.getDataRange().getValues();
-
-  for(let i = absData.length - 1; i > 0; i--){
-    if(absData[i][0] == data.jurnalId){
-      shAbs.deleteRow(i + 1);
-    }
-  }
-
+  // Absensi — pengaman: kalau data.absensi kosong/tidak terkirim (mis.
+  // tabel siswa belum sempat termuat penuh saat klik Simpan — race
+  // condition async), JANGAN hapus data absensi yang sudah ada. Dulu
+  // baris lama selalu dihapus dulu baru diisi ulang TANPA cek ini, jadi
+  // kalau payload-nya kebetulan kosong, hasilnya "NIHIL" walau guru tidak
+  // benar-benar mengubah absensi (laporan bug ini).
   if(data.absensi && data.absensi.length){
+    const shAbs = ss.getSheetByName('ABSENSI');
+    const absData = shAbs.getDataRange().getValues();
+
+    for(let i = absData.length - 1; i > 0; i--){
+      if(absData[i][0] == data.jurnalId){
+        shAbs.deleteRow(i + 1);
+      }
+    }
+
     data.absensi.forEach(a => {
       shAbs.appendRow([
         data.jurnalId,
