@@ -542,11 +542,19 @@ function logError_(context, err) {
 
 /**
  * clearServerCache()
- * Bersihkan GAS Script Cache & User Cache setelah deploy baru.
- * Jalankan via: clasp run clearServerCache
- * atau buka Apps Script Editor → Run → clearServerCache
+ * Dulu dimaksudkan untuk "bersihkan semua cache" setelah deploy baru,
+ * tapi CacheService GAS TIDAK punya API untuk menghapus SEMUA key
+ * sekaligus tanpa tahu key-nya lebih dulu — Cache.removeAll() WAJIB diisi
+ * array key, bukan dipanggil tanpa argumen (itu sebab error "The
+ * parameters () don't match the method signature" yang selalu muncul
+ * tiap fungsi ini dijalankan — sudah dari awal begini, bukan regresi
+ * baru). Semua cache di aplikasi ini sudah pakai TTL pendek (60-180
+ * detik untuk data sheet, lihat getSheetCached/invalidateCache_ di file
+ * ini) jadi otomatis kadaluwarsa sendiri — tidak butuh wipe manual.
+ * Fungsi ini disederhanakan supaya aman dijalankan (tidak lagi error),
+ * tapi memang tidak melakukan apa-apa selain melapor status.
  *
- * CATATAN DEPLOYMENT:
+ * CATATAN DEPLOYMENT (tetap berlaku):
  * - URL /dev  → selalu menampilkan kode terbaru (versi HEAD).
  * - URL produksi (Manage Deployments) → menampilkan versi snapshot.
  * - Agar kode baru tampil di URL produksi:
@@ -554,9 +562,11 @@ function logError_(context, err) {
  *   ATAU jalankan: clasp deploy --description "v$(Get-Date -f yyyy-MM-dd)"
  */
 function clearServerCache() {
-  CacheService.getScriptCache().removeAll();
-  CacheService.getUserCache().removeAll();
-  return { status: 'cleared', ts: new Date().toISOString() };
+  return {
+    status: 'noop',
+    note: 'CacheService tidak mendukung hapus semua key sekaligus — cache di aplikasi ini pakai TTL pendek dan kadaluwarsa otomatis, tidak perlu wipe manual.',
+    ts: new Date().toISOString()
+  };
 }
 
 function generateLicenseToken() {
