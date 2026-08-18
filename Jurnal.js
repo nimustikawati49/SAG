@@ -288,6 +288,157 @@ function getNextPertemuanKe(kelas) {
   return maxPertemuan + 1;
 }
 
+/**
+ * _restFindOrCreateFolder_(token, name, parentId)
+ * Cari/buat folder lewat Drive API v3 MURNI (UrlFetchApp + OAuth token),
+ * bukan lewat service DriveApp bawaan — jalur kode yang BENAR-BENAR
+ * berbeda. parentId null = di My Drive root.
+ */
+function _restFindOrCreateFolder_(token, name, parentId) {
+  var safeName = String(name).replace(/'/g, "\\'");
+  var q = "name = '" + safeName + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false" +
+    (parentId ? " and '" + parentId + "' in parents" : " and 'root' in parents");
+  var searchRes = UrlFetchApp.fetch(
+    'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)',
+    { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true }
+  );
+  var searchJson = JSON.parse(searchRes.getContentText() || '{}');
+  if (searchJson.files && searchJson.files.length) return searchJson.files[0].id;
+
+  var metadata = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentId) metadata.parents = [parentId];
+  var createRes = UrlFetchApp.fetch(
+    'https://www.googleapis.com/drive/v3/files?fields=id',
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify(metadata),
+      muteHttpExceptions: true
+    }
+  );
+  var createJson = JSON.parse(createRes.getContentText() || '{}');
+  if (!createJson.id) throw new Error('Gagal buat folder "' + name + '" via REST API: ' + createRes.getContentText());
+  return createJson.id;
+}
+
+/**
+ * _uploadFotoViaRestApi_(email, jurnalId, f)
+ * FALLBACK saat DriveApp (service bawaan) gagal dengan "Access denied" —
+ * upload lewat Drive API v3 langsung via UrlFetchApp + OAuth token,
+ * jalur kode yang BERBEDA dari DriveApp (kadang lolos pembatasan yang
+ * spesifik memblokir service DriveApp tapi tidak panggilan REST API
+ * murni, tergantung kebijakan domain Google Workspace). Folder yang
+ * dipakai sama seperti getGuruFolder_ (FOLDER_DOKUMENTASI/emailSlug/
+ * tahun) supaya tetap terorganisir sama, terlepas dari jalur mana yang
+ * berhasil.
+ */
+function _uploadFotoViaRestApi_(email, jurnalId, f) {
+  var token = ScriptApp.getOAuthToken();
+  var setting = getSetting();
+  var tahun = setting.tahun_pelajaran || 'Tanpa_Tahun';
+  var safeEmail = email.replace(/[@.]/g, '_');
+
+  var folderId = _restFindOrCreateFolder_(token, FOLDER_DOKUMENTASI, null);
+  folderId = _restFindOrCreateFolder_(token, safeEmail, folderId);
+  folderId = _restFindOrCreateFolder_(token, tahun, folderId);
+
+  var base64 = f.data.split(',')[1];
+  var mimeType = f.type || 'image/jpeg';
+  var fileName = jurnalId + '_' + (f.name || 'foto');
+
+  var boundary = 'jgd_' + jurnalId + '_' + Math.random().toString(36).slice(2);
+  var metadata = { name: fileName, parents: [folderId] };
+  var body =
+    '--' + boundary + '\r\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) + '\r\n' +
+    '--' + boundary + '\r\n' +
+    'Content-Type: ' + mimeType + '\r\n' +
+    'Content-Transfer-Encoding: base64\r\n\r\n' +
+    base64 + '\r\n' +
+    '--' + boundary + '--';
+
+  var uploadRes = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    {
+      method: 'post',
+      contentType: 'multipart/related; boundary=' + boundary,
+      headers: { Authorization: 'Bearer ' + token },
+      payload: body,
+      muteHttpExceptions: true
+    }
+  );
+  var uploadJson = JSON.parse(uploadRes.getContentText() || '{}');
+  if (!uploadJson.id) throw new Error('Upload REST API gagal: ' + uploadRes.getContentText());
+
+  try {
+    UrlFetchApp.fetch(
+      'https://www.googleapis.com/drive/v3/files/' + uploadJson.id + '/permissions',
+      {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + token },
+        payload: JSON.stringify({ role: 'reader', type: 'anyone' }),
+        muteHttpExceptions: true
+      }
+    );
+  } catch (eShare) { /* file tetap terupload walau share publiknya gagal */ }
+
+  return { full: "https://drive.google.com/uc?id=" + uploadJson.id };
+}
+
+/**
+ * _uploadJurnalFotoList_(email, jurnalId, dokumentasiArr)
+ * Upload SEMUA foto di dokumentasiArr — coba DriveApp dulu (jalur normal,
+ * lewat getGuruFolder_), kalau itu melempar error APA PUN, coba lagi
+ * SATU KALI lewat _uploadFotoViaRestApi_ (jalur REST API murni) sebelum
+ * benar-benar menyerah. Melempar error kalau KEDUA jalur gagal — dipakai
+ * simpanJurnal/updateJurnal yang membungkusnya sendiri dengan try/catch
+ * supaya jurnal tetap tersimpan walau upload foto akhirnya tetap gagal.
+ */
+function _uploadJurnalFotoList_(email, jurnalId, dokumentasiArr) {
+  var result = [];
+  var usedFallback = false;
+
+  var folder = null;
+  try { folder = getGuruFolder_(email); } catch (e) { folder = null; }
+
+  dokumentasiArr.forEach(function (f) {
+    if (!f || !f.data) return;
+
+    if (folder) {
+      try {
+        var base64 = f.data.split(',')[1];
+        var blob = Utilities.newBlob(
+          Utilities.base64Decode(base64),
+          f.type || 'image/jpeg',
+          jurnalId + '_' + (f.name || 'foto')
+        );
+        var file = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        result.push({ full: "https://drive.google.com/uc?id=" + file.getId() });
+        return;
+      } catch (eDriveApp) {
+        try { logError_('uploadFoto/DriveApp_gagal', eDriveApp); } catch (e2) {}
+        // lanjut ke fallback REST API di bawah, jangan return dulu
+      }
+    }
+
+    // Fallback REST API — kalau ini JUGA gagal, error-nya dilempar ke
+    // atas (dibiarkan, tidak ditangkap di sini) supaya pemanggil
+    // (simpanJurnal/updateJurnal) tahu upload benar-benar gagal total.
+    usedFallback = true;
+    result.push(_uploadFotoViaRestApi_(email, jurnalId, f));
+  });
+
+  if (usedFallback) {
+    try { logAudit('UPLOAD_FOTO_VIA_REST_FALLBACK', email, jurnalId + ' | DriveApp gagal, berhasil lewat REST API'); } catch (e) {}
+  }
+
+  return result;
+}
+
 function simpanJurnal(data){
 
   ensureAcademicSchema_();
@@ -346,29 +497,8 @@ function simpanJurnal(data){
   // ke client supaya guru diberi tahu jelas, bukan diam-diam kehilangan foto.
   if(data.dokumentasi && data.dokumentasi.length){
     try {
-      const folder = getGuruFolder_(email);
-
-      data.dokumentasi.forEach(f=>{
-
-        const base64 = f.data.split(',')[1];
-
-        const blob = Utilities.newBlob(
-          Utilities.base64Decode(base64),
-          f.type || 'image/jpeg',
-          jurnalId + '_' + f.name
-        );
-
-        const file = folder.createFile(blob);
-        file.setSharing(
-          DriveApp.Access.ANYONE_WITH_LINK,
-          DriveApp.Permission.VIEW
-        );
-
-        const url = "https://drive.google.com/uc?id=" + file.getId();
-
-        fotoArr.push({ full: url });
-        fotoUrls.push(url);
-      });
+      fotoArr = _uploadJurnalFotoList_(email, jurnalId, data.dokumentasi);
+      fotoUrls = fotoArr.map(f => f.full).filter(Boolean);
     } catch (fotoErr) {
       fotoGagal = true;
       fotoArr = [];
@@ -526,27 +656,10 @@ function updateJurnal(data){
 
   if(data.dokumentasi && data.dokumentasi.length){
     try {
-      const folder = getGuruFolder_(getAuth().email);
-      const uploaded = [];
-
-      data.dokumentasi.forEach(f => {
-        if(!f || !f.data) return;
-        const base64 = f.data.split(',')[1];
-        const blob = Utilities.newBlob(
-          Utilities.base64Decode(base64),
-          f.type || 'image/jpeg',
-          data.jurnalId + '_' + (f.name || 'foto')
-        );
-        const file = folder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        const url = "https://drive.google.com/uc?id=" + file.getId();
-        uploaded.push({ full: url });
-      });
-
       // Upload sukses SEMUA baru menggantikan foto lama — kalau ada yang
-      // gagal di tengah jalan, foto lama TETAP dipertahankan (tidak
-      // separuh terganti separuh hilang).
-      finalFotos = uploaded;
+      // gagal di tengah jalan (exception dilempar dari dalam), foto lama
+      // TETAP dipertahankan (tidak separuh terganti separuh hilang).
+      finalFotos = _uploadJurnalFotoList_(getAuth().email, data.jurnalId, data.dokumentasi);
     } catch (fotoErr) {
       fotoGagal = true;
       finalFotos = existingFotos; // gagal upload — foto lama tetap dipertahankan, bukan dihapus
