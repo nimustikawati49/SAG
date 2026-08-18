@@ -865,9 +865,17 @@ async function simpan(){
         return;
       }
 
-      // ✅ BENAR-BENAR SUKSES
-      if(typeof showToast === 'function') showToast('✅ Jurnal berhasil disimpan!', 'success', 4000);
-      else alert('✅ Jurnal berhasil disimpan');
+      // ✅ BENAR-BENAR SUKSES — tapi kalau foto gagal diupload (mis. Drive
+      // diblokir kebijakan domain), jurnalnya tetap tersimpan (cuma butuh
+      // akses Sheets), jadi tetap diberi tahu sukses + peringatan terpisah
+      // soal fotonya, bukan dianggap gagal total.
+      if(res && res.fotoGagal){
+        if(typeof showToast === 'function') showToast('✅ Jurnal tersimpan, tapi foto GAGAL diupload (masalah akses Drive) — coba simpan ulang tanpa foto dulu kalau perlu.', 'warning', 8000);
+        else alert('✅ Jurnal tersimpan, tapi foto gagal diupload (masalah akses Drive).');
+      } else {
+        if(typeof showToast === 'function') showToast('✅ Jurnal berhasil disimpan!', 'success', 4000);
+        else alert('✅ Jurnal berhasil disimpan');
+      }
       editingJurnalId = null;
       clearDraft_(); // 🗑 hapus draft setelah simpan sukses
       showTab('riwayat');

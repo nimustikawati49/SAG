@@ -298,32 +298,46 @@ function simpanJurnal(data){
 
   let fotoArr = [];
   let fotoUrls = [];
+  let fotoGagal = false;
 
+  // Upload foto SENGAJA dibungkus try/catch terpisah dari sisa proses simpan
+  // — kalau DriveApp diblokir (mis. kebijakan domain Google Workspace yang
+  // membatasi akses Drive untuk web app, di luar kendali SuperAdmin
+  // aplikasi ini — pernah terjadi persis begini di deployment ini), jurnal
+  // TETAP tersimpan (cuma butuh akses Sheets, bukan Drive) alih-alih gagal
+  // total cuma karena fotonya tidak bisa diupload. fotoGagal dikirim balik
+  // ke client supaya guru diberi tahu jelas, bukan diam-diam kehilangan foto.
   if(data.dokumentasi && data.dokumentasi.length){
+    try {
+      const folder = getGuruFolder_(email);
 
-    const folder = getGuruFolder_(email);
+      data.dokumentasi.forEach(f=>{
 
-    data.dokumentasi.forEach(f=>{
+        const base64 = f.data.split(',')[1];
 
-      const base64 = f.data.split(',')[1];
+        const blob = Utilities.newBlob(
+          Utilities.base64Decode(base64),
+          f.type || 'image/jpeg',
+          jurnalId + '_' + f.name
+        );
 
-      const blob = Utilities.newBlob(
-        Utilities.base64Decode(base64),
-        f.type || 'image/jpeg',
-        jurnalId + '_' + f.name
-      );
+        const file = folder.createFile(blob);
+        file.setSharing(
+          DriveApp.Access.ANYONE_WITH_LINK,
+          DriveApp.Permission.VIEW
+        );
 
-      const file = folder.createFile(blob);
-      file.setSharing(
-        DriveApp.Access.ANYONE_WITH_LINK,
-        DriveApp.Permission.VIEW
-      );
+        const url = "https://drive.google.com/uc?id=" + file.getId();
 
-      const url = "https://drive.google.com/uc?id=" + file.getId();
-
-      fotoArr.push({ full: url });
-      fotoUrls.push(url);
-    });
+        fotoArr.push({ full: url });
+        fotoUrls.push(url);
+      });
+    } catch (fotoErr) {
+      fotoGagal = true;
+      fotoArr = [];
+      fotoUrls = [];
+      try { logError_('simpanJurnal/uploadFoto', fotoErr); } catch (e2) {}
+    }
   }
 
   const dokumentasi_json = JSON.stringify(fotoArr);
@@ -374,7 +388,7 @@ function simpanJurnal(data){
     logError_('simpanJurnal/asyncSync', syncErr);
   }
 
-  return { status:true };
+  return { status:true, fotoGagal: fotoGagal };
 }
 
 function getJurnalDetail(id){
@@ -458,43 +472,58 @@ function updateJurnal(data){
     finalFotos = data.keepFotos;
   }
 
-  const folder = getGuruFolder_(getAuth().email);
+  const hasReplaceFotos = data.replaceFotos && Array.isArray(data.replaceFotos) && data.replaceFotos.length;
+  const hasNewFotos = data.newFotos && Array.isArray(data.newFotos) && data.newFotos.length;
+  let fotoGagal = false;
 
-  if(data.replaceFotos && Array.isArray(data.replaceFotos)){
+  // getGuruFolder_ (butuh DriveApp) cuma dipanggil kalau BENAR-BENAR ada
+  // foto baru/pengganti — dulu dipanggil tanpa syarat di sini, jadi SETIAP
+  // edit jurnal (termasuk yang tidak menyentuh foto sama sekali) ikut
+  // gagal kalau DriveApp diblokir. Dibungkus try/catch juga (sama seperti
+  // simpanJurnal) supaya edit jurnal tetap tersimpan meski upload foto
+  // gagal, bukan gagal total.
+  if(hasReplaceFotos || hasNewFotos){
+    try {
+      const folder = getGuruFolder_(getAuth().email);
 
-    data.replaceFotos.forEach(r => {
+      if(hasReplaceFotos){
+        data.replaceFotos.forEach(r => {
 
-      if(!r.index && r.index !== 0) return;
-      if(!r.file || !r.file.data) return;
+          if(!r.index && r.index !== 0) return;
+          if(!r.file || !r.file.data) return;
 
-      const base64 = r.file.data.split(',')[1];
-      const blob = compressImage_(base64, r.file.type);
-      const file = folder.createFile(blob);
+          const base64 = r.file.data.split(',')[1];
+          const blob = compressImage_(base64, r.file.type);
+          const file = folder.createFile(blob);
 
-      finalFotos[r.index] = {
-        full: "https://drive.google.com/uc?id=" + file.getId(),
-        thumb: "https://drive.google.com/uc?id=" + file.getId()
-      };
+          finalFotos[r.index] = {
+            full: "https://drive.google.com/uc?id=" + file.getId(),
+            thumb: "https://drive.google.com/uc?id=" + file.getId()
+          };
 
-    });
-  }
+        });
+      }
 
-  if(data.newFotos && Array.isArray(data.newFotos)){
+      if(hasNewFotos){
+        data.newFotos.forEach(f => {
 
-    data.newFotos.forEach(f => {
+          if(!f.data) return;
 
-      if(!f.data) return;
+          const base64 = f.data.split(',')[1];
+          const blob = compressImage_(base64, f.type);
+          const file = folder.createFile(blob);
 
-      const base64 = f.data.split(',')[1];
-      const blob = compressImage_(base64, f.type);
-      const file = folder.createFile(blob);
+          finalFotos.push({
+            full: "https://drive.google.com/uc?id=" + file.getId(),
+            thumb: "https://drive.google.com/uc?id=" + file.getId()
+          });
 
-      finalFotos.push({
-        full: "https://drive.google.com/uc?id=" + file.getId(),
-        thumb: "https://drive.google.com/uc?id=" + file.getId()
-      });
-
-    });
+        });
+      }
+    } catch (fotoErr) {
+      fotoGagal = true;
+      try { logError_('updateJurnal/uploadFoto', fotoErr); } catch (e2) {}
+    }
   }
 
   sh.getRange(rowNumber, 15)
@@ -520,7 +549,7 @@ function updateJurnal(data){
     });
   }
 
-  return { status:true };
+  return { status:true, fotoGagal: fotoGagal };
 }
 
 function hapusJurnal(id){
