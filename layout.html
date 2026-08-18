@@ -1509,14 +1509,10 @@
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
 <!-- ===== KALENDER HARI LIBUR ====================================================
-     Dua sumber tanggal libur (lihat Kalender.js):
-      1. 'nasional' — ditarik otomatis dari kalender publik Google
-         ("Holidays in Indonesia") lewat tombol Sinkronkan di bawah. Tidak
-         otomatis jalan sendiri (biar tidak boros kuota Calendar API) —
-         SuperAdmin klik manual, idealnya sekali di awal tahun ajaran.
-      2. 'sekolah' — ditambah manual untuk hari libur yang tidak ada di
-         kalender nasional (libur semester, hari raya lokal, dst) —
-         SELALU menang, tidak pernah ditimpa sync nasional.
+     Semua tanggal libur diinput MANUAL oleh SuperAdmin (lihat Kalender.js
+     — sinkronisasi otomatis dari kalender publik Google sempat dicoba,
+     tapi dihapus karena akun Workspace deployment ini terus menolak izin
+     scope Calendar, kemungkinan dibatasi kebijakan admin domain sekolah).
      Begitu tersimpan, kartu "📅 Jadwal Mengajar" di Dashboard guru
      otomatis menampilkan "🎉 Libur" pada hari yang bertepatan, jadi guru
      tidak perlu dikasih tahu manual lewat menu lain. -->
@@ -1524,10 +1520,9 @@
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
     <div>
       <h3 style="margin:0">📅 Kalender Hari Libur</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Hari yang ditandai libur di sini otomatis muncul sebagai "🎉 Libur" di kartu Jadwal Mengajar semua guru — jadi guru langsung tahu tanpa perlu diberi tahu manual.</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Hari yang ditandai libur di sini otomatis muncul sebagai "🎉 Libur" di kartu Jadwal Mengajar semua guru — jadi guru langsung tahu tanpa perlu diberi tahu manual. Isi manual di bawah (termasuk hari libur nasional — tidak ada sinkronisasi otomatis).</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="syncKalenderNasionalUI()" style="background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">🔄 Sinkronkan Kalender Nasional</button>
       <button class="ghost" onclick="loadHariLiburPanel()" style="font-size:13px">🔄 Muat</button>
     </div>
   </div>

@@ -1,37 +1,25 @@
 /**
- * Kalender.js — Kalender Hari Libur (Nasional + Sekolah)
+ * Kalender.js — Kalender Hari Libur (input manual SuperAdmin)
  *
  * Sheet HARI_LIBUR (central-only, lihat _isCentralOnlySheet_ di Code.js)
  * menyimpan tanggal yang tidak efektif untuk mengajar — dipakai untuk
  * menandai kartu "Jadwal Mengajar" di Dashboard guru supaya jelas kalau
  * suatu hari itu libur, bukan cuma tidak ada jadwal.
  *
- * Dua sumber data:
- *  1. 'nasional' — ditarik otomatis dari kalender publik resmi Google
- *     ("Holidays in Indonesia") lewat syncKalenderNasional() (SuperAdmin
- *     only, manual trigger — BUKAN otomatis tiap hari, supaya tidak
- *     membebani kuota Calendar API tanpa perlu). ID kalender publik ini
- *     TIDAK selalu sama persis di semua akun/region, jadi dicoba
- *     beberapa kandidat (KALENDER_NASIONAL_ID_CANDIDATES_) sampai dapat
- *     yang benar-benar punya event. Kalender publik ini TIDAK mencakup
- *     hal spesifik sekolah (libur semester, hari raya lokal, dst).
- *  2. 'sekolah' — ditambah manual oleh SuperAdmin lewat addHariLiburManual()
- *     untuk hari libur yang tidak ada di kalender nasional. Entry
- *     'sekolah' TIDAK PERNAH ditimpa oleh sync nasional (lihat
- *     syncKalenderNasional — hanya menulis/update baris ber-sumber
- *     'nasional').
+ * CATATAN: sebelumnya ada juga sinkronisasi otomatis dari kalender publik
+ * Google ("Holidays in Indonesia") lewat CalendarApp — DIHAPUS karena
+ * akun Google Workspace deployment ini (domain @guru.smp.belajar.id)
+ * menolak izin scope Calendar terus-menerus (kemungkinan dibatasi
+ * kebijakan admin Workspace sekolah, di luar kendali SuperAdmin aplikasi
+ * ini) — dicoba re-otorisasi manual pun tetap gagal. Semua hari libur
+ * sekarang HANYA lewat input manual SuperAdmin (addHariLiburManual),
+ * kolom 'sumber' tetap dipertahankan di sheet untuk kompatibilitas data
+ * lama (baris ber-sumber 'nasional' dari percobaan sync sebelumnya,
+ * kalau ada, tetap tampil apa adanya — cuma tidak ada lagi cara
+ * menambah baris baru ber-sumber itu).
  */
 
 var HARI_LIBUR_SHEET_ = 'HARI_LIBUR';
-// Beberapa kemungkinan ID kalender publik resmi Google untuk hari libur
-// Indonesia — dicoba satu-satu oleh syncKalenderNasional() sampai ketemu
-// yang benar-benar punya event (Google kadang mengubah/menduplikasi ID
-// ini antar akun/region, jadi tidak cukup andalkan 1 ID saja).
-var KALENDER_NASIONAL_ID_CANDIDATES_ = [
-  'en.indonesian#holiday@group.v.calendar.google.com',
-  'id.indonesian#holiday@group.v.calendar.google.com',
-  'en.indonesian.official#holiday@group.v.calendar.google.com'
-];
 
 function _ensureHariLiburSheet_() {
   var ss = getCentralSpreadsheet_();
@@ -50,96 +38,11 @@ function _formatTanggalISO_(d) {
 }
 
 /**
- * syncKalenderNasional()
- * SuperAdmin only — tarik hari libur nasional Indonesia dari kalender
- * publik Google untuk rentang -30 hari s.d. +400 hari dari sekarang
- * (cukup untuk menutup 1 tahun ajaran penuh + sisa semester berjalan).
- * Upsert per tanggal: kalau sudah ada baris 'sekolah' untuk tanggal itu,
- * DILEWATI (tidak ditimpa) — entry manual sekolah selalu menang. Kalau
- * sudah ada baris 'nasional' lama, keterangannya diperbarui kalau beda.
- *
- * Coba tiap ID di KALENDER_NASIONAL_ID_CANDIDATES_ sampai dapat kalender
- * yang benar-benar punya event di rentang tsb — kalau SEMUA kandidat
- * gagal/kosong, error yang dilempar berisi ID mana saja yang sudah
- * dicoba supaya gampang didiagnosis (bukan cuma "gagal" tanpa detail).
- */
-function syncKalenderNasional() {
-  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-
-  var now = new Date();
-  var start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  var end = new Date(now.getTime() + 400 * 24 * 60 * 60 * 1000);
-
-  var events = null;
-  var usedId = '';
-  var attempts = [];
-
-  for (var ci = 0; ci < KALENDER_NASIONAL_ID_CANDIDATES_.length; ci++) {
-    var candidateId = KALENDER_NASIONAL_ID_CANDIDATES_[ci];
-    try {
-      var cal = CalendarApp.getCalendarById(candidateId);
-      if (!cal) { attempts.push(candidateId + ': tidak ditemukan'); continue; }
-      var ev = cal.getEvents(start, end);
-      attempts.push(candidateId + ': ' + ev.length + ' event');
-      if (ev.length > 0) { events = ev; usedId = candidateId; break; }
-    } catch (e) {
-      attempts.push(candidateId + ': error - ' + e.message);
-    }
-  }
-
-  if (!events) {
-    throw new Error('Tidak ada kalender nasional yang menghasilkan data. Detail percobaan: ' + attempts.join(' | ') + '. Coba tambah hari libur manual dulu di bawah, atau cek ID kalender publik yang benar untuk akun ini.');
-  }
-
-  var sh = _ensureHariLiburSheet_();
-  var rows = sh.getDataRange().getValues();
-  var existingByTanggal = {}; // tanggal -> { rowNum, sumber }
-  for (var i = 1; i < rows.length; i++) {
-    var t = String(rows[i][0] || '').trim();
-    if (!t) continue;
-    existingByTanggal[t] = { rowNum: i + 1, sumber: String(rows[i][2] || '').toLowerCase().trim(), keterangan: String(rows[i][1] || '') };
-  }
-
-  var now_ = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-  var added = 0, updated = 0, skipped = 0;
-  var appendBatch = [];
-
-  events.forEach(function (ev) {
-    var tanggal;
-    try { tanggal = _formatTanggalISO_(ev.getAllDayStartDate ? ev.getAllDayStartDate() : ev.getStartTime()); }
-    catch (e) { return; }
-    var keterangan = String(ev.getTitle() || '').trim();
-    if (!tanggal || !keterangan) return;
-
-    var existing = existingByTanggal[tanggal];
-    if (existing) {
-      if (existing.sumber === 'sekolah') { skipped++; return; } // entry sekolah menang, jangan ditimpa
-      if (existing.keterangan !== keterangan) {
-        sh.getRange(existing.rowNum, 2).setValue(keterangan);
-        updated++;
-      }
-      return;
-    }
-
-    appendBatch.push([tanggal, keterangan, 'nasional', now_]);
-    existingByTanggal[tanggal] = { rowNum: -1, sumber: 'nasional', keterangan: keterangan }; // cegah duplikat dalam batch yang sama
-    added++;
-  });
-
-  if (appendBatch.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, appendBatch.length, 4).setValues(appendBatch);
-  }
-
-  logAudit('SYNC_KALENDER_NASIONAL', getLoginEmail(), 'ID: ' + usedId + ' | ditambah: ' + added + ' | diperbarui: ' + updated + ' | dilewati (sudah ada entry sekolah): ' + skipped);
-  return { success: true, added: added, updated: updated, skipped: skipped, usedId: usedId, totalEvents: events.length };
-}
-
-/**
  * addHariLiburManual(tanggal, keterangan)
- * SuperAdmin only — tambah/ubah 1 hari libur khusus sekolah (sumber
- * 'sekolah'), mis. libur semester, hari raya lokal yang tidak ada di
- * kalender nasional, dst. Kalau tanggal itu sudah ada (dari sumber mana
- * pun), keterangannya diganti dan sumbernya jadi 'sekolah'.
+ * SuperAdmin only — satu-satunya cara mengisi HARI_LIBUR (lihat catatan
+ * di header file ini soal sinkronisasi otomatis yang dihapus). Mencakup
+ * hari libur nasional MAUPUN khusus sekolah — semuanya diinput manual di
+ * sini. Kalau tanggal itu sudah ada, keterangannya diganti.
  */
 function addHariLiburManual(tanggal, keterangan) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');

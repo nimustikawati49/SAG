@@ -1515,7 +1515,7 @@ function loadHariLiburPanel() {
   google.script.run
     .withSuccessHandler(function(rows) {
       if (!rows || !rows.length) {
-        el.innerHTML = '<div class="alert-banner info">Belum ada hari libur tersimpan. Klik "🔄 Sinkronkan Kalender Nasional" atau tambah manual di atas.</div>';
+        el.innerHTML = '<div class="alert-banner info">Belum ada hari libur tersimpan. Tambah manual lewat form di atas.</div>';
         return;
       }
       var todayISO = new Date().toISOString().slice(0, 10);
@@ -1539,31 +1539,6 @@ function loadHariLiburPanel() {
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
     })
     .getHariLiburList();
-}
-
-function syncKalenderNasionalUI() {
-  var resultEl = document.getElementById('hariLiburResult');
-  if (resultEl) resultEl.textContent = '';
-  var stopElapsed = (typeof startElapsedNotice_ === 'function' && resultEl)
-    ? startElapsedNotice_(resultEl, '⏳ Menyinkronkan kalender nasional...')
-    : null;
-
-  google.script.run
-    .withSuccessHandler(function(res) {
-      if (stopElapsed) stopElapsed();
-      var msg = '✅ Sinkron selesai (kalender: ' + res.usedId + ', total ' + res.totalEvents + ' event ditemukan) — ditambah: ' + res.added + ', diperbarui: ' + res.updated +
-        (res.skipped ? ', dilewati (sudah ada entry sekolah): ' + res.skipped : '') + '.';
-      if (resultEl) resultEl.textContent = msg;
-      if (typeof showToast === 'function') showToast(msg, 'success', 8000);
-      loadHariLiburPanel();
-    })
-    .withFailureHandler(function(err) {
-      if (stopElapsed) stopElapsed();
-      var msg = '❌ ' + (err && err.message ? err.message : err);
-      if (resultEl) resultEl.textContent = msg;
-      if (typeof showToast === 'function') showToast(msg, 'error', 9000);
-    })
-    .syncKalenderNasional();
 }
 
 function addHariLiburManualUI() {
