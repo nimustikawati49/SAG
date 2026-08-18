@@ -251,6 +251,43 @@ function compressImage_(base64, type){
 
 }
 
+/**
+ * getNextPertemuanKe(kelas)
+ * Sarankan nomor pertemuan BERIKUTNYA untuk kelas ini — dihitung dari
+ * pertemuan TERBESAR yang sudah ada untuk guru+kelas+tahun/semester aktif
+ * yang sama, +1 (bukan sekadar jumlah baris, supaya tidak salah saran
+ * kalau ada pertemuan yang pernah dihapus di tengah). Dipanggil client
+ * (loadSiswa di scripts-jurnal.html) saat kelas dipilih untuk entri BARU
+ * — dropdown "Pertemuan Ke" sebelumnya statis 1-24 tanpa saran apa pun,
+ * jadi diam-diam nyangkut di pilihan pertama (1) kalau guru lupa
+ * menggantinya manual. Guru tetap bisa override manual kalau perlu.
+ */
+function getNextPertemuanKe(kelas) {
+  const auth = getAuth();
+  if (!auth.email || !kelas) return 1;
+
+  const setting = getSetting();
+  const activeTahun = setting.tahun_pelajaran || '';
+  const activeSemester = setting.semester || '';
+
+  const sh = sheet('JURNAL');
+  if (!sh) return 1;
+  const rows = sh.getDataRange().getValues();
+
+  let maxPertemuan = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (String(row[12] || '').toLowerCase().trim() !== auth.email) continue;
+    if (String(row[2] || '').trim() !== String(kelas).trim()) continue;
+    if (activeTahun && row[18] && String(row[18]) !== activeTahun) continue;
+    if (activeSemester && row[13] && String(row[13]) !== activeSemester) continue;
+    const p = parseInt(row[4], 10);
+    if (!isNaN(p) && p > maxPertemuan) maxPertemuan = p;
+  }
+
+  return maxPertemuan + 1;
+}
+
 function simpanJurnal(data){
 
   ensureAcademicSchema_();
@@ -673,29 +710,40 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
       if (alpha.length) absHtml += `🔴 <b>A (Alpha)</b><br>${alpha.join('<br>')}`;
     }
 
-    // foto
+    // foto — thumbnail visual (bukan cuma teks link), pakai endpoint
+    // thumbnail resmi Drive (lh3.googleusercontent.com/d/ID=wN-hN) supaya
+    // gambar kecil benar-benar tampil di tabel, bukan cuma tulisan
+    // "📷 Foto 1" yang harus diklik dulu untuk lihat isinya. Tetap
+    // dibungkus <a> supaya klik tetap buka versi penuh di tab baru.
     let fotoHtml = '-';
     try {
-      let fotoLinks = [];
+      let fotoThumbs = [];
+      const pushThumb = (fileId) => {
+        if (!fileId) return;
+        fotoThumbs.push(
+          `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" title="Buka foto penuh">` +
+          `<img src="https://lh3.googleusercontent.com/d/${fileId}=w80-h80" ` +
+          `style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;margin:2px" ` +
+          `loading="lazy" alt="Dokumentasi"></a>`
+        );
+      };
       if (row[14]) {
         const parsed = JSON.parse(row[14]);
         if (Array.isArray(parsed)) {
-          parsed.forEach((f, idx) => {
+          parsed.forEach((f) => {
             if (!f || !f.full) return;
             const m = f.full.match(/[-\w]{25,}/);
-            if (!m) return;
-            fotoLinks.push(`<a href="https://drive.google.com/file/d/${m[0]}/view" target="_blank" style="font-weight:600;color:#4f46e5;text-decoration:none;">📷 Foto ${idx+1}</a>`);
+            if (m) pushThumb(m[0]);
           });
         }
       }
-      if (fotoLinks.length === 0 && row[17]) {
-        String(row[17]).trim().split(',').filter(u=>u.trim()).forEach((u, idx) => {
+      if (fotoThumbs.length === 0 && row[17]) {
+        String(row[17]).trim().split(',').filter(u=>u.trim()).forEach((u) => {
           const m = u.match(/[-\w]{25,}/);
-          if (!m) return;
-          fotoLinks.push(`<a href="https://drive.google.com/file/d/${m[0]}/view" target="_blank" style="font-weight:600;color:#4f46e5;text-decoration:none;">📷 Foto ${idx+1}</a>`);
+          if (m) pushThumb(m[0]);
         });
       }
-      if (fotoLinks.length) fotoHtml = fotoLinks.join('<br>');
+      if (fotoThumbs.length) fotoHtml = `<div style="display:flex;flex-wrap:wrap;gap:2px">${fotoThumbs.join('')}</div>`;
     } catch(e) { fotoHtml = '-'; }
 
     rows.push({

@@ -296,6 +296,21 @@ function loadSiswa(){
     }
     endProgress();
   }).getSiswaByKelas(kelas.value);
+
+  // Sarankan "Pertemuan Ke" berikutnya untuk kelas ini (dropdown 1-24
+  // sebelumnya statis, diam-diam nyangkut di pilihan pertama kalau lupa
+  // diganti manual) — TIDAK dijalankan saat mode edit (editJurnal sudah
+  // set nilai pertemuan yang benar sebelum manggil loadSiswa) atau saat
+  // draft sedang dipulihkan (restoreDraft_ menimpa nilai ini lagi
+  // setelahnya kalau draft.pertemuan ada, jadi aman tetap dipanggil).
+  if(!editingJurnalId && typeof pertemuan !== 'undefined' && pertemuan){
+    google.script.run
+      .withSuccessHandler(function(next){
+        if(pertemuan && next) pertemuan.value = String(next);
+      })
+      .withFailureHandler(function(){})
+      .getNextPertemuanKe(kelas.value);
+  }
 }
 /* ================= RIWAYAT ================= */
 function loadRiwayatFilterKelas(){
