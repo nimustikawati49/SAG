@@ -86,6 +86,44 @@ window._getJadwalSaveDebug = function(){
   return window._jadwalSaveDebug || null;
 };
 
+/* =================================================================
+   FOTO HOVER/TOUCH ZOOM PREVIEW — dipakai di thumbnail Riwayat Jurnal.
+   Sengaja pakai elemen <img> mengambang position:fixed yang ditempel
+   ke <body> (bukan CSS transform:scale di dalam sel tabel), karena
+   .table-wrap pembungkusnya overflow-x:auto — kalau cuma di-scale di
+   tempat, gambar besarnya kepotong oleh scroll container. Klik tetap
+   jalan normal buka tab baru (link <a> tidak di-preventDefault).
+   ================================================================= */
+let _fotoZoomEl_ = null;
+function _fotoZoomShow_(ev, fileId){
+  _fotoZoomHide_();
+  const img = document.createElement('img');
+  img.src = 'https://lh3.googleusercontent.com/d/' + fileId + '=w420-h420';
+  img.style.cssText = 'position:fixed;z-index:99999;border-radius:12px;border:3px solid #fff;'
+    + 'box-shadow:0 12px 40px rgba(0,0,0,.4);pointer-events:none;max-width:280px;max-height:280px;'
+    + 'object-fit:cover;opacity:0;transition:opacity .12s ease';
+  document.body.appendChild(img);
+  _fotoZoomEl_ = img;
+  _fotoZoomMove_(ev);
+  requestAnimationFrame(function(){ if(_fotoZoomEl_) _fotoZoomEl_.style.opacity = '1'; });
+}
+function _fotoZoomMove_(ev){
+  if(!_fotoZoomEl_) return;
+  const t = (ev.touches && ev.touches[0]) ? ev.touches[0] : ev;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = t.clientX + 24, y = t.clientY + 24;
+  if(x + 290 > vw) x = t.clientX - 300;
+  if(y + 290 > vh) y = t.clientY - 300;
+  _fotoZoomEl_.style.left = Math.max(8, x) + 'px';
+  _fotoZoomEl_.style.top  = Math.max(8, y) + 'px';
+}
+function _fotoZoomHide_(){
+  if(_fotoZoomEl_){ _fotoZoomEl_.remove(); _fotoZoomEl_ = null; }
+}
+window._fotoZoomShow_ = _fotoZoomShow_;
+window._fotoZoomMove_ = _fotoZoomMove_;
+window._fotoZoomHide_ = _fotoZoomHide_;
+
 /* ================= INIT ================= */
 /* ================= RIWAYAT STATE ================= */
 let riwayatData  = [];
@@ -194,6 +232,13 @@ function showTab(id){
   // 🔥 LOAD KELAS SAAT BUKA JURNALKU
   if(id === 'jurnalku'){
     loadKelas();
+    // Bukan mode edit (mis. buka jurnal baru lewat FAB) — pastikan box
+    // foto lama dari sesi edit sebelumnya tidak nyangkut kebawa.
+    if(!editingJurnalId){
+      const efb = document.getElementById('existingFotoBox');
+      if(efb){ efb.style.display = 'none'; efb.innerHTML = ''; }
+      editRemovedFotoIds = [];
+    }
     // Restore draft (hanya jika bukan mode edit)
     setTimeout(function() { if (!editingJurnalId) restoreDraft_(); }, 300);
   }
@@ -475,7 +520,7 @@ function renderRiwayat(){
           </span>
         </td>
         <td class="actions">
-          <button onclick="editJurnal('${x.jurnalId}')"
+          <button onclick="editJurnal('${x.jurnalId}', event)"
             ${x.locked ? 'disabled' : ''}>✏️</button>
           <button class="danger"
             onclick="hapusJurnal('${x.jurnalId}')">🗑️</button>
@@ -487,8 +532,73 @@ function renderRiwayat(){
   renderRiwayatPagination();
 }
 
-function editJurnal(id){
+// Foto lama yang ditandai hapus saat mode edit (diisi ulang tiap kali
+// editJurnal() dipanggil, dikosongkan lagi setelah simpan/batal edit).
+let editRemovedFotoIds = [];
+
+function _extractDriveFileId_(url){
+  if(!url) return '';
+  const m = String(url).match(/[-\w]{25,}/);
+  return m ? m[0] : '';
+}
+
+// Tampilkan foto lama saat edit — TIDAK hilang begitu saja seperti
+// sebelumnya (guru tidak tahu foto apa saja yang sudah ada), tapi bisa
+// ditandai hapus per foto (klik 🗑️ lagi untuk batal) sebelum Simpan.
+function renderExistingFotoBox_(fotoArr){
+  const box = document.getElementById('existingFotoBox');
+  if(!box) return;
+  editRemovedFotoIds = [];
+  if(!fotoArr || !fotoArr.length){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = '<small class="helper">📷 Foto lama — klik 🗑️ untuk hapus, klik lagi untuk batal:</small>'
+    + '<div id="existingFotoList" style="display:flex;flex-wrap:wrap;margin-top:6px"></div>';
+  const list = box.querySelector('#existingFotoList');
+  fotoArr.forEach((f) => {
+    const fid = f && f.full ? _extractDriveFileId_(f.full) : '';
+    if(!fid) return;
+    const item = document.createElement('div');
+    item.className = 'existing-foto-item';
+    item.dataset.fid = fid;
+    item.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${fid}=w120-h120" loading="lazy" alt="Foto lama">`
+      + `<button type="button" class="existing-foto-remove-badge" title="Hapus foto ini">🗑️</button>`;
+    item.querySelector('button').onclick = function(){ _toggleRemoveExistingFoto_(fid, item); };
+    list.appendChild(item);
+  });
+}
+
+function _toggleRemoveExistingFoto_(fid, item){
+  const idx = editRemovedFotoIds.indexOf(fid);
+  if(idx === -1){
+    editRemovedFotoIds.push(fid);
+    item.classList.add('removed');
+  } else {
+    editRemovedFotoIds.splice(idx, 1);
+    item.classList.remove('removed');
+  }
+}
+
+function editJurnal(id, ev){
+  // 🔄 Progresbar + penanda waktu berjalan di tombol yang diklik, supaya
+  // guru tahu proses memuat data jurnal sedang berlangsung (bukan diam
+  // tanpa respon) sebelum form edit terisi.
+  const btn = ev && ev.currentTarget ? ev.currentTarget : null;
+  const btnOrigHtml = btn ? btn.innerHTML : null;
+  if(btn) btn.disabled = true;
+  startProgress();
+  const stopElapsed = startElapsedNotice_(btn, '⏳');
+  const finishLoading = () => {
+    if(typeof stopElapsed === 'function') stopElapsed();
+    endProgress();
+    if(btn){ btn.innerHTML = btnOrigHtml; btn.disabled = false; }
+  };
+
   google.script.run.withSuccessHandler(d=>{
+    finishLoading();
     if(d.locked){
       if(typeof showToast === 'function') showToast('🔒 Jurnal terkunci (≥45 hari)', 'warning');
       else alert('Jurnal terkunci (≥45 hari)');
@@ -503,16 +613,37 @@ function editJurnal(id){
     // Simpan absensi sebelum loadSiswa agar bisa di-restore
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
-    kelas.value=d.kelas;
     jam_ke.value=d.jam_ke||'';
     pertemuan.value=d.pertemuan;
     materi.value=d.materi;
     tujuan.value=d.tujuan||'';
     asesmen.value=d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
-    loadSiswa();
+    renderExistingFotoBox_(d.foto || []);
+
+    // Kelas: dropdown-nya dimuat ASYNC lewat loadKelas() yang baru saja
+    // dipicu oleh showTab('jurnalku') di atas. Kalau opsinya belum sempat
+    // terisi saat baris ini jalan, kelas.value=... diam-diam gagal
+    // "nempel" (browser mengabaikan value yang belum ada opsinya) — itu
+    // sebab laporan "Kelas harus diisi ulang saat edit". Pola retry ini
+    // sama dengan applyKelas() di restoreDraft_() untuk kasus yang sama.
+    let kelasRetryEdit = 0;
+    const applyKelasEdit = function(){
+      const selKelas = document.getElementById('kelas');
+      if(!selKelas) return;
+      selKelas.value = d.kelas;
+      if(selKelas.value === d.kelas){
+        loadSiswa();
+      } else if(kelasRetryEdit < 6){
+        kelasRetryEdit++;
+        setTimeout(applyKelasEdit, 500);
+      }
+    };
+    applyKelasEdit();
+
     if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
   }).withFailureHandler(err=>{
+    finishLoading();
     if(typeof showToast === 'function') showToast('❌ Gagal memuat detail jurnal', 'error');
   }).getJurnalDetail(id);
 }
@@ -825,12 +956,21 @@ async function simpan(){
     // tidak menyentuh foto sama sekali (foto lama otomatis dipertahankan
     // oleh updateJurnal di server, lihat Jurnal.js), jadi tidak boleh
     // dipaksa pilih ulang file cuma untuk mengubah teks materi/refleksi.
+    // Tapi kalau semua foto lama ditandai hapus tanpa foto pengganti,
+    // tetap tidak boleh — jurnal jangan sampai berakhir 0 foto.
     const fileInputs = ['foto1','foto2','foto3'];
     const fotoFiles = fileInputs
       .map(id => document.getElementById(id).files[0])
       .filter(f => f);
+    const existingKeptCount = editingJurnalId
+      ? document.querySelectorAll('#existingFotoList .existing-foto-item:not(.removed)').length
+      : 0;
     if(!editingJurnalId && fotoFiles.length < 1){
       alert('⚠️ Minimal 1 foto dokumentasi wajib diupload');
+      throw new Error('Foto wajib');
+    }
+    if(editingJurnalId && (existingKeptCount + fotoFiles.length) < 1){
+      alert('⚠️ Minimal 1 foto dokumentasi harus tersisa — jangan hapus semua foto lama tanpa foto pengganti');
       throw new Error('Foto wajib');
     }
     if(fotoFiles.length > 3){
@@ -863,7 +1003,8 @@ async function simpan(){
       asesmen: asesmen.value || '-',
       refleksi: refleksi.value || '-',
       absensi: abs,
-      dokumentasi: fotos
+      dokumentasi: fotos,
+      removeFotos: editingJurnalId ? editRemovedFotoIds : []
     };
 
     const fn = editingJurnalId ? 'updateJurnal' : 'simpanJurnal';
@@ -897,6 +1038,9 @@ async function simpan(){
         else alert('✅ Jurnal berhasil disimpan');
       }
       editingJurnalId = null;
+      editRemovedFotoIds = [];
+      const efbDone = document.getElementById('existingFotoBox');
+      if(efbDone){ efbDone.style.display = 'none'; efbDone.innerHTML = ''; }
       clearDraft_(); // 🗑 hapus draft setelah simpan sukses
       showTab('riwayat');
       loadRiwayat();

@@ -630,16 +630,13 @@ function updateJurnal(data){
   const prevEditCount = Number(values[rowIndex][11]) || 0;
   sh.getRange(rowNumber, 12).setValue(prevEditCount + 1);
 
-  // Foto — CATATAN PENTING: client (scripts-jurnal.html) SELALU mengirim
-  // foto baru lewat key 'dokumentasi' (array base64), sama persis seperti
-  // simpanJurnal — TIDAK PERNAH mengirim 'keepFotos'/'replaceFotos'/
-  // 'newFotos' (versi lama fungsi ini salah asumsi menunggu key-key itu,
-  // yang tidak pernah ada isinya → finalFotos selalu [] → foto lama
-  // KETIMPA KOSONG tiap kali diedit, itu sebab laporan "foto hilang saat
-  // edit"). Sekarang: kalau ada foto BARU di 'dokumentasi', upload &
-  // GANTIKAN foto lama sepenuhnya (sama seperti simpanJurnal). Kalau
-  // 'dokumentasi' kosong (guru tidak menyentuh foto saat edit), foto LAMA
-  // dipertahankan apa adanya — TIDAK dihapus cuma karena tidak diisi ulang.
+  // Foto — CATATAN PENTING: client (scripts-jurnal.html) mengirim foto
+  // baru lewat key 'dokumentasi' (array base64) dan ID foto lama yang
+  // ditandai hapus lewat 'removeFotos' (array file ID hasil ekstrak dari
+  // URL foto lama). Model lama "kirim dokumentasi = ganti SEMUA foto"
+  // sudah diganti model per-foto: foto lama yang TIDAK ditandai hapus
+  // tetap dipertahankan, foto baru DITAMBAHKAN (bukan menimpa semuanya),
+  // supaya guru bisa keep sebagian & replace sebagian saja.
   let existingFotos = [];
   try{
     const raw = values[rowIndex][14];
@@ -651,21 +648,33 @@ function updateJurnal(data){
     existingFotos = [];
   }
 
-  let finalFotos = existingFotos;
+  const removeIds = Array.isArray(data.removeFotos) ? data.removeFotos : [];
+  let keptFotos = removeIds.length
+    ? existingFotos.filter(f => {
+        const m = String((f && f.full) || '').match(/[-\w]{25,}/);
+        const fid = m ? m[0] : '';
+        return removeIds.indexOf(fid) === -1;
+      })
+    : existingFotos;
+
+  let finalFotos = keptFotos;
   let fotoGagal = false;
 
   if(data.dokumentasi && data.dokumentasi.length){
     try {
-      // Upload sukses SEMUA baru menggantikan foto lama — kalau ada yang
-      // gagal di tengah jalan (exception dilempar dari dalam), foto lama
-      // TETAP dipertahankan (tidak separuh terganti separuh hilang).
-      finalFotos = _uploadJurnalFotoList_(getAuth().email, data.jurnalId, data.dokumentasi);
+      // Upload foto baru DITAMBAHKAN ke foto lama yang masih dipertahankan
+      // (bukan menggantikan semuanya) — kalau upload gagal, foto lama yang
+      // masih tersisa (setelah removeFotos) tetap dipertahankan apa adanya.
+      const uploaded = _uploadJurnalFotoList_(getAuth().email, data.jurnalId, data.dokumentasi);
+      finalFotos = keptFotos.concat(uploaded);
     } catch (fotoErr) {
       fotoGagal = true;
-      finalFotos = existingFotos; // gagal upload — foto lama tetap dipertahankan, bukan dihapus
+      finalFotos = keptFotos;
       try { logError_('updateJurnal/uploadFoto', fotoErr); } catch (e2) {}
     }
   }
+
+  if(finalFotos.length > 3) finalFotos = finalFotos.slice(0, 3);
 
   sh.getRange(rowNumber, 15)
     .setValue(JSON.stringify(finalFotos));
@@ -830,10 +839,14 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     let fotoHtml = '-';
     try {
       let fotoThumbs = [];
+      // Hover/touch = perbesar (lihat _fotoZoomShow_ di scripts-jurnal.html),
+      // klik tetap buka foto penuh di tab baru.
       const pushThumb = (fileId) => {
         if (!fileId) return;
         fotoThumbs.push(
-          `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" title="Buka foto penuh">` +
+          `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" title="Sorot untuk perbesar · klik untuk buka penuh" ` +
+          `onmouseenter="_fotoZoomShow_(event,'${fileId}')" onmousemove="_fotoZoomMove_(event)" onmouseleave="_fotoZoomHide_()" ` +
+          `ontouchstart="_fotoZoomShow_(event,'${fileId}')" ontouchend="_fotoZoomHide_()" ontouchcancel="_fotoZoomHide_()">` +
           `<img src="https://lh3.googleusercontent.com/d/${fileId}=w80-h80" ` +
           `style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;margin:2px" ` +
           `loading="lazy" alt="Dokumentasi"></a>`
