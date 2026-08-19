@@ -701,10 +701,14 @@ function normalizeSemesterServer_(raw) {
 }
 
 /**
- * Daftar kelas yang punya data nilai (mapel apa saja) untuk tahun/semester
- * tertentu milik user ini. Kalau periode ini adalah periode aktif dan belum
- * ada data nilai sama sekali, fallback ke daftar kelas hidup dari sheet SISWA
- * supaya tetap bisa mulai input nilai baru.
+ * Daftar kelas untuk dropdown Input Nilai pada tahun/semester tertentu milik
+ * user ini. Untuk periode AKTIF selalu digabung dengan seluruh kelas yang
+ * diampu (dari sheet SISWA) — bukan cuma kelas yang KEBETULAN sudah ada
+ * nilainya — supaya kelas yang belum mulai diisi nilai tetap muncul di
+ * dropdown (bug lama: begitu 1 kelas sudah ada nilainya, kelas lain yang
+ * diampu tapi belum diisi jadi hilang dari pilihan). Untuk periode LAMPAU
+ * (bukan aktif) tetap hanya menampilkan kelas yang benar-benar punya data,
+ * supaya tidak mengundang isi data baru ke periode yang sudah lewat.
  */
 function getKelasNilaiUntukPeriode(tahun, semester) {
   const auth  = authAdmin_();
@@ -717,14 +721,12 @@ function getKelasNilaiUntukPeriode(tahun, semester) {
     }
   });
 
-  if (kelasSet.size === 0) {
-    let setting = {};
-    try { setting = getSetting() || {}; } catch (e) { setting = {}; }
-    const activeTahun = String(setting.tahun_pelajaran || '').trim();
-    const activeSem   = normalizeSemesterServer_(setting.semester);
-    if (activeTahun === String(tahun).trim() && activeSem === String(semester).trim()) {
-      return getAllKelasUntukNilai();
-    }
+  let setting = {};
+  try { setting = getSetting() || {}; } catch (e) { setting = {}; }
+  const activeTahun = String(setting.tahun_pelajaran || '').trim();
+  const activeSem   = normalizeSemesterServer_(setting.semester);
+  if (activeTahun === String(tahun).trim() && activeSem === String(semester).trim()) {
+    getAllKelasUntukNilai().forEach(k => kelasSet.add(k));
   }
 
   return [...kelasSet].filter(Boolean).sort();
