@@ -710,6 +710,42 @@ function updateJurnal(data){
   return { status:true, fotoGagal: fotoGagal };
 }
 
+function removeJurnalFotoSatuan(jurnalId, fotoId){
+  assertLicenseActive();
+  const auth = getAuth();
+  const ss = getSpreadsheet_();
+  const sh = ss.getSheetByName('JURNAL');
+  const values = sh.getDataRange().getValues();
+
+  const rowIndex = values.findIndex(r => r[0] == jurnalId);
+  if(rowIndex === -1) return { status:false, msg:'Jurnal tidak ditemukan' };
+  if(auth.role !== 'superadmin' && values[rowIndex][12] !== auth.email){
+    return { status:false, msg:'Tidak diizinkan' };
+  }
+
+  const rowNumber = rowIndex + 1;
+  let fotos = [];
+  try{
+    const raw = values[rowIndex][14];
+    if(raw){
+      fotos = JSON.parse(raw);
+      if(!Array.isArray(fotos)) fotos = [];
+    }
+  }catch(e){
+    fotos = [];
+  }
+
+  const finalFotos = fotos.filter(f => {
+    const m = String((f && f.full) || '').match(/[-\w]{25,}/);
+    return (m ? m[0] : '') !== fotoId;
+  });
+
+  sh.getRange(rowNumber, 15).setValue(JSON.stringify(finalFotos));
+  sh.getRange(rowNumber, 18).setValue(finalFotos.map(f => f.full).filter(Boolean).join(','));
+
+  return { status:true, sisa: finalFotos.length };
+}
+
 function hapusJurnal(id){
 
   assertLicenseActive();
