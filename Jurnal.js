@@ -833,7 +833,9 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
       const pushThumb = (fileId) => {
         if (!fileId) return;
         fotoThumbs.push(
-          `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" title="Buka foto penuh">` +
+          `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" title="Sorot untuk perbesar, klik untuk buka penuh" ` +
+          `onmouseenter="_fotoZoomShow_(event,'${fileId}')" onmousemove="_fotoZoomMove_(event)" onmouseleave="_fotoZoomHide_()" ` +
+          `ontouchstart="_fotoZoomShow_(event,'${fileId}')" ontouchend="_fotoZoomHide_()" ontouchcancel="_fotoZoomHide_()">` +
           `<img src="https://lh3.googleusercontent.com/d/${fileId}=w80-h80" ` +
           `style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;margin:2px" ` +
           `loading="lazy" alt="Dokumentasi"></a>`

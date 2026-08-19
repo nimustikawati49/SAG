@@ -86,6 +86,36 @@ window._getJadwalSaveDebug = function(){
   return window._jadwalSaveDebug || null;
 };
 
+let _fotoZoomEl_ = null;
+function _fotoZoomShow_(ev, fileId){
+  _fotoZoomHide_();
+  const img = document.createElement('img');
+  img.src = 'https://lh3.googleusercontent.com/d/' + fileId + '=w420-h420';
+  img.style.cssText = 'position:fixed;z-index:99999;border-radius:12px;border:3px solid #fff;'
+    + 'box-shadow:0 12px 40px rgba(0,0,0,.4);pointer-events:none;max-width:280px;max-height:280px;'
+    + 'object-fit:cover;opacity:0;transition:opacity .12s ease';
+  document.body.appendChild(img);
+  _fotoZoomEl_ = img;
+  _fotoZoomMove_(ev);
+  requestAnimationFrame(function(){ if(_fotoZoomEl_) _fotoZoomEl_.style.opacity = '1'; });
+}
+function _fotoZoomMove_(ev){
+  if(!_fotoZoomEl_) return;
+  const t = (ev.touches && ev.touches[0]) ? ev.touches[0] : ev;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = t.clientX + 24, y = t.clientY + 24;
+  if(x + 290 > vw) x = t.clientX - 300;
+  if(y + 290 > vh) y = t.clientY - 300;
+  _fotoZoomEl_.style.left = Math.max(8, x) + 'px';
+  _fotoZoomEl_.style.top  = Math.max(8, y) + 'px';
+}
+function _fotoZoomHide_(){
+  if(_fotoZoomEl_){ _fotoZoomEl_.remove(); _fotoZoomEl_ = null; }
+}
+window._fotoZoomShow_ = _fotoZoomShow_;
+window._fotoZoomMove_ = _fotoZoomMove_;
+window._fotoZoomHide_ = _fotoZoomHide_;
+
 /* ================= INIT ================= */
 /* ================= RIWAYAT STATE ================= */
 let riwayatData  = [];
