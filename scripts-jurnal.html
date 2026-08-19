@@ -86,36 +86,6 @@ window._getJadwalSaveDebug = function(){
   return window._jadwalSaveDebug || null;
 };
 
-let _fotoZoomEl_ = null;
-function _fotoZoomShow_(ev, fileId){
-  _fotoZoomHide_();
-  const img = document.createElement('img');
-  img.src = 'https://lh3.googleusercontent.com/d/' + fileId + '=w420-h420';
-  img.style.cssText = 'position:fixed;z-index:99999;border-radius:12px;border:3px solid #fff;'
-    + 'box-shadow:0 12px 40px rgba(0,0,0,.4);pointer-events:none;max-width:280px;max-height:280px;'
-    + 'object-fit:cover;opacity:0;transition:opacity .12s ease';
-  document.body.appendChild(img);
-  _fotoZoomEl_ = img;
-  _fotoZoomMove_(ev);
-  requestAnimationFrame(function(){ if(_fotoZoomEl_) _fotoZoomEl_.style.opacity = '1'; });
-}
-function _fotoZoomMove_(ev){
-  if(!_fotoZoomEl_) return;
-  const t = (ev.touches && ev.touches[0]) ? ev.touches[0] : ev;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let x = t.clientX + 24, y = t.clientY + 24;
-  if(x + 290 > vw) x = t.clientX - 300;
-  if(y + 290 > vh) y = t.clientY - 300;
-  _fotoZoomEl_.style.left = Math.max(8, x) + 'px';
-  _fotoZoomEl_.style.top  = Math.max(8, y) + 'px';
-}
-function _fotoZoomHide_(){
-  if(_fotoZoomEl_){ _fotoZoomEl_.remove(); _fotoZoomEl_ = null; }
-}
-window._fotoZoomShow_ = _fotoZoomShow_;
-window._fotoZoomMove_ = _fotoZoomMove_;
-window._fotoZoomHide_ = _fotoZoomHide_;
-
 /* ================= INIT ================= */
 /* ================= RIWAYAT STATE ================= */
 let riwayatData  = [];
@@ -149,7 +119,7 @@ function renderRiwayatPagination(){
   let   btnTo   = Math.min(totalPage, btnFrom + maxBtn - 1);
   if(btnTo - btnFrom < maxBtn - 1) btnFrom = Math.max(1, btnTo - maxBtn + 1);
 
-  if(btnFrom > 1) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(1)">\u{ab} 1</button>`;
+  if(btnFrom > 1) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(1)">« 1</button>`;
 
   for(let i = btnFrom; i <= btnTo; i++){
     box.innerHTML += `
@@ -161,7 +131,7 @@ function renderRiwayatPagination(){
     `;
   }
 
-  if(btnTo < totalPage) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(${totalPage})">${totalPage} \u{bb}</button>`;
+  if(btnTo < totalPage) box.innerHTML += `<button class="ghost" onclick="loadRiwayat(${totalPage})">${totalPage} »</button>`;
   box.innerHTML += `<span class="muted" style="font-size:12px;align-self:center;margin-left:4px">(${riwayatTotal} jurnal)</span>`;
 }
 
@@ -198,20 +168,20 @@ function showTab(id){
   // Update FAB context
   updateFab_(id);
 
-  // \u{1f525} AUTO LOAD RIWAYAT SAAT TAB DIBUKA
+  // 🔥 AUTO LOAD RIWAYAT SAAT TAB DIBUKA
   if(id === 'riwayat'){
-    restoreRiwayatFilterState();  // \u{2705} restore filter state
+    restoreRiwayatFilterState();  // ✅ restore filter state
     loadRiwayat();
     loadArsipRiwayat(); // tetap aman
     loadRiwayatFilterKelas(); // isi dropdown filter kelas
   }
 
-  // \u{1f525} LOAD REKAP ABSENSI (rentang tanggal + rekap per kelas)
+  // 🔥 LOAD REKAP ABSENSI (rentang tanggal + rekap per kelas)
   if(id === 'rekap'){
     initLaporanAbsensiKelas();
   }
 
-  // \u{1f525} AUTO LOAD SETTING + JADWAL
+  // 🔥 AUTO LOAD SETTING + JADWAL
   if(id === 'setting'){
     loadSettingForm();
     if(typeof loadJadwalSetting === 'function'){
@@ -221,27 +191,23 @@ function showTab(id){
     }
   }
 
-  // \u{1f525} LOAD KELAS SAAT BUKA JURNALKU
+  // 🔥 LOAD KELAS SAAT BUKA JURNALKU
   if(id === 'jurnalku'){
     loadKelas();
-    if(!editingJurnalId){
-      const efb = document.getElementById('existingFotoBox');
-      if(efb){ efb.style.display = 'none'; efb.innerHTML = ''; }
-    }
     // Restore draft (hanya jika bukan mode edit)
     setTimeout(function() { if (!editingJurnalId) restoreDraft_(); }, 300);
   }
 
-  // \u{1f525} LOAD JURNAL GURU WALI
+  // 🔥 LOAD JURNAL GURU WALI
   if(id === 'jurnalGuruWali'){
     loadJurnalGuruWali();
     setTimeout(function() { if (typeof gwRestoreDraft_ === 'function') gwRestoreDraft_(); }, 300);
   }
 
-  // \u{1f525} DASHBOARD FIX
+  // 🔥 DASHBOARD FIX
   if(id === 'dashboard'){
     initDashboardMeta();
-    // Load jadwal independently \u{2014} use loadJadwalDashboard_ if available, else fallback
+    // Load jadwal independently — use loadJadwalDashboard_ if available, else fallback
     if(typeof loadJadwalDashboard_ === 'function'){
       loadJadwalDashboard_();
     } else if(typeof _loadJadwalFallback_ === 'function'){
@@ -333,7 +299,7 @@ function loadSiswa(){
 
   // Sarankan "Pertemuan Ke" berikutnya untuk kelas ini (dropdown 1-24
   // sebelumnya statis, diam-diam nyangkut di pilihan pertama kalau lupa
-  // diganti manual) \u{2014} TIDAK dijalankan saat mode edit (editJurnal sudah
+  // diganti manual) — TIDAK dijalankan saat mode edit (editJurnal sudah
   // set nilai pertemuan yang benar sebelum manggil loadSiswa) atau saat
   // draft sedang dipulihkan (restoreDraft_ menimpa nilai ini lagi
   // setelahnya kalau draft.pertemuan ada, jadi aman tetap dipanggil).
@@ -352,7 +318,7 @@ function loadRiwayatFilterKelas(){
   if(!sel || sel.options.length > 1) return;
   google.script.run.withSuccessHandler(d=>{
     d.forEach(k=> sel.innerHTML += '<option>' + k + '</option>');
-    // \u{2705} Restore persisted kelas after dropdown populated
+    // ✅ Restore persisted kelas after dropdown populated
     const restoreVal = sel.getAttribute('data-restore');
     if(restoreVal){
       sel.value = restoreVal;
@@ -368,12 +334,12 @@ function resetRiwayatFilter(){
   });
   const sel = document.getElementById('riwayatFilterKelas');
   if(sel) sel.value = '';
-  // \u{2705} Clear persisted filter state
+  // ✅ Clear persisted filter state
   localStorage.removeItem('riwayatFilter');
   loadRiwayat(1);
 }
 
-/* \u{2705} Save filter state to localStorage */
+/* ✅ Save filter state to localStorage */
 function saveRiwayatFilterState(){
   const state = {
     dari  : (document.getElementById('riwayatFilterDari')   || {}).value || '',
@@ -384,7 +350,7 @@ function saveRiwayatFilterState(){
   localStorage.setItem('riwayatFilter', JSON.stringify(state));
 }
 
-/* \u{2705} Restore filter state from localStorage */
+/* ✅ Restore filter state from localStorage */
 function restoreRiwayatFilterState(){
   try{
     const saved = localStorage.getItem('riwayatFilter');
@@ -397,7 +363,7 @@ function restoreRiwayatFilterState(){
     if(dari   && state.dari)   dari.value   = state.dari;
     if(sampai && state.sampai) sampai.value = state.sampai;
     if(cari   && state.cari)   cari.value   = state.cari;
-    // kelas dropdown may not have its options yet \u{2014} restored after loadRiwayatFilterKelas
+    // kelas dropdown may not have its options yet — restored after loadRiwayatFilterKelas
     if(kelas  && state.kelas)  kelas.setAttribute('data-restore', state.kelas);
   }catch(e){}
 }
@@ -423,13 +389,13 @@ function loadRiwayat(page = 1){
         tbody.innerHTML = `
           <tr>
             <td colspan="11" class="muted">
-              \u{274c} Gagal memuat riwayat jurnal
+              ❌ Gagal memuat riwayat jurnal
             </td>
           </tr>
         `;
       }
       endProgress();
-      if(typeof showToast === 'function') showToast('\u{274c} Gagal memuat riwayat: ' + err.message, 'error');
+      if(typeof showToast === 'function') showToast('❌ Gagal memuat riwayat: ' + err.message, 'error');
     })
     .withSuccessHandler(resp=>{
       riwayatData  = resp.rows  || [];
@@ -453,7 +419,7 @@ function renderRiwayat(){
 
   if(pageData.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="11" class="muted">\u{1f4ed} Belum ada jurnal.</td></tr>';
+      '<tr><td colspan="11" class="muted">📭 Belum ada jurnal.</td></tr>';
     renderRiwayatPagination();
     return;
   }
@@ -482,7 +448,7 @@ function renderRiwayat(){
       }
 
       const txt = ref.length > 60
-        ? ref.substring(0,60) + '\u{2026}'
+        ? ref.substring(0,60) + '…'
         : ref;
 
       refleksiHtml =
@@ -509,10 +475,10 @@ function renderRiwayat(){
           </span>
         </td>
         <td class="actions">
-          <button onclick="editJurnal('${x.jurnalId}', event)"
-            ${x.locked ? 'disabled' : ''}>\u{270f}\u{fe0f}</button>
+          <button onclick="editJurnal('${x.jurnalId}')"
+            ${x.locked ? 'disabled' : ''}>✏️</button>
           <button class="danger"
-            onclick="hapusJurnal('${x.jurnalId}')">\u{1f5d1}\u{fe0f}</button>
+            onclick="hapusJurnal('${x.jurnalId}')">🗑️</button>
         </td>
       </tr>
     `;
@@ -521,79 +487,15 @@ function renderRiwayat(){
   renderRiwayatPagination();
 }
 
-function _extractDriveFileId_(url){
-  if(!url) return '';
-  const m = String(url).match(/[-\w]{25,}/);
-  return m ? m[0] : '';
-}
-
-function renderExistingFotoBox_(fotoArr, jurnalId){
-  const box = document.getElementById('existingFotoBox');
-  if(!box) return;
-  if(!fotoArr || !fotoArr.length){
-    box.style.display = 'none';
-    box.innerHTML = '';
-    return;
-  }
-  box.style.display = 'block';
-  box.innerHTML = '<small class="helper">\u{1f4f7} Foto lama \u{2014} klik \u{1f5d1}\u{fe0f} untuk hapus sekarang:</small>'
-    + '<div id="existingFotoList" style="display:flex;flex-wrap:wrap;margin-top:6px"></div>';
-  const list = box.querySelector('#existingFotoList');
-  fotoArr.forEach((f) => {
-    const fid = f && f.full ? _extractDriveFileId_(f.full) : '';
-    if(!fid) return;
-    const item = document.createElement('div');
-    item.className = 'existing-foto-item';
-    item.dataset.fid = fid;
-    item.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${fid}=w120-h120" loading="lazy" alt="Foto lama">`
-      + `<button type="button" class="existing-foto-remove-badge" title="Hapus foto ini">\u{1f5d1}\u{fe0f}</button>`;
-    item.querySelector('button').onclick = function(){ _removeExistingFotoNow_(fid, item, jurnalId); };
-    list.appendChild(item);
-  });
-}
-
-function _removeExistingFotoNow_(fid, item, jurnalId){
-  if(!confirm('Hapus foto ini sekarang?')) return;
-  const btn = item.querySelector('button');
-  if(btn){ btn.disabled = true; btn.innerText = '...'; }
-  google.script.run
-    .withFailureHandler(err=>{
-      if(btn){ btn.disabled = false; btn.innerHTML = '\u{1f5d1}\u{fe0f}'; }
-      if(typeof showToast === 'function') showToast('\u{274c} Gagal hapus foto: ' + err.message, 'error');
-    })
-    .withSuccessHandler(res=>{
-      if(res && res.status === false){
-        if(btn){ btn.disabled = false; btn.innerHTML = '\u{1f5d1}\u{fe0f}'; }
-        if(typeof showToast === 'function') showToast('\u{26a0}\u{fe0f} ' + (res.msg || 'Gagal hapus foto'), 'warning');
-        return;
-      }
-      item.remove();
-      if(typeof showToast === 'function') showToast('\u{1f5d1}\u{fe0f} Foto dihapus', 'success', 2500);
-    })
-    .removeJurnalFotoSatuan(jurnalId, fid);
-}
-
-function editJurnal(id, ev){
-  const btn = ev && ev.currentTarget ? ev.currentTarget : null;
-  const btnOrigHtml = btn ? btn.innerHTML : null;
-  if(btn) btn.disabled = true;
-  startProgress();
-  const stopElapsed = startElapsedNotice_(btn, '\u{23f3}');
-  const finishLoading = () => {
-    if(typeof stopElapsed === 'function') stopElapsed();
-    endProgress();
-    if(btn){ btn.innerHTML = btnOrigHtml; btn.disabled = false; }
-  };
-
+function editJurnal(id){
   google.script.run.withSuccessHandler(d=>{
-    finishLoading();
     if(d.locked){
-      if(typeof showToast === 'function') showToast('\u{1f512} Jurnal terkunci (\u{2265}45 hari)', 'warning');
-      else alert('Jurnal terkunci (\u{2265}45 hari)');
+      if(typeof showToast === 'function') showToast('🔒 Jurnal terkunci (≥45 hari)', 'warning');
+      else alert('Jurnal terkunci (≥45 hari)');
       return;
     }
     if(d.edit_count>=3){
-      if(typeof showToast === 'function') showToast('\u{26a0}\u{fe0f} Batas edit jurnal (3x) tercapai', 'warning');
+      if(typeof showToast === 'function') showToast('⚠️ Batas edit jurnal (3x) tercapai', 'warning');
       else alert('Batas edit jurnal tercapai');
       return;
     }
@@ -601,32 +503,17 @@ function editJurnal(id, ev){
     // Simpan absensi sebelum loadSiswa agar bisa di-restore
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
+    kelas.value=d.kelas;
     jam_ke.value=d.jam_ke||'';
     pertemuan.value=d.pertemuan;
     materi.value=d.materi;
     tujuan.value=d.tujuan||'';
     asesmen.value=d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
-    renderExistingFotoBox_(d.foto || [], id);
-
-    let kelasRetryEdit = 0;
-    const applyKelasEdit = function(){
-      const selKelas = document.getElementById('kelas');
-      if(!selKelas) return;
-      selKelas.value = d.kelas;
-      if(selKelas.value === d.kelas){
-        loadSiswa();
-      } else if(kelasRetryEdit < 6){
-        kelasRetryEdit++;
-        setTimeout(applyKelasEdit, 500);
-      }
-    };
-    applyKelasEdit();
-
-    if(typeof showToast === 'function') showToast('\u{270f}\u{fe0f} Mode edit: kelas ' + d.kelas + ' \u{b7} pertemuan ' + d.pertemuan, 'info', 4000);
+    loadSiswa();
+    if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
   }).withFailureHandler(err=>{
-    finishLoading();
-    if(typeof showToast === 'function') showToast('\u{274c} Gagal memuat detail jurnal', 'error');
+    if(typeof showToast === 'function') showToast('❌ Gagal memuat detail jurnal', 'error');
   }).getJurnalDetail(id);
 }
 
@@ -636,13 +523,13 @@ function hapusJurnal(id){
   google.script.run
     .withFailureHandler(err=>{
       endProgress();
-      if(typeof showToast === 'function') showToast('\u{274c} Gagal hapus jurnal: ' + err.message, 'error');
-      else alert('\u{274c} ' + err.message);
+      if(typeof showToast === 'function') showToast('❌ Gagal hapus jurnal: ' + err.message, 'error');
+      else alert('❌ ' + err.message);
     })
     .withSuccessHandler(()=>{
       endProgress();
       loadRiwayat();
-      if(typeof showToast === 'function') showToast('\u{1f5d1}\u{fe0f} Jurnal berhasil dihapus', 'success');
+      if(typeof showToast === 'function') showToast('🗑️ Jurnal berhasil dihapus', 'success');
     }).hapusJurnal(id);
 }
 
@@ -696,7 +583,7 @@ function exportSemester(semester){
     .withFailureHandler(err=>{
       endProgress();
       if(skel) skel.style.display = 'none';
-      alert('\u{274c} Gagal export jurnal semester:\n' + err.message);
+      alert('❌ Gagal export jurnal semester:\n' + err.message);
     })
     .withSuccessHandler(url=>{
       endProgress();
@@ -731,16 +618,16 @@ function doExportByBulan(){
   const bulan = document.getElementById('exportBulanSelect').value;
   const tahun = document.getElementById('exportBulanTahun').value || new Date().getFullYear();
   const info  = document.getElementById('exportBulanInfo');
-  if(info) info.innerHTML = '<span class="muted">\u{23f3} Memproses export...</span>';
+  if(info) info.innerHTML = '<span class="muted">⏳ Memproses export...</span>';
   startProgress();
   google.script.run
     .withFailureHandler(err=>{
       endProgress();
-      if(info) info.innerHTML = '<span style="color:#dc2626">\u{274c} '+err.message+'</span>';
+      if(info) info.innerHTML = '<span style="color:#dc2626">❌ '+err.message+'</span>';
     })
     .withSuccessHandler(url=>{
       endProgress();
-      if(info) info.innerHTML = '<span style="color:#059669">\u{2705} File siap \u{2014} tab baru terbuka</span>';
+      if(info) info.innerHTML = '<span style="color:#059669">✅ File siap — tab baru terbuka</span>';
       window.open(url,'_blank');
     })
     .exportJurnalByBulan(parseInt(bulan), parseInt(tahun));
@@ -822,13 +709,13 @@ function loadLaporanAbsensi(){
 
   if(mode === 'bulan' && !period){ alert('Pilih bulan'); return; }
 
-  wrap.innerHTML = '<p class="muted">\u{23f3} Memuat laporan...</p>';
+  wrap.innerHTML = '<p class="muted">⏳ Memuat laporan...</p>';
   startProgress();
 
   google.script.run
     .withFailureHandler(err=>{
       endProgress();
-      wrap.innerHTML = `<p style="color:#dc2626">\u{274c} ${err.message}</p>`;
+      wrap.innerHTML = `<p style="color:#dc2626">❌ ${err.message}</p>`;
     })
     .withSuccessHandler(data=>{
       endProgress();
@@ -841,7 +728,7 @@ function loadLaporanAbsensi(){
 function renderLaporanAbsensi(data, kelas, mode, period){
   const wrap = document.getElementById('laporanAbsensiWrap');
   if(!data || data.length === 0){
-    wrap.innerHTML = '<p class="muted">\u{1f4ed} Tidak ada data untuk periode ini.</p>';
+    wrap.innerHTML = '<p class="muted">📭 Tidak ada data untuk periode ini.</p>';
     return;
   }
 
@@ -852,7 +739,7 @@ function renderLaporanAbsensi(data, kelas, mode, period){
     : 'Tahun Pelajaran';
 
   let html = `
-    <p class="muted" style="margin-bottom:8px">${kelas} \u{b7} ${labelPeriode} \u{b7} ${data[0].totalPertemuan} pertemuan</p>
+    <p class="muted" style="margin-bottom:8px">${kelas} · ${labelPeriode} · ${data[0].totalPertemuan} pertemuan</p>
     <div class="table-wrap">
     <table>
       <thead>
@@ -893,7 +780,7 @@ function exportLaporanAbsensiExcel(){
   if(mode === 'semester') period = document.getElementById('laporanSemester').value;
   startProgress();
   google.script.run
-    .withFailureHandler(err=>{ endProgress(); alert('\u{274c} '+err.message); })
+    .withFailureHandler(err=>{ endProgress(); alert('❌ '+err.message); })
     .withSuccessHandler(url=>{ endProgress(); window.open(url,'_blank'); })
     .exportLaporanAbsensiSiswa(mode, kelas, period);
 }
@@ -903,13 +790,13 @@ function exportLaporanAbsensiExcel(){
 async function simpan(){
   const now = Date.now();
 
-  // \u{1f4f1} TAP DELAY GUARD (KHUSUS MOBILE)
+  // 📱 TAP DELAY GUARD (KHUSUS MOBILE)
   if(now - lastTapTime < TAP_DELAY_MS){
     return;
   }
   lastTapTime = now;
 
-  // \u{1f6ab} CEGAH DOUBLE SUBMIT LOGIC
+  // 🚫 CEGAH DOUBLE SUBMIT LOGIC
   if(isSavingJurnal){
     return;
   }
@@ -917,10 +804,10 @@ async function simpan(){
   const btn = document.getElementById('btnSimpanJurnal');
   if(btn){
     btn.disabled = true;
-    btn.innerText = '\u{23f3} Menyimpan...';
+    btn.innerText = '⏳ Menyimpan...';
   }
 
-  // \u{1f512} LOCK FORM (MOBILE UX)
+  // 🔒 LOCK FORM (MOBILE UX)
   lockJurnalForm(true);
   startProgress();
 
@@ -933,38 +820,36 @@ async function simpan(){
       });
     });
 
+    // ===== VALIDASI FOTO =====
+    // Minimal 1 foto HANYA wajib untuk jurnal BARU — saat edit, guru boleh
+    // tidak menyentuh foto sama sekali (foto lama otomatis dipertahankan
+    // oleh updateJurnal di server, lihat Jurnal.js), jadi tidak boleh
+    // dipaksa pilih ulang file cuma untuk mengubah teks materi/refleksi.
     const fileInputs = ['foto1','foto2','foto3'];
     const fotoFiles = fileInputs
       .map(id => document.getElementById(id).files[0])
       .filter(f => f);
-    const existingKeptCount = editingJurnalId
-      ? document.querySelectorAll('#existingFotoList .existing-foto-item').length
-      : 0;
     if(!editingJurnalId && fotoFiles.length < 1){
-      alert('\u{26a0}\u{fe0f} Minimal 1 foto dokumentasi wajib diupload');
-      throw new Error('Foto wajib');
-    }
-    if(editingJurnalId && (existingKeptCount + fotoFiles.length) < 1){
-      alert('\u{26a0}\u{fe0f} Minimal 1 foto dokumentasi harus tersisa \u{2014} jangan hapus semua foto lama tanpa foto pengganti');
+      alert('⚠️ Minimal 1 foto dokumentasi wajib diupload');
       throw new Error('Foto wajib');
     }
     if(fotoFiles.length > 3){
-      alert('\u{26a0}\u{fe0f} Maksimal 3 foto dokumentasi');
+      alert('⚠️ Maksimal 3 foto dokumentasi');
       throw new Error('Foto berlebih');
     }
 
     // ===== CEK UKURAN FILE SEBELUM UPLOAD =====
-    // (Batas longgar \u{2014} kompresi canvas otomatis akan mengecilkan ukuran)
-    const MAX_SINGLE_KB = 15000; // 15MB raw \u{2014} canvas compression handles the rest
+    // (Batas longgar — kompresi canvas otomatis akan mengecilkan ukuran)
+    const MAX_SINGLE_KB = 15000; // 15MB raw — canvas compression handles the rest
     const MAX_TOTAL_KB  = 45000;
     const oversizeFile = fotoFiles.find(f => f.size / 1024 > MAX_SINGLE_KB);
     if (oversizeFile) {
-      if(typeof showToast === 'function') showToast('\u{26a0}\u{fe0f} Foto terlalu besar (maks 15MB per foto)', 'warning');
-      else alert('\u{26a0}\u{fe0f} Foto "' + oversizeFile.name + '" melebihi batas 15MB');
+      if(typeof showToast === 'function') showToast('⚠️ Foto terlalu besar (maks 15MB per foto)', 'warning');
+      else alert('⚠️ Foto "' + oversizeFile.name + '" melebihi batas 15MB');
       throw new Error('Foto terlalu besar');
     }
 
-    // ===== KONVERSI FOTO \u{2192} BASE64 =====
+    // ===== KONVERSI FOTO → BASE64 =====
     const fotos = await Promise.all(
       fotoFiles.map(f => fileToBase64(f))
     );
@@ -985,34 +870,34 @@ async function simpan(){
       google.script.run
     .withFailureHandler(err=>{
       endProgress();
-      if(typeof showToast === 'function') showToast('\u{274c} Gagal simpan jurnal: ' + err.message, 'error', 6000);
-      else alert('\u{274c} Gagal menyimpan jurnal:\n' + err.message);
+      if(typeof showToast === 'function') showToast('❌ Gagal simpan jurnal: ' + err.message, 'error', 6000);
+      else alert('❌ Gagal menyimpan jurnal:\n' + err.message);
       resetSimpanButton();
     })
     .withSuccessHandler(res=>{
       endProgress();
 
-      // \u{1f534} CEK STATUS DARI BACKEND
+      // 🔴 CEK STATUS DARI BACKEND
       if(res && res.status === false){
-        if(typeof showToast === 'function') showToast('\u{26a0}\u{fe0f} ' + (res.msg || 'Gagal menyimpan jurnal'), 'warning');
-        else alert('\u{26a0}\u{fe0f} ' + (res.msg || 'Gagal menyimpan jurnal'));
+        if(typeof showToast === 'function') showToast('⚠️ ' + (res.msg || 'Gagal menyimpan jurnal'), 'warning');
+        else alert('⚠️ ' + (res.msg || 'Gagal menyimpan jurnal'));
         resetSimpanButton();
         return;
       }
 
-      // \u{2705} BENAR-BENAR SUKSES \u{2014} tapi kalau foto gagal diupload (mis. Drive
+      // ✅ BENAR-BENAR SUKSES — tapi kalau foto gagal diupload (mis. Drive
       // diblokir kebijakan domain), jurnalnya tetap tersimpan (cuma butuh
       // akses Sheets), jadi tetap diberi tahu sukses + peringatan terpisah
       // soal fotonya, bukan dianggap gagal total.
       if(res && res.fotoGagal){
-        if(typeof showToast === 'function') showToast('\u{2705} Jurnal tersimpan, tapi foto GAGAL diupload (masalah akses Drive) \u{2014} coba simpan ulang tanpa foto dulu kalau perlu.', 'warning', 8000);
-        else alert('\u{2705} Jurnal tersimpan, tapi foto gagal diupload (masalah akses Drive).');
+        if(typeof showToast === 'function') showToast('✅ Jurnal tersimpan, tapi foto GAGAL diupload (masalah akses Drive) — coba simpan ulang tanpa foto dulu kalau perlu.', 'warning', 8000);
+        else alert('✅ Jurnal tersimpan, tapi foto gagal diupload (masalah akses Drive).');
       } else {
-        if(typeof showToast === 'function') showToast('\u{2705} Jurnal berhasil disimpan!', 'success', 4000);
-        else alert('\u{2705} Jurnal berhasil disimpan');
+        if(typeof showToast === 'function') showToast('✅ Jurnal berhasil disimpan!', 'success', 4000);
+        else alert('✅ Jurnal berhasil disimpan');
       }
       editingJurnalId = null;
-      clearDraft_(); // \u{1f5d1} hapus draft setelah simpan sukses
+      clearDraft_(); // 🗑 hapus draft setelah simpan sukses
       showTab('riwayat');
       loadRiwayat();
       resetSimpanButton();
@@ -1028,14 +913,14 @@ function resetSimpanButton(){
   const btn = document.getElementById('btnSimpanJurnal');
   if(btn){
     btn.disabled = false;
-    btn.innerText = '\u{1f4be} Simpan Jurnal';
+    btn.innerText = '💾 Simpan Jurnal';
     btn.style.opacity = '1';
   }
-  // \u{1f513} UNLOCK FORM
+  // 🔓 UNLOCK FORM
   lockJurnalForm(false);
 }
 
-// \u{1f512} LOCK / UNLOCK FORM SAAT SIMPAN (UX MOBILE)
+// 🔒 LOCK / UNLOCK FORM SAAT SIMPAN (UX MOBILE)
 function lockJurnalForm(lock = true){
   const fields = document.querySelectorAll(
     '#jurnalku input, #jurnalku textarea, #jurnalku select'
@@ -1054,7 +939,7 @@ function lockJurnalForm(lock = true){
 // dipanggil saat klik tab Setting
 
 /* ===================================================================
-   DRAFT AUTO-SAVE \u{2014} simpan form jurnal ke localStorage saat diisi
+   DRAFT AUTO-SAVE — simpan form jurnal ke localStorage saat diisi
    ================================================================= */
 // Kunci draft per-user agar tidak tercampur di PC yang dipakai bergantian
 function getDraftKey_() {
@@ -1152,12 +1037,12 @@ function clearDraft_() {
 })();
 
 /* ===================================================================
-   TEMPLATE JURNAL \u{2014} pilih template materi siap pakai
+   TEMPLATE JURNAL — pilih template materi siap pakai
    ================================================================= */
 const _JURNAL_TEMPLATES_ = [
   {
     label    : 'Pendahuluan / Perkenalan Materi',
-    materi   : 'Pengenalan materi bab baru \u{2014} apersepsi, peta konsep, motivasi belajar',
+    materi   : 'Pengenalan materi bab baru — apersepsi, peta konsep, motivasi belajar',
     tujuan   : 'Siswa mampu menyebutkan garis besar materi yang akan dipelajari dan termotivasi untuk belajar',
     asesmen  : 'Tanya jawab lisan, lembar observasi keaktifan'
   },
@@ -1169,7 +1054,7 @@ const _JURNAL_TEMPLATES_ = [
   },
   {
     label    : 'Praktik / Latihan Soal',
-    materi   : 'Latihan soal terstruktur \u{2014} tingkat mudah, sedang, dan sulit (diferensiasi)',
+    materi   : 'Latihan soal terstruktur — tingkat mudah, sedang, dan sulit (diferensiasi)',
     tujuan   : 'Siswa mampu mengerjakan soal secara mandiri dan mengidentifikasi kesulitan belajar',
     asesmen  : 'Lembar kerja siswa (LKS), penilaian proses, koreksi bersama'
   },
@@ -1181,7 +1066,7 @@ const _JURNAL_TEMPLATES_ = [
   },
   {
     label    : 'Ulangan Harian / Evaluasi',
-    materi   : 'Ulangan Harian \u{2014} cakupan materi bab yang telah selesai dipelajari',
+    materi   : 'Ulangan Harian — cakupan materi bab yang telah selesai dipelajari',
     tujuan   : 'Mengukur ketercapaian KD siswa secara individual',
     asesmen  : 'Soal pilihan ganda dan uraian, penilaian tertulis'
   },
@@ -1193,13 +1078,13 @@ const _JURNAL_TEMPLATES_ = [
   },
   {
     label    : 'Review / Rangkuman Bab',
-    materi   : 'Review seluruh materi bab \u{2014} mind mapping bersama, tanya jawab, dan persiapan ujian',
+    materi   : 'Review seluruh materi bab — mind mapping bersama, tanya jawab, dan persiapan ujian',
     tujuan   : 'Siswa mampu merangkum poin penting materi dan siap mengikuti ujian',
     asesmen  : 'Mind map, kuis review, tanya jawab'
   },
   {
     label    : 'PTS / PAS / PAT',
-    materi   : 'Penilaian Tengah/Akhir Semester \u{2014} siswa mengerjakan soal ujian secara mandiri',
+    materi   : 'Penilaian Tengah/Akhir Semester — siswa mengerjakan soal ujian secara mandiri',
     tujuan   : 'Mengukur pencapaian kompetensi siswa selama satu semester',
     asesmen  : 'Lembar ujian tertulis, PTS/PAS/PAT'
   }
