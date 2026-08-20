@@ -135,6 +135,55 @@ if(_elTanggal) _elTanggal.value = new Date().toISOString().slice(0,10);
 var _elPertemuan = document.getElementById('pertemuan');
 if(_elPertemuan) for(let i=1;i<=24;i++) _elPertemuan.innerHTML+=`<option>${i}</option>`;
 
+// Jam Ke disimpan sebagai satu string di sheet — "08:00-09:45" (jam
+// mulai-selesai). Format sudah HH:MM (input type=time), jadi tidak perlu
+// diproses lagi selain digabung dengan "-".
+function _gabungJamKe_(mulai, selesai){
+  mulai = String(mulai || '').trim();
+  selesai = String(selesai || '').trim();
+  if(!mulai) return '';
+  return (selesai && selesai !== mulai) ? (mulai + '-' + selesai) : mulai;
+}
+
+// Pecah string Jam Ke tersimpan ("08:00-09:45" atau "08:00") jadi
+// {mulai, selesai} untuk mengisi ulang input jam saat Edit/Duplikat.
+function _pecahJamKe_(jamKeStr){
+  const s = String(jamKeStr || '').trim();
+  if(!s) return { mulai: '', selesai: '' };
+  const parts = s.split('-').map(p => p.trim()).filter(Boolean);
+  if(parts.length >= 2) return { mulai: parts[0], selesai: parts[1] };
+  return { mulai: parts[0] || '', selesai: parts[0] || '' };
+}
+
+// Begitu Kelas (atau Tanggal) dipilih untuk jurnal BARU, cari otomatis
+// jam mengajar guru ini untuk Kelas & Hari (dari Tanggal) itu di Jadwal
+// Mengajar yang sudah dikonfigurasi — supaya guru tidak perlu ketik
+// manual, dan otomatis benar walau jam berbeda di hari tertentu (mis.
+// Kamis/Sabtu lebih pendek dari hari lain). Tidak dijalankan saat mode
+// edit (jam sudah diisi dari data jurnal yang diedit, jangan ditimpa).
+function _autoIsiJamDariJadwal_(){
+  if(editingJurnalId) return;
+  if(!kelas.value || !tanggal.value) return;
+  const info = document.getElementById('jamAutoInfo');
+  if(info) info.textContent = '⏳ Mencari jam dari Jadwal Mengajar...';
+  google.script.run
+    .withSuccessHandler(hasil=>{
+      console.log('[AUTO JAM] kelas=' + kelas.value + ' tanggal=' + tanggal.value + ' hasil=', hasil);
+      if(!hasil){
+        if(info) info.textContent = '⚠️ Tidak ditemukan jadwal untuk kelas & hari ini — isi Jam Mulai/Selesai manual.';
+        return;
+      }
+      if(hasil.jam_mulai)   jamMulai.value   = hasil.jam_mulai;
+      if(hasil.jam_selesai) jamSelesai.value = hasil.jam_selesai;
+      if(info) info.textContent = '✅ Jam otomatis terisi dari Jadwal Mengajar — boleh diubah kalau ada penyesuaian.';
+    })
+    .withFailureHandler(err=>{
+      console.error('[AUTO JAM] error:', err);
+      if(info) info.textContent = '⚠️ Gagal cek Jadwal Mengajar — isi Jam Mulai/Selesai manual.';
+    })
+    .getJamMengajarUntukKelas(kelas.value, tanggal.value);
+}
+
 // Init export bulan defaults
 (function(){
   const now = new Date();
@@ -300,12 +349,13 @@ let pendingAbsensiData = []; // untuk restore absensi saat editJurnal
 // ke jurnalku terpicu 2x hampir bersamaan), respons yang BASI diabaikan
 // supaya daftar Kelas tidak dobel-tampil.
 let _loadKelasToken_ = 0;
-function loadKelas(){
+function loadKelas(onDone){
   const myToken = ++_loadKelasToken_;
   kelas.innerHTML='<option value="">-- Pilih Kelas --</option>';
   google.script.run.withSuccessHandler(d=>{
     if(myToken !== _loadKelasToken_) return;
     d.forEach(k=>kelas.innerHTML+=`<option>${k}</option>`);
+    if(typeof onDone === 'function') onDone();
   }).getKelas();
 }
 
@@ -358,6 +408,7 @@ function loadSiswa(){
 
   if(!editingJurnalId){
     _populateSalinJurnalBox_(kelas.value);
+    _autoIsiJamDariJadwal_();
   }
 }
 
@@ -473,7 +524,7 @@ function loadRiwayat(page = 1){
       if(tbody){
         tbody.innerHTML = `
           <tr>
-            <td colspan="12" class="muted">
+            <td colspan="13" class="muted">
               ❌ Gagal memuat riwayat jurnal
             </td>
           </tr>
@@ -524,7 +575,7 @@ function renderRiwayat(){
 
   if(pageData.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="12" class="muted">📭 Belum ada jurnal.</td></tr>';
+      '<tr><td colspan="13" class="muted">📭 Belum ada jurnal.</td></tr>';
     renderRiwayatPagination();
     return;
   }
@@ -557,6 +608,7 @@ function renderRiwayat(){
         <td>${x.no}</td>
         <td>${x.tanggal || '-'}</td>
         <td>${x.kelas || '-'}</td>
+        <td>${_escAttr_(x.jam_ke) || '-'}</td>
         <td>${x.pertemuan || '-'}</td>
         <td class="left">${_clampCell_(x.materi)}</td>
         <td class="left">${_clampCell_(x.tujuan)}</td>
@@ -615,7 +667,9 @@ function editJurnal(id, ev){
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
     tanggal.value = d.tanggal || tanggal.value;
-    jam_ke.value=d.jam_ke||'';
+    const _jamEdit = _pecahJamKe_(d.jam_ke);
+    if(_jamEdit.mulai)   jamMulai.value   = _jamEdit.mulai;
+    if(_jamEdit.selesai) jamSelesai.value = _jamEdit.selesai;
     pertemuan.value=d.pertemuan;
     materi.value=d.materi;
     tujuan.value=d.tujuan||'';
@@ -643,7 +697,9 @@ function duplikatJurnal_(id){
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
     tanggal.value = d.tanggal || tanggal.value;
-    jam_ke.value = d.jam_ke || '';
+    const _jamDup = _pecahJamKe_(d.jam_ke);
+    if(_jamDup.mulai)   jamMulai.value   = _jamDup.mulai;
+    if(_jamDup.selesai) jamSelesai.value = _jamDup.selesai;
     materi.value = d.materi;
     tujuan.value = d.tujuan || '';
     asesmen.value = d.asesmen;
@@ -662,14 +718,16 @@ function duplikatJurnal_(id){
 // "nempel" (browser mengabaikan value yang belum ada opsinya) — guru
 // harus klik pilih Kelas manual lagi baru Absensi/Pertemuan ikut termuat.
 // Dipakai baik oleh Edit maupun Duplikat jurnal.
-function _isiKelasDenganRetry_(kelasVal, retryKe){
-  retryKe = retryKe || 0;
-  kelas.value = kelasVal;
-  if(kelas.value === kelasVal){
+function _isiKelasDenganRetry_(kelasVal){
+  // Dulu menebak-nebak lama loadKelas() selesai lewat retry+setTimeout
+  // (nyerah kalau lebih dari 3 detik, dropdown Kelas tetap kosong kalau
+  // server sedang lambat). Sekarang loadKelas() sendiri yang memberi
+  // tahu kapan opsinya benar-benar siap (onDone) — tidak ada lagi
+  // batas waktu tebakan, dijamin nempel begitu opsinya ada.
+  loadKelas(function(){
+    kelas.value = kelasVal;
     loadSiswa();
-  } else if(retryKe < 6){
-    setTimeout(()=>_isiKelasDenganRetry_(kelasVal, retryKe + 1), 500);
-  }
+  });
 }
 
 // Ganti tampilan tombol Simpan/Batal sesuai mode: jurnal baru cuma ada
@@ -757,7 +815,7 @@ function renderRiwayatSkeleton(rows = 6){
   for(let i=0;i<rows;i++){
     tbody.innerHTML += `
       <tr class="skeleton-row">
-        ${'<td><div class="skeleton"></div></td>'.repeat(12)}
+        ${'<td><div class="skeleton"></div></td>'.repeat(13)}
       </tr>
     `;
   }
@@ -1009,6 +1067,24 @@ async function simpan(){
   startProgress();
 
   try{
+    // ===== VALIDASI KELAS & JAM KE =====
+    // Dulu Jam Ke tidak diwajibkan sama sekali — kalau lupa/kelupaan
+    // kekosongan (mis. field belum sempat terisi ulang saat Duplikat/
+    // Edit lalu tidak disadari), tersimpan kosong tanpa peringatan apa
+    // pun. Sekarang dicegat di sini sebelum terkirim ke server.
+    if(!kelas.value){
+      alert('⚠️ Kelas belum dipilih');
+      throw new Error('Kelas wajib');
+    }
+    if(!jamMulai.value || !jamSelesai.value){
+      alert('⚠️ Jam Ke (Mulai/Selesai) belum diisi');
+      throw new Error('Jam Ke wajib');
+    }
+    if(jamSelesai.value < jamMulai.value){
+      alert('⚠️ Jam Selesai tidak boleh lebih kecil dari Jam Mulai');
+      throw new Error('Jam Ke tidak valid');
+    }
+
     let abs = [];
     document.querySelectorAll('#siswaBody select').forEach(s=>{
       abs.push({
@@ -1054,7 +1130,7 @@ async function simpan(){
       jurnalId: editingJurnalId,
       tanggal: tanggal.value,
       kelas: kelas.value,
-      jam_ke: jam_ke.value,
+      jam_ke: _gabungJamKe_(jamMulai.value, jamSelesai.value),
       pertemuan: pertemuan.value,
       materi: materi.value,
       tujuan: tujuan.value,
@@ -1152,7 +1228,10 @@ function saveDraft_() {
       tanggal   : (document.getElementById('tanggal')   || {}).value || '',
       kelas     : (document.getElementById('kelas')     || {}).value || '',
       pertemuan : (document.getElementById('pertemuan') || {}).value || '',
-      jam_ke    : (document.getElementById('jam_ke')    || {}).value || '',
+      jam_ke    : _gabungJamKe_(
+                    (document.getElementById('jamMulai')   || {}).value || '',
+                    (document.getElementById('jamSelesai') || {}).value || ''
+                  ),
       materi    : (document.getElementById('materi')    || {}).value || '',
       tujuan    : (document.getElementById('tujuan')    || {}).value || '',
       asesmen   : (document.getElementById('asesmen')   || {}).value || '',
@@ -1180,8 +1259,11 @@ function restoreDraft_() {
       if (el) el.value = draft.tanggal;
     }
     if (draft.jam_ke) {
-      const el = document.getElementById('jam_ke');
-      if (el) el.value = draft.jam_ke;
+      const jamDraft = _pecahJamKe_(draft.jam_ke);
+      const elMulai = document.getElementById('jamMulai');
+      const elSelesai = document.getElementById('jamSelesai');
+      if (elMulai && jamDraft.mulai) elMulai.value = jamDraft.mulai;
+      if (elSelesai && jamDraft.selesai) elSelesai.value = jamDraft.selesai;
     }
     // Kelas & pertemuan direstore terakhir: memilih kelas memuat ulang tabel
     // absensi (loadSiswa), jadi pertemuan baru diisi setelah itu supaya tidak
@@ -1221,7 +1303,7 @@ function clearDraft_() {
 
 // Pasang auto-save listeners setelah DOM siap
 (function() {
-  const ids = ['tanggal','materi','tujuan','asesmen','refleksi','pertemuan','jam_ke','kelas'];
+  const ids = ['tanggal','materi','tujuan','asesmen','refleksi','pertemuan','jamMulai','jamSelesai','kelas'];
   function _attachDraftListeners() {
     ids.forEach(function(id) {
       const el = document.getElementById(id);

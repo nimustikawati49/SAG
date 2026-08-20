@@ -518,6 +518,9 @@ function simpanJurnal(data){
   if(!data.kelas){
     throw new Error("Kelas belum dipilih");
   }
+  if(!jamKe){
+    throw new Error("Jam Ke belum diisi");
+  }
 
   // ✅ DUPLICATE VALIDATION: cek jurnal sama (email + kelas + pertemuan +
   // TANGGAL yang sama persis dengan yang sedang diinput — dulu selalu
@@ -671,6 +674,12 @@ function updateJurnal(data){
   if(rowIndex === -1){
     return { status:false, msg:'Jurnal tidak ditemukan' };
   }
+  if(!data.kelas){
+    return { status:false, msg:'Kelas belum dipilih' };
+  }
+  if(!String(data.jam_ke || '').trim()){
+    return { status:false, msg:'Jam Ke belum diisi' };
+  }
 
   const rowNumber = rowIndex + 1;
 
@@ -805,6 +814,20 @@ function hapusJurnal(id){
 }
 
 /**
+ * _jamKeKeMenit_(jamKeStr)
+ * Ubah nilai kolom Jam Ke jadi total menit sejak 00:00, buat kebutuhan
+ * urutan Riwayat Jurnal. Menangani format "HH:MM" atau "HH:MM-HH:MM"
+ * (jam mulai dipakai), plus fallback ke angka polos (format lama sebelum
+ * field ini berupa jam) supaya data lama tidak error.
+ */
+function _jamKeKeMenit_(jamKeStr){
+  const s = String(jamKeStr || '').trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if(m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  return parseInt(s, 10) || 0;
+}
+
+/**
  * Paginated riwayat jurnal — returns {rows, total, page, pageSize}
  * so the client does NOT need to download the full dataset.
  */
@@ -819,6 +842,19 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
   const fCari   = (filters.cari  || '').trim().toLowerCase();
 
   const auth        = getAuth();
+
+  // Cache singkat (30 detik) per user+filter — buka/tutup tab Riwayat
+  // berkali-kali dalam waktu dekat jadi hampir instan, tanpa perlu baca
+  // ulang sheet JURNAL/ABSENSI/SISWA tiap kali. TTL pendek sengaja dipilih
+  // supaya perubahan (simpan/update/hapus jurnal) tetap terlihat cepat
+  // (maksimal basi ~30 detik), tanpa perlu invalidasi manual di tiap
+  // fungsi yang mengubah data.
+  const _riwayatCacheKey = 'RIWAYAT_' + auth.email + '_' + page + '_' + pageSize + '_' + JSON.stringify(filters);
+  try {
+    const _cached = CacheService.getUserCache().get(_riwayatCacheKey);
+    if (_cached) return JSON.parse(_cached);
+  } catch (eCacheRead) { /* fail-soft, lanjut baca sheet langsung */ }
+
   const setting     = getSetting();
   const activeTahun = setting.tahun_pelajaran || '';
   const ss = getSpreadsheet_();
@@ -858,7 +894,16 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     if (tglB !== tglA) return tglB - tglA;
     const pA = parseInt(jurnalData[a][4], 10) || 0;
     const pB = parseInt(jurnalData[b][4], 10) || 0;
-    return pB - pA;
+    if (pB !== pA) return pB - pA;
+    // Tanggal & Pertemuan sama, Jam Mulai terbesar dulu — mis. hari yang
+    // sama, pertemuan ke-5 di kelas berbeda: yang mengajar jam 13:00
+    // tampil di atas yang mengajar jam 08:00 (jam mengajar paling akhir
+    // hari itu). Jam Ke disimpan sebagai "HH:MM-HH:MM" (atau angka lama
+    // dari sebelum field ini berformat jam) — _jamKeKeMenit_ menangani
+    // keduanya.
+    const jA = _jamKeKeMenit_(jurnalData[a][3]);
+    const jB = _jamKeKeMenit_(jurnalData[b][3]);
+    return jB - jA;
   });
 
   const total  = matchIdx.length;
@@ -866,7 +911,11 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
   const end    = Math.min(start + pageSize, total);
   const pageIdx = matchIdx.slice(start, end);
 
-  if (pageIdx.length === 0) return { rows: [], total, page, pageSize };
+  if (pageIdx.length === 0) {
+    const _emptyResult = { rows: [], total, page, pageSize };
+    try { CacheService.getUserCache().put(_riwayatCacheKey, JSON.stringify(_emptyResult), 30); } catch (eCacheWrite) {}
+    return _emptyResult;
+  }
 
   // 2. Heavy work only for current page rows
   const absData   = shAbs   ? shAbs.getDataRange().getValues()   : [];
@@ -959,7 +1008,9 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     });
   });
 
-  return { rows, total, page, pageSize };
+  const _finalResult = { rows, total, page, pageSize };
+  try { CacheService.getUserCache().put(_riwayatCacheKey, JSON.stringify(_finalResult), 30); } catch (eCacheWrite) {}
+  return _finalResult;
 }
 
 function getRiwayatJurnal(){

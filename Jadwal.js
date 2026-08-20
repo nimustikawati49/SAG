@@ -16,6 +16,46 @@ function getJadwalSheet_(){
 }
 
 /**
+ * getJamMengajarUntukKelas(kelas, tanggal)
+ * Cari jam mulai/selesai mengajar guru ini untuk Kelas tertentu, pada
+ * Hari yang sesuai dengan Tanggal yang diberikan (Kamis/Sabtu dkk bisa
+ * beda jam dari hari lain — makanya dicocokkan per hari, bukan diasumsikan
+ * sama sepanjang minggu). Dipakai untuk auto-isi Jam Mulai/Selesai di
+ * form Jurnalku supaya guru tidak perlu ketik manual tiap kali, dan
+ * hasilnya selalu sesuai jadwal resmi (bukan hafalan/perkiraan guru).
+ */
+function getJamMengajarUntukKelas(kelas, tanggal){
+  if(!kelas || !tanggal) return null;
+  const auth = getAuth();
+  if(!auth.email) return null;
+
+  const hariMap = ['MINGGU','SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
+  const d = new Date(tanggal + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  const hari = hariMap[d.getDay()];
+
+  const setting = getSetting();
+  const semesterAktif = String(setting.semester || '').trim().toLowerCase();
+
+  const sh = getJadwalSheet_();
+  if(!sh) return null;
+  const rows = sh.getDataRange().getValues();
+
+  for(let i = 1; i < rows.length; i++){
+    const row = rows[i];
+    if(String(row[0] || '').toLowerCase().trim() !== auth.email) continue;
+    if(semesterAktif && String(row[1] || '').toLowerCase().trim() !== semesterAktif) continue;
+    if(String(row[2] || '').toUpperCase().trim() !== hari) continue;
+    if(String(row[3] || '').trim() !== String(kelas).trim()) continue;
+    const jamMulai = normalizeJam_(row[5]);
+    const jamSelesai = normalizeJam_(row[6]);
+    if(!jamMulai && !jamSelesai) continue;
+    return { jam_mulai: jamMulai, jam_selesai: jamSelesai };
+  }
+  return null;
+}
+
+/**
  * Pastikan sheet jadwal ada. Buat baru jika belum ada.
  * Hanya dipanggil dari operasi TULIS (save/update/delete).
  */
