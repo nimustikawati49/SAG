@@ -669,7 +669,10 @@
         <small class="helper">
           Contoh: respon siswa, kendala waktu, rencana perbaikan.
         </small>
-    <button id="btnSimpanJurnal" onclick="simpan()">💾 Simpan Jurnal</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button id="btnBatalEditJurnal" onclick="batalEditJurnal_()" style="display:none;background:#f3f4f6;color:#374151;box-shadow:none">↩️ Batal</button>
+      <button id="btnSimpanJurnal" onclick="simpan()">💾 Simpan Jurnal</button>
+    </div>
         <div id="progressWrap">
         <div id="progressBar"></div>
     </div>

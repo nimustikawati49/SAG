@@ -224,6 +224,7 @@ function showTab(id){
   // 🔥 LOAD KELAS SAAT BUKA JURNALKU
   if(id === 'jurnalku'){
     loadKelas();
+    if(!editingJurnalId && typeof _setModeEditJurnalUI_ === 'function') _setModeEditJurnalUI_(false);
     // Restore draft (hanya jika bukan mode edit)
     setTimeout(function() { if (!editingJurnalId) restoreDraft_(); }, 300);
   }
@@ -288,9 +289,15 @@ function fabAction() {
 /* ================= KELAS & SISWA ================= */
 let pendingAbsensiData = []; // untuk restore absensi saat editJurnal
 
+// Token anti-race: kalau loadKelas() sempat terpanggil dobel (mis. showTab
+// ke jurnalku terpicu 2x hampir bersamaan), respons yang BASI diabaikan
+// supaya daftar Kelas tidak dobel-tampil.
+let _loadKelasToken_ = 0;
 function loadKelas(){
+  const myToken = ++_loadKelasToken_;
   kelas.innerHTML='<option value="">-- Pilih Kelas --</option>';
   google.script.run.withSuccessHandler(d=>{
+    if(myToken !== _loadKelasToken_) return;
     d.forEach(k=>kelas.innerHTML+=`<option>${k}</option>`);
   }).getKelas();
 }
@@ -582,10 +589,43 @@ function editJurnal(id){
     asesmen.value=d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
     loadSiswa();
+    _setModeEditJurnalUI_(true);
     if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
   }).withFailureHandler(err=>{
     if(typeof showToast === 'function') showToast('❌ Gagal memuat detail jurnal', 'error');
   }).getJurnalDetail(id);
+}
+
+// Ganti tampilan tombol Simpan/Batal sesuai mode: jurnal baru cuma ada
+// "Simpan Jurnal"; mode edit ada "Update Jurnal" + "Batal" (kembali ke
+// Riwayat Jurnal tanpa menyimpan perubahan).
+function _setModeEditJurnalUI_(isEdit){
+  const btnSimpan = document.getElementById('btnSimpanJurnal');
+  const btnBatal  = document.getElementById('btnBatalEditJurnal');
+  if(btnSimpan) btnSimpan.innerText = isEdit ? '🔄 Update Jurnal' : '💾 Simpan Jurnal';
+  if(btnBatal)  btnBatal.style.display = isEdit ? 'inline-block' : 'none';
+}
+
+function batalEditJurnal_(){
+  editingJurnalId = null;
+  _setModeEditJurnalUI_(false);
+  if(typeof clearDraft_ === 'function') clearDraft_();
+  showTab('riwayat');
+  if(typeof loadRiwayat === 'function') loadRiwayat();
+  _scrollKeAtasRiwayat_();
+  if(typeof showToast === 'function') showToast('↩️ Edit dibatalkan', 'info', 2500);
+}
+
+// Setelah Simpan/Update/Batal, pastikan tabel Riwayat Jurnal langsung
+// terlihat dari atas (bukan nyangkut di posisi scroll sebelumnya).
+function _scrollKeAtasRiwayat_(){
+  setTimeout(function(){
+    const el = document.getElementById('riwayat');
+    if(el && typeof el.scrollIntoView === 'function'){
+      el.scrollIntoView({ block: 'start' });
+    }
+    if(typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+  }, 50);
 }
 
 function hapusJurnal(id){
@@ -968,9 +1008,11 @@ async function simpan(){
         else alert('✅ Jurnal berhasil disimpan');
       }
       editingJurnalId = null;
+      _setModeEditJurnalUI_(false);
       clearDraft_(); // 🗑 hapus draft setelah simpan sukses
       showTab('riwayat');
       loadRiwayat();
+      _scrollKeAtasRiwayat_();
       resetSimpanButton();
     })[fn](data);
     }catch(e){
