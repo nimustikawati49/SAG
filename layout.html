@@ -711,6 +711,14 @@
       <button onclick="loadRiwayat(1)">🔎 Cari</button>
       <button class="ghost" onclick="resetRiwayatFilter()">✕ Reset</button>
       <button class="ghost" onclick="loadRiwayat()">🔄 Refresh</button>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+        <label style="font-size:12px;margin:0" for="riwayatLimitSelect">Tampilkan</label>
+        <select id="riwayatLimitSelect" onchange="gantiJumlahBarisRiwayat_()" style="min-width:auto;padding:8px 10px">
+          <option value="10">10 baris</option>
+          <option value="20">20 baris</option>
+          <option value="30">30 baris</option>
+        </select>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -722,6 +730,7 @@
             <th>Kelas</th>
             <th>Pertemuan</th>
             <th>Materi</th>
+            <th title="Tujuan Pembelajaran">TP</th>
             <th>Asesmen</th>
             <th>Absensi</th>
             <th>📸 Dokumentasi</th>

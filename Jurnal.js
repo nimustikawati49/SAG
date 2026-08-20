@@ -890,12 +890,23 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
       if (a[3] === 'A') alpha.push(nama);
     });
 
-    let absHtml = '✅ NIHIL';
+    // Ringkas + detail: tabel Riwayat menampilkan hitungan saja (mis.
+    // "🟠2 · 🔵1"), daftar nama lengkap pindah ke tooltip (hover) supaya
+    // baris tabel tidak melar tinggi kalau siswa yang absen banyak.
+    let absRingkas = '✅ NIHIL';
+    let absDetail  = 'Semua siswa hadir (NIHIL)';
     if (sakit.length || izin.length || alpha.length) {
-      absHtml = '';
-      if (sakit.length) absHtml += `🟠 <b>S (Sakit)</b><br>${sakit.join('<br>')}<br><br>`;
-      if (izin.length)  absHtml += `🔵 <b>I (Izin)</b><br>${izin.join('<br>')}<br><br>`;
-      if (alpha.length) absHtml += `🔴 <b>A (Alpha)</b><br>${alpha.join('<br>')}`;
+      const ringkasParts = [];
+      if (sakit.length) ringkasParts.push('🟠' + sakit.length);
+      if (izin.length)  ringkasParts.push('🔵' + izin.length);
+      if (alpha.length) ringkasParts.push('🔴' + alpha.length);
+      absRingkas = ringkasParts.join(' · ');
+
+      const detailParts = [];
+      if (sakit.length) detailParts.push('Sakit: ' + sakit.join(', '));
+      if (izin.length)  detailParts.push('Izin: ' + izin.join(', '));
+      if (alpha.length) detailParts.push('Alpha: ' + alpha.join(', '));
+      absDetail = detailParts.join('\n');
     }
 
     // foto — thumbnail visual (bukan cuma teks link), pakai endpoint
@@ -941,9 +952,9 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
       jurnalId  : jurnalId,
       tanggal   : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
       kelas, jam_ke: row[3] || '', pertemuan: row[4] || '',
-      materi    : row[5] || '', asesmen: row[7] || '-',
+      materi    : row[5] || '', tujuan: row[6] || '-', asesmen: row[7] || '-',
       foto      : fotoHtml, refleksi: row[15] || '-',
-      absensi   : absHtml, edit_count: row[11] || 0,
+      absensi   : absRingkas, absensiDetail: absDetail, edit_count: row[11] || 0,
       locked    : false
     });
   });

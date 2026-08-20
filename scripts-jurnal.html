@@ -121,7 +121,14 @@ window._fotoZoomHide_ = _fotoZoomHide_;
 let riwayatData  = [];
 let riwayatPage  = 1;
 let riwayatTotal = 0;
-const RIWAYAT_LIMIT = 20;
+let riwayatLimit = 10;
+
+function gantiJumlahBarisRiwayat_(){
+  const sel = document.getElementById('riwayatLimitSelect');
+  if(!sel) return;
+  riwayatLimit = parseInt(sel.value, 10) || 10;
+  loadRiwayat(1);
+}
 
 var _elTanggal = document.getElementById('tanggal');
 if(_elTanggal) _elTanggal.value = new Date().toISOString().slice(0,10);
@@ -141,7 +148,7 @@ function renderRiwayatPagination(){
   const box = document.getElementById('riwayatPagination');
   box.innerHTML = '';
 
-  const totalPage = Math.ceil(riwayatTotal / RIWAYAT_LIMIT);
+  const totalPage = Math.ceil(riwayatTotal / riwayatLimit);
   if(totalPage <= 1) return;
 
   const maxBtn  = 7;
@@ -466,7 +473,7 @@ function loadRiwayat(page = 1){
       if(tbody){
         tbody.innerHTML = `
           <tr>
-            <td colspan="11" class="muted">
+            <td colspan="12" class="muted">
               ❌ Gagal memuat riwayat jurnal
             </td>
           </tr>
@@ -481,11 +488,31 @@ function loadRiwayat(page = 1){
       renderRiwayat();
       endProgress();
     })
-    .getRiwayatJurnalPaged(page, RIWAYAT_LIMIT, filters);
+    .getRiwayatJurnalPaged(page, riwayatLimit, filters);
 }
 
 function $(id){
   return document.getElementById(id);
+}
+
+function _escAttr_(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Sel tabel Riwayat dengan teks panjang (Materi/TP/Asesmen/Absensi/
+// Refleksi) — dibatasi 2 baris lewat CSS (.riwayat-clamp), teks lengkap
+// (atau versi lain kalau hoverText dikasih terpisah, mis. Absensi yang
+// tampilannya cuma hitungan tapi hover-nya daftar nama) muncul lewat
+// tooltip title bawaan browser.
+function _clampCell_(text, hoverText){
+  const visible = (text == null || text === '') ? '-' : text;
+  if(visible === '-') return '-';
+  const hover = hoverText != null ? hoverText : visible;
+  return `<span class="riwayat-clamp" title="${_escAttr_(hover)}">${_escAttr_(visible)}</span>`;
 }
 
 function renderRiwayat(){
@@ -497,7 +524,7 @@ function renderRiwayat(){
 
   if(pageData.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="11" class="muted">📭 Belum ada jurnal.</td></tr>';
+      '<tr><td colspan="12" class="muted">📭 Belum ada jurnal.</td></tr>';
     renderRiwayatPagination();
     return;
   }
@@ -510,12 +537,9 @@ function renderRiwayat(){
         : '-';
 
     /* ================= REFLEKSI FIX ================= */
-    let refleksiHtml = '-';
-
+    let refleksiTxt = '-';
     if(x.refleksi && x.refleksi !== '-' && x.refleksi !== '[]'){
-
       let ref = x.refleksi;
-
       if(typeof ref === 'string'){
         try{
           const parsed = JSON.parse(ref);
@@ -524,15 +548,7 @@ function renderRiwayat(){
           }
         }catch(e){}
       }
-
-      const txt = ref.length > 60
-        ? ref.substring(0,60) + '…'
-        : ref;
-
-      refleksiHtml =
-        `<span title="${ref.replace(/"/g,'&quot;')}">
-          ${txt}
-        </span>`;
+      refleksiTxt = ref;
     }
 
     /* ================= ROW RENDER ================= */
@@ -542,11 +558,12 @@ function renderRiwayat(){
         <td>${x.tanggal || '-'}</td>
         <td>${x.kelas || '-'}</td>
         <td>${x.pertemuan || '-'}</td>
-        <td class="left">${x.materi || '-'}</td>
-        <td>${x.asesmen || '-'}</td>
-        <td class="left">${x.absensi || '-'}</td>
+        <td class="left">${_clampCell_(x.materi)}</td>
+        <td class="left">${_clampCell_(x.tujuan)}</td>
+        <td class="left">${_clampCell_(x.asesmen)}</td>
+        <td class="left">${_clampCell_(x.absensi, x.absensiDetail)}</td>
         <td>${fotoHtml}</td>
-        <td class="left">${refleksiHtml}</td>
+        <td class="left">${_clampCell_(refleksiTxt)}</td>
         <td>
           <span class="badge">
             ${x.edit_count || 0} / 3
@@ -740,7 +757,7 @@ function renderRiwayatSkeleton(rows = 6){
   for(let i=0;i<rows;i++){
     tbody.innerHTML += `
       <tr class="skeleton-row">
-        ${'<td><div class="skeleton"></div></td>'.repeat(11)}
+        ${'<td><div class="skeleton"></div></td>'.repeat(12)}
       </tr>
     `;
   }

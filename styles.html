@@ -251,6 +251,20 @@ footer .copy{
       font-weight:700;
     }
     td.left{text-align:left}
+    /* ===== TEKS PANJANG DI TABEL RIWAYAT (Materi/TP/Asesmen/Refleksi) —
+       dibatasi 2 baris + "...", teks lengkap muncul lewat tooltip saat
+       mouse hover (atribut title bawaan browser). ===== */
+    .riwayat-clamp{
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+      max-width:220px;
+      cursor:help;
+    }
+    @media(max-width:768px){
+      .riwayat-clamp{ max-width:140px; }
+    }
     @media(max-width:768px){
       .table-wrap{
         -webkit-overflow-scrolling:touch;
