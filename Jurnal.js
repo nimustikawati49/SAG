@@ -630,6 +630,7 @@ function getJurnalDetail(id){
 
       return {
         jurnalId : id,
+        tanggal  : Utilities.formatDate(new Date(j[i][1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
         kelas    : j[i][2] || '',
         jam_ke   : j[i][3] || '',
         pertemuan: j[i][4] || '',

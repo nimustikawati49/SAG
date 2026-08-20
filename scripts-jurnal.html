@@ -554,9 +554,10 @@ function renderRiwayat(){
         </td>
         <td class="actions">
           <button onclick="editJurnal('${x.jurnalId}')"
-            ${x.locked ? 'disabled' : ''}>✏️</button>
+            ${x.locked ? 'disabled' : ''} title="Edit jurnal ini">✏️</button>
+          <button onclick="duplikatJurnal_('${x.jurnalId}')" title="Duplikat jadi jurnal baru">📋</button>
           <button class="danger"
-            onclick="hapusJurnal('${x.jurnalId}')">🗑️</button>
+            onclick="hapusJurnal('${x.jurnalId}')" title="Hapus jurnal ini">🗑️</button>
         </td>
       </tr>
     `;
@@ -596,6 +597,33 @@ function editJurnal(id){
   }).getJurnalDetail(id);
 }
 
+// Duplikat jurnal — isi ulang form dari entri yang sudah ada (Kelas,
+// Tanggal, Jam Ke, Materi, Tujuan, Asesmen, Refleksi, Absensi), TAPI
+// TIDAK diset sebagai mode edit (editingJurnalId tetap kosong) supaya
+// saat Simpan hasilnya jadi jurnal BARU, bukan menimpa yang lama. Guru
+// tinggal sesuaikan Kelas/Tanggal/Jam Ke/Absensi yang beda, sisanya boleh
+// dibiarkan sama. Boleh dipakai walau jurnal sumbernya sudah terkunci
+// (≥45 hari) atau sudah 3x diedit, karena tidak mengubah baris itu sendiri.
+function duplikatJurnal_(id){
+  google.script.run.withSuccessHandler(d=>{
+    editingJurnalId = null;
+    pendingAbsensiData = d.absensi || [];
+    showTab('jurnalku');
+    kelas.value = d.kelas;
+    tanggal.value = d.tanggal || tanggal.value;
+    jam_ke.value = d.jam_ke || '';
+    materi.value = d.materi;
+    tujuan.value = d.tujuan || '';
+    asesmen.value = d.asesmen;
+    if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
+    loadSiswa();
+    _setModeEditJurnalUI_(false);
+    if(typeof showToast === 'function') showToast('📋 Jurnal diduplikat — sesuaikan Kelas/Tanggal/Jam Ke/Absensi lalu Simpan', 'info', 4500);
+  }).withFailureHandler(err=>{
+    if(typeof showToast === 'function') showToast('❌ Gagal memuat jurnal untuk diduplikat', 'error');
+  }).getJurnalDetail(id);
+}
+
 // Ganti tampilan tombol Simpan/Batal sesuai mode: jurnal baru cuma ada
 // "Simpan Jurnal"; mode edit ada "Update Jurnal" + "Batal" (kembali ke
 // Riwayat Jurnal tanpa menyimpan perubahan).
@@ -604,6 +632,16 @@ function _setModeEditJurnalUI_(isEdit){
   const btnBatal  = document.getElementById('btnBatalEditJurnal');
   if(btnSimpan) btnSimpan.innerText = isEdit ? '🔄 Update Jurnal' : '💾 Simpan Jurnal';
   if(btnBatal)  btnBatal.style.display = isEdit ? 'inline-block' : 'none';
+}
+
+// Tombol "Input Jurnal" di atas tabel Riwayat — pastikan mulai dari
+// kondisi bersih (bukan nyangkut mode edit/duplikat sebelumnya) sebelum
+// pindah ke form Jurnalku.
+function mulaiJurnalBaru_(){
+  editingJurnalId = null;
+  _setModeEditJurnalUI_(false);
+  if(typeof openJurnalFocus === 'function') openJurnalFocus();
+  else showTab('jurnalku');
 }
 
 function batalEditJurnal_(){
