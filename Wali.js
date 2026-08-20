@@ -291,7 +291,17 @@ function getRiwayatJurnalGuruWali(){
     });
   }
 
-  return result.reverse();
+  // Urutkan Tanggal terbaru dulu; kalau Tanggal sama, Waktu Mulai terbesar
+  // dulu — sebelumnya cuma dibalik urutan barisnya di sheet (insertion
+  // order), bukan urutan Tanggal/Waktu yang sebenarnya.
+  result.sort((a, b) => {
+    if (a.iso_tanggal !== b.iso_tanggal) return b.iso_tanggal.localeCompare(a.iso_tanggal);
+    const waktuMulaiA = (a.waktu || '').split(' - ')[0];
+    const waktuMulaiB = (b.waktu || '').split(' - ')[0];
+    return waktuMulaiB.localeCompare(waktuMulaiA);
+  });
+
+  return result;
 }
 
 function hapusJurnalGuruWali(id){

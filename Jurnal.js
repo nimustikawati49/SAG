@@ -500,6 +500,11 @@ function simpanJurnal(data){
 
   const jurnalId = Date.now().toString();
   const now = new Date();
+  // Tanggal jurnal HARUS ikut yang dipilih user di form (bisa tanggal
+  // lampau, mis. lupa input pertemuan minggu lalu) — dulu selalu dipaksa
+  // "now" (tanggal hari ini) tanpa peduli input user, itu sebab laporan
+  // "input jurnal tanggal lampau tapi tersimpan hari ini".
+  const tanggalJurnal = data.tanggal ? new Date(data.tanggal + 'T00:00:00') : now;
 
   const setting = getSetting();
   const period = getUserAcademicPeriod(getAuth().email);
@@ -514,9 +519,13 @@ function simpanJurnal(data){
     throw new Error("Kelas belum dipilih");
   }
 
-  // ✅ DUPLICATE VALIDATION: cek jurnal sama (email + kelas + pertemuan + hari yang sama)
+  // ✅ DUPLICATE VALIDATION: cek jurnal sama (email + kelas + pertemuan +
+  // TANGGAL yang sama persis dengan yang sedang diinput — dulu selalu
+  // dibandingkan ke "hari ini" walau user sedang input tanggal lampau,
+  // jadi validasi ini praktis tidak pernah berlaku untuk input tanggal
+  // lampau (dan sebaliknya).
   const existingRows = sh.getDataRange().getValues();
-  const todayStr = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const targetTanggalStr = Utilities.formatDate(tanggalJurnal, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   for(let i = 1; i < existingRows.length; i++){
     const r = existingRows[i];
     const rowEmail    = String(r[12] || '').toLowerCase().trim();
@@ -527,9 +536,9 @@ function simpanJurnal(data){
       rowEmail   === email &&
       rowKelas   === String(data.kelas   || '').trim() &&
       rowPert    === String(data.pertemuan || '').trim() &&
-      rowTanggal === todayStr
+      rowTanggal === targetTanggalStr
     ){
-      throw new Error('Jurnal duplikat: kelas ' + data.kelas + ' pertemuan ' + data.pertemuan + ' sudah ada hari ini.');
+      throw new Error('Jurnal duplikat: kelas ' + data.kelas + ' pertemuan ' + data.pertemuan + ' sudah ada pada tanggal ' + targetTanggalStr + '.');
     }
   }
 
@@ -563,7 +572,7 @@ function simpanJurnal(data){
 
   sh.appendRow([
     jurnalId,
-    now,
+    tanggalJurnal,
     data.kelas || '',
     jamKe,
     data.pertemuan || '',
@@ -665,6 +674,12 @@ function updateJurnal(data){
 
   const rowNumber = rowIndex + 1;
 
+  // Tanggal (kolom 2) — dulu TIDAK PERNAH ditulis di sini sama sekali,
+  // jadi kalau guru ubah Tanggal saat edit, perubahannya diam-diam
+  // diabaikan (tetap pakai tanggal lama).
+  if(data.tanggal){
+    sh.getRange(rowNumber, 2).setValue(new Date(data.tanggal + 'T00:00:00'));
+  }
   sh.getRange(rowNumber, 3).setValue(data.kelas);
   sh.getRange(rowNumber, 4).setValue(data.jam_ke);
   sh.getRange(rowNumber, 5).setValue(data.pertemuan);
@@ -832,8 +847,19 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     if (fCari  && !String(row[5] || '').toLowerCase().includes(fCari)) continue;
     matchIdx.push(i);
   }
-  // Reverse: newest first
-  matchIdx.reverse();
+  // Urutkan Tanggal terbaru dulu; kalau Tanggal sama, Pertemuan terbesar
+  // dulu — sebelumnya cuma dibalik urutan barisnya di sheet (insertion
+  // order), jadi kalau ada entri yang ditambahkan tidak berurutan
+  // tanggalnya (mis. isi tanggal lama belakangan), urutan tampilnya jadi
+  // salah.
+  matchIdx.sort((a, b) => {
+    const tglA = new Date(jurnalData[a][1]).getTime();
+    const tglB = new Date(jurnalData[b][1]).getTime();
+    if (tglB !== tglA) return tglB - tglA;
+    const pA = parseInt(jurnalData[a][4], 10) || 0;
+    const pB = parseInt(jurnalData[b][4], 10) || 0;
+    return pB - pA;
+  });
 
   const total  = matchIdx.length;
   const start  = (page - 1) * pageSize;

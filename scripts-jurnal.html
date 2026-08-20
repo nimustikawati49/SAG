@@ -553,7 +553,7 @@ function renderRiwayat(){
           </span>
         </td>
         <td class="actions">
-          <button onclick="editJurnal('${x.jurnalId}')"
+          <button onclick="editJurnal('${x.jurnalId}', event)"
             ${x.locked ? 'disabled' : ''} title="Edit jurnal ini">✏️</button>
           <button onclick="duplikatJurnal_('${x.jurnalId}')" title="Duplikat jadi jurnal baru">📋</button>
           <button class="danger"
@@ -566,8 +566,23 @@ function renderRiwayat(){
   renderRiwayatPagination();
 }
 
-function editJurnal(id){
+function editJurnal(id, ev){
+  // Progres + hitungan detik di tombol yang diklik, supaya guru tahu
+  // proses memuat data jurnal sedang berlangsung (bukan diam tanpa
+  // respons) sebelum form edit terisi.
+  const btn = ev && ev.currentTarget ? ev.currentTarget : null;
+  const btnOrigHtml = btn ? btn.innerHTML : null;
+  if(btn) btn.disabled = true;
+  if(typeof startProgress === 'function') startProgress();
+  const stopElapsed = typeof startElapsedNotice_ === 'function' ? startElapsedNotice_(btn, '⏳') : function(){};
+  const selesaiMemuat = () => {
+    stopElapsed();
+    if(typeof endProgress === 'function') endProgress();
+    if(btn){ btn.innerHTML = btnOrigHtml; btn.disabled = false; }
+  };
+
   google.script.run.withSuccessHandler(d=>{
+    selesaiMemuat();
     if(d.locked){
       if(typeof showToast === 'function') showToast('🔒 Jurnal terkunci (≥45 hari)', 'warning');
       else alert('Jurnal terkunci (≥45 hari)');
@@ -582,17 +597,18 @@ function editJurnal(id){
     // Simpan absensi sebelum loadSiswa agar bisa di-restore
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
-    kelas.value=d.kelas;
+    tanggal.value = d.tanggal || tanggal.value;
     jam_ke.value=d.jam_ke||'';
     pertemuan.value=d.pertemuan;
     materi.value=d.materi;
     tujuan.value=d.tujuan||'';
     asesmen.value=d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
-    loadSiswa();
+    _isiKelasDenganRetry_(d.kelas);
     _setModeEditJurnalUI_(true);
     if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
   }).withFailureHandler(err=>{
+    selesaiMemuat();
     if(typeof showToast === 'function') showToast('❌ Gagal memuat detail jurnal', 'error');
   }).getJurnalDetail(id);
 }
@@ -609,19 +625,34 @@ function duplikatJurnal_(id){
     editingJurnalId = null;
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
-    kelas.value = d.kelas;
     tanggal.value = d.tanggal || tanggal.value;
     jam_ke.value = d.jam_ke || '';
     materi.value = d.materi;
     tujuan.value = d.tujuan || '';
     asesmen.value = d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
-    loadSiswa();
+    _isiKelasDenganRetry_(d.kelas);
     _setModeEditJurnalUI_(false);
     if(typeof showToast === 'function') showToast('📋 Jurnal diduplikat — sesuaikan Kelas/Tanggal/Jam Ke/Absensi lalu Simpan', 'info', 4500);
   }).withFailureHandler(err=>{
     if(typeof showToast === 'function') showToast('❌ Gagal memuat jurnal untuk diduplikat', 'error');
   }).getJurnalDetail(id);
+}
+
+// Isi dropdown Kelas dengan retry — dropdown-nya dimuat ASYNC lewat
+// loadKelas() (dipicu oleh showTab('jurnalku')). Kalau opsinya belum
+// sempat terisi saat langsung di-set, kelas.value=... diam-diam gagal
+// "nempel" (browser mengabaikan value yang belum ada opsinya) — guru
+// harus klik pilih Kelas manual lagi baru Absensi/Pertemuan ikut termuat.
+// Dipakai baik oleh Edit maupun Duplikat jurnal.
+function _isiKelasDenganRetry_(kelasVal, retryKe){
+  retryKe = retryKe || 0;
+  kelas.value = kelasVal;
+  if(kelas.value === kelasVal){
+    loadSiswa();
+  } else if(retryKe < 6){
+    setTimeout(()=>_isiKelasDenganRetry_(kelasVal, retryKe + 1), 500);
+  }
 }
 
 // Ganti tampilan tombol Simpan/Batal sesuai mode: jurnal baru cuma ada
@@ -1004,6 +1035,7 @@ async function simpan(){
     );
     const data = {
       jurnalId: editingJurnalId,
+      tanggal: tanggal.value,
       kelas: kelas.value,
       jam_ke: jam_ke.value,
       pertemuan: pertemuan.value,
