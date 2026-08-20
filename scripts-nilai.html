@@ -1014,6 +1014,7 @@ function simpanSemuaNilai() {
 
   const btn = document.getElementById('btnSimpanNilai');
   if (btn) btn.disabled = true;
+  if (typeof startProgress === 'function') startProgress();
   const stopElapsed = startElapsedNotice_(btn, '⏳ Menyimpan...');
 
   const payload = {
@@ -1032,6 +1033,7 @@ function simpanSemuaNilai() {
   google.script.run
     .withSuccessHandler(res => {
       stopElapsed();
+      if (typeof endProgress === 'function') endProgress();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
       nilaiState.dataVersion = Number(res?.version || Date.now());
       clearNilaiDraftLocal_();
@@ -1040,6 +1042,7 @@ function simpanSemuaNilai() {
     })
     .withFailureHandler(e => {
       stopElapsed();
+      if (typeof endProgress === 'function') endProgress();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
       const msg = String(e?.message || 'Gagal menyimpan');
       if (msg.includes('KONFLIK_DATA')) {

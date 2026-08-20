@@ -824,6 +824,28 @@ function loadInfoGuruWali(){
     .getInfoGuruWali();
 }
 
+// Tombol toggle centang semua/hapus semua siswa binaan di Form Jurnal
+// Pendampingan — sengaja ditaruh di file ini (bukan scripts-jadwal-wali-
+// cetak.html) dan dipicu lewat onclick biasa (bukan checkbox terpisah +
+// addEventListener/delegasi) karena pola itu beberapa kali tidak
+// berhasil untuk fitur Siswa Binaan di sesi sebelumnya, sedangkan
+// tombol onclick biasa di file ini (mis. "🔄 Refresh" di atas) selalu
+// terbukti bekerja.
+function _gwToggleCentangSemua_(){
+  var boxes = document.querySelectorAll('.gwSiswaCk');
+  if(!boxes.length) return;
+  var allChecked = true;
+  boxes.forEach(function(b){ if(!b.checked) allChecked = false; });
+  boxes.forEach(function(b){ b.checked = !allChecked; });
+  var checked = document.querySelectorAll('.gwSiswaCk:checked');
+  var counter = document.getElementById('gwSiswaCounter');
+  if(counter){
+    if(!checked.length) counter.textContent = '';
+    else if(checked.length === 1) counter.textContent = '(1 dipilih — individu)';
+    else counter.textContent = '(' + checked.length + ' dipilih — kelompok)';
+  }
+}
+
 function loadSiswaBinaan(page){
   var tbody = document.getElementById('siswaBinaanBody');
   if(!tbody) return;
@@ -862,7 +884,6 @@ function loadSiswaBinaan(page){
               }).join('') + '</tbody></table>';
           }
           if(typeof _gwUpdateSiswaCounter_ === 'function') _gwUpdateSiswaCounter_();
-          if(typeof _gwSyncCentangSemua_ === 'function') _gwSyncCentangSemua_();
         }
       }
 

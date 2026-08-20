@@ -494,15 +494,15 @@
        JURNAL + ABSENSI yang sudah diisi guru di tab "Jurnal Saya", bukan
        diisi manual di sini. Kartu ini murni teks bantuan, tidak memanggil
        server mana pun. -->
-  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px">
-    <h4 style="margin-top:0">📌 Cara Membaca Dashboard</h4>
+  <details class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px">
+    <summary style="cursor:pointer;font-weight:700;font-size:14px">📌 Cara Membaca Dashboard</summary>
     <ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.7">
       <li>Kartu <b>KPI</b> (Total Jurnal, Total Kelas, Rata-rata Hadir, Kelas Risiko) dihitung dari jurnal &amp; absensi dalam rentang tanggal <b>Dari – Sampai</b> di bawah — ubah rentangnya lalu klik <b>Terapkan</b> untuk memfilter ulang.</li>
       <li><b>Kelas Risiko</b> = kelas dengan rata-rata kehadiran di bawah 80% pada rentang tanggal terpilih — cek kelas ini lebih dulu kalau ada.</li>
       <li><b>Insight Otomatis</b> di paling bawah merangkum poin-poin di atas secara otomatis, tidak perlu dibaca satu-satu kalau sudah lihat KPI &amp; ranking.</li>
       <li>Tahun pelajaran &amp; semester yang dipakai selalu mengikuti periode aktif di tab <b>⚙️ Pengaturan</b> — tidak perlu dipilih ulang di sini.</li>
     </ol>
-  </div>
+  </details>
 
   <!-- JADWAL MENGAJAR — jadwal hari ini s.d. akhir minggu, diambil dari
        JADWAL_SEMESTER (diisi lewat tab Pengaturan). Kosong = guru belum
@@ -1026,10 +1026,8 @@
           </div>
         </div>
         <small class="helper">Centang 1 siswa untuk pendampingan individu, atau lebih dari 1 untuk kelompok (didampingi bersama di waktu yang sama).</small>
-        <label style="display:flex;align-items:center;gap:6px;margin:8px 0 0;font-weight:400;font-size:12.5px;cursor:pointer">
-          <input type="checkbox" id="gwCentangSemuaCk" style="width:auto">
-          Centang Semua
-        </label>
+        <button type="button" class="ghost" onclick="_gwToggleCentangSemua_()"
+                style="font-size:12px;padding:4px 10px;margin-top:8px">☑️ Centang / Hapus Semua</button>
         <div id="gwSiswaBinaanCkList" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-top:6px">
           <p class="muted" style="margin:6px;font-size:12px">⏳ Memuat daftar siswa...</p>
         </div>
@@ -2152,8 +2150,8 @@
 <div id="inputNilai" class="card tab" data-tabid="inputNilai" style="display:none">
   <h2>📊 Daftar Nilai Siswa</h2>
   <p class="muted" style="margin-bottom:10px">Bisa diakses semua akun guru terdaftar (tidak khusus admin/superadmin) — untuk input, pengolahan, dan cetak daftar nilai.</p>
-  <div class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px;font-size:12.5px;line-height:1.75">
-    <h4 style="margin-top:0">ℹ️ Panduan Singkat</h4>
+  <details class="card" style="background:#f8fafc;border-left:6px solid #6366f1;margin-bottom:16px;font-size:12.5px;line-height:1.75">
+    <summary style="cursor:pointer;font-weight:700;font-size:14px">ℹ️ Panduan Singkat</summary>
     <b>Kolom yang tersedia:</b>
     <ul style="margin:4px 0 10px 18px">
       <li><b>TGS1–TGS3</b>: nilai tugas mandiri harian</li>
@@ -2170,7 +2168,7 @@
       <li><b>Nilai Akhir</b> = Total Nilai yang sudah disesuaikan lewat <b>Katrol</b> (lihat kartu "⚙️ Pengaturan Nilai" di bawah untuk detail rumusnya)</li>
     </ul>
     <b>Cetak / Export:</b> tersedia pilihan nilai murni atau katrol, kolom mana saja yang ditampilkan, ukuran kertas A4/F4 dengan orientasi potrait/landscape (header tabel berulang otomatis tiap halaman), dan export ke Excel.
-  </div>
+  </details>
 
   <!-- Filter -->
   <div class="card" style="margin-bottom:16px">
