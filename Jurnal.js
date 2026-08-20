@@ -1086,13 +1086,15 @@ function getJurnalUntukCetak(kelas, tglMulai, tglSampai){
     // Baris cetak dibuat per-siswa (bukan digabung koma) supaya tidak
     // jadi satu baris panjang yang berantakan saat kolom sempit — tiap
     // kategori (Sakit/Izin/Alpa) diberi judul, lalu nama-nama di bawahnya
-    // masing-masing baris baru.
+    // sebagai bullet list satu nama per baris.
+    const bulletList = (names) => '<ul style="margin:2px 0 6px 14px;padding:0">' +
+      names.map(n => '<li>' + n + '</li>').join('') + '</ul>';
     let absRingkas = 'NIHIL';
     const blocks = [];
-    if (sakit.length) blocks.push('<b>Sakit:</b><br>' + sakit.join('<br>'));
-    if (izin.length)  blocks.push('<b>Izin:</b><br>'  + izin.join('<br>'));
-    if (alpha.length) blocks.push('<b>Alpa:</b><br>'  + alpha.join('<br>'));
-    if (blocks.length) absRingkas = blocks.join('<br>');
+    if (sakit.length) blocks.push('<b>Sakit:</b>' + bulletList(sakit));
+    if (izin.length)  blocks.push('<b>Izin:</b>'  + bulletList(izin));
+    if (alpha.length) blocks.push('<b>Alpa:</b>'  + bulletList(alpha));
+    if (blocks.length) absRingkas = blocks.join('');
 
     // ID file Drive dokumentasi (bukan HTML siap-pakai seperti di Riwayat)
     // — dibiarkan mentah supaya client bebas atur ukuran thumbnail sendiri
