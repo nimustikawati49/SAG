@@ -892,18 +892,25 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     const tglA = new Date(jurnalData[a][1]).getTime();
     const tglB = new Date(jurnalData[b][1]).getTime();
     if (tglB !== tglA) return tglB - tglA;
-    const pA = parseInt(jurnalData[a][4], 10) || 0;
-    const pB = parseInt(jurnalData[b][4], 10) || 0;
-    if (pB !== pA) return pB - pA;
-    // Tanggal & Pertemuan sama, Jam Mulai terbesar dulu — mis. hari yang
-    // sama, pertemuan ke-5 di kelas berbeda: yang mengajar jam 13:00
-    // tampil di atas yang mengajar jam 08:00 (jam mengajar paling akhir
-    // hari itu). Jam Ke disimpan sebagai "HH:MM-HH:MM" (atau angka lama
+    // Tanggal sama, Jam Mulai terbesar dulu — ini urutan UTAMA setelah
+    // Tanggal (seperti urutan Jadwal Mengajar per hari), BUKAN Pertemuan
+    // dulu — soalnya Pertemuan itu hitungan per-KELAS sendiri-sendiri
+    // (kelas A bisa di pertemuan 8 sementara kelas B baru pertemuan 5 di
+    // hari yang sama), jadi kalau Pertemuan jadi prioritas duluan, kelas
+    // yang diajar PAGI tapi pertemuan-nya kebetulan lebih besar bisa
+    // tampil di atas kelas yang diajar SIANG — salah urutan kronologis
+    // hari itu. Jam Ke disimpan sebagai "HH:MM-HH:MM" (atau angka lama
     // dari sebelum field ini berformat jam) — _jamKeKeMenit_ menangani
     // keduanya.
     const jA = _jamKeKeMenit_(jurnalData[a][3]);
     const jB = _jamKeKeMenit_(jurnalData[b][3]);
-    return jB - jA;
+    if (jB !== jA) return jB - jA;
+    // Tanggal & Jam sama juga (jarang, tapi bisa terjadi kalau Jam Ke
+    // kosong/belum diisi di beberapa entri) — baru Pertemuan terbesar
+    // sebagai kunci urutan terakhir.
+    const pA = parseInt(jurnalData[a][4], 10) || 0;
+    const pB = parseInt(jurnalData[b][4], 10) || 0;
+    return pB - pA;
   });
 
   const total  = matchIdx.length;
@@ -1011,6 +1018,118 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
   const _finalResult = { rows, total, page, pageSize };
   try { CacheService.getUserCache().put(_riwayatCacheKey, JSON.stringify(_finalResult), 30); } catch (eCacheWrite) {}
   return _finalResult;
+}
+
+// Data untuk fitur Cetak Jurnal (laporan per Kelas & rentang tanggal) —
+// TIDAK dipaging seperti getRiwayatJurnalPaged, karena laporan cetak
+// harus memuat SEMUA entri dalam rentang tanggal yang dipilih, bukan
+// cuma satu halaman. Diurutkan Tanggal & Jam MENAIK (kronologis) supaya
+// enak dibaca sebagai laporan, beda dengan tabel Riwayat yang terbaru
+// di atas.
+function getJurnalUntukCetak(kelas, tglMulai, tglSampai){
+  const auth = getAuth();
+  const fKelas  = String(kelas || '').trim().toLowerCase();
+  const fDari   = tglMulai ? new Date(tglMulai + 'T00:00:00') : null;
+  const fSampai = tglSampai ? new Date(tglSampai + 'T23:59:59') : null;
+
+  const setting     = getSetting();
+  const activeTahun = setting.tahun_pelajaran || '';
+  const ss = getSpreadsheet_();
+
+  const shJurnal = ss.getSheetByName('JURNAL');
+  const shAbs    = ss.getSheetByName('ABSENSI');
+  const shSiswa  = ss.getSheetByName('SISWA');
+  if (!shJurnal) return [];
+
+  const jurnalData = shJurnal.getDataRange().getValues();
+  const absData     = shAbs   ? shAbs.getDataRange().getValues()   : [];
+  const siswaData   = shSiswa ? shSiswa.getDataRange().getValues() : [];
+
+  const matchIdx = [];
+  for (let i = 1; i < jurnalData.length; i++) {
+    const row = jurnalData[i];
+    if (row[12] !== auth.email) continue;
+    if (activeTahun && row[18] && String(row[18]) !== activeTahun) continue;
+    if (fKelas && String(row[2] || '').toLowerCase() !== fKelas) continue;
+    const tgl = new Date(row[1]);
+    if (fDari   && tgl < fDari)   continue;
+    if (fSampai && tgl > fSampai) continue;
+    matchIdx.push(i);
+  }
+
+  matchIdx.sort((a, b) => {
+    const tglA = new Date(jurnalData[a][1]).getTime();
+    const tglB = new Date(jurnalData[b][1]).getTime();
+    if (tglA !== tglB) return tglA - tglB;
+    const jA = _jamKeKeMenit_(jurnalData[a][3]);
+    const jB = _jamKeKeMenit_(jurnalData[b][3]);
+    return jA - jB;
+  });
+
+  return matchIdx.map((i) => {
+    const row      = jurnalData[i];
+    const jurnalId = row[0];
+    const kelasRow = row[2] || '-';
+    const absRows  = absData.filter(a => a[0] == jurnalId);
+
+    let sakit = [], izin = [], alpha = [];
+    absRows.forEach(a => {
+      if (a[3] === 'H') return;
+      const nis   = String(a[2] || '').trim();
+      const siswa = siswaData.find(s => s[0] == kelasRow && String(s[2]) == nis);
+      const nama  = siswa ? siswa[3] : getNamaSiswaByNis_(nis);
+      if (a[3] === 'S') sakit.push(nama);
+      if (a[3] === 'I') izin.push(nama);
+      if (a[3] === 'A') alpha.push(nama);
+    });
+
+    // Baris cetak dibuat per-siswa (bukan digabung koma) supaya tidak
+    // jadi satu baris panjang yang berantakan saat kolom sempit — tiap
+    // kategori (Sakit/Izin/Alpa) diberi judul, lalu nama-nama di bawahnya
+    // masing-masing baris baru.
+    let absRingkas = 'NIHIL';
+    const blocks = [];
+    if (sakit.length) blocks.push('<b>Sakit:</b><br>' + sakit.join('<br>'));
+    if (izin.length)  blocks.push('<b>Izin:</b><br>'  + izin.join('<br>'));
+    if (alpha.length) blocks.push('<b>Alpa:</b><br>'  + alpha.join('<br>'));
+    if (blocks.length) absRingkas = blocks.join('<br>');
+
+    // ID file Drive dokumentasi (bukan HTML siap-pakai seperti di Riwayat)
+    // — dibiarkan mentah supaya client bebas atur ukuran thumbnail sendiri
+    // sesuai kebutuhan tata letak cetak.
+    let fotoIds = [];
+    try {
+      if (row[14]) {
+        const parsed = JSON.parse(row[14]);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((f) => {
+            if (!f || !f.full) return;
+            const m = f.full.match(/[-\w]{25,}/);
+            if (m) fotoIds.push(m[0]);
+          });
+        }
+      }
+      if (fotoIds.length === 0 && row[17]) {
+        String(row[17]).trim().split(',').filter(u => u.trim()).forEach((u) => {
+          const m = u.match(/[-\w]{25,}/);
+          if (m) fotoIds.push(m[0]);
+        });
+      }
+    } catch (e) { fotoIds = []; }
+
+    return {
+      tanggal   : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      kelas     : kelasRow,
+      jam_ke    : row[3] || '-',
+      pertemuan : row[4] || '-',
+      materi    : row[5] || '-',
+      tujuan    : row[6] || '-',
+      asesmen   : row[7] || '-',
+      absensi   : absRingkas,
+      refleksi  : row[15] || '-',
+      foto      : fotoIds
+    };
+  });
 }
 
 function getRiwayatJurnal(){

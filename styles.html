@@ -1956,6 +1956,85 @@ body.dark .nav-mobile{
     padding: 24px 12px;
     overflow-y: auto;
   }
+
+  /* ===== DETAIL JURNAL & CETAK JURNAL MODAL (Riwayat Jurnal) ===== */
+  #detailJurnalModal,
+  #cetakJurnalModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 999996;
+    padding: 24px 12px;
+    overflow-y: auto;
+  }
+  .detail-jurnal-field { margin-bottom: 14px; }
+  .detail-jurnal-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: 4px;
+  }
+  .detail-jurnal-field div.val {
+    font-size: 14px;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+  body.dark #detailJurnalModal > div,
+  body.dark #cetakJurnalModal > div {
+    background: #1f2937 !important;
+    color: #e5e7eb !important;
+    border: 1px solid #374151;
+  }
+  body.dark #detailJurnalModal h3,
+  body.dark #cetakJurnalModal h3 { color: #f9fafb; }
+  body.dark .detail-jurnal-field label { color: #9ca3af; }
+
+  /* ===== AKSI FLOATING MENU (Riwayat Jurnal) ===== */
+  .aksi-menu {
+    position: fixed;
+    flex-direction: column;
+    min-width: 168px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.18);
+    z-index: 999995;
+    padding: 6px;
+    gap: 2px;
+  }
+  .aksi-menu button {
+    text-align: left;
+    background: none;
+    box-shadow: none;
+    color: #1f2937;
+    padding: 9px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    width: 100%;
+  }
+  .aksi-menu button:hover:not(:disabled) { background: #f3f4f6; }
+  .aksi-menu button.danger { color: #dc2626; }
+  .aksi-menu button.danger:hover:not(:disabled) { background: #fef2f2; }
+  .aksi-menu .aksi-menu-info {
+    font-size: 11px;
+    color: #6b7280;
+    padding: 6px 10px 2px;
+    border-top: 1px solid #eee;
+    margin-top: 4px;
+  }
+  body.dark .aksi-menu {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  body.dark .aksi-menu button { color: #e5e7eb; }
+  body.dark .aksi-menu button:hover:not(:disabled) { background: #374151; }
+  body.dark .aksi-menu .aksi-menu-info { color: #9ca3af; border-top-color: #374151; }
   .tmpl-item {
     padding: 14px 16px;
     border-radius: 10px;

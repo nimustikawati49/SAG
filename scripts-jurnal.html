@@ -155,14 +155,19 @@ function _pecahJamKe_(jamKeStr){
   return { mulai: parts[0] || '', selesai: parts[0] || '' };
 }
 
-// Begitu Kelas (atau Tanggal) dipilih untuk jurnal BARU, cari otomatis
-// jam mengajar guru ini untuk Kelas & Hari (dari Tanggal) itu di Jadwal
-// Mengajar yang sudah dikonfigurasi — supaya guru tidak perlu ketik
-// manual, dan otomatis benar walau jam berbeda di hari tertentu (mis.
-// Kamis/Sabtu lebih pendek dari hari lain). Tidak dijalankan saat mode
-// edit (jam sudah diisi dari data jurnal yang diedit, jangan ditimpa).
+// Begitu Kelas (atau Tanggal) dipilih, cari otomatis jam mengajar guru
+// ini untuk Kelas & Hari (dari Tanggal) itu di Jadwal Mengajar yang
+// sudah dikonfigurasi — supaya guru tidak perlu ketik manual, dan
+// otomatis benar walau jam berbeda di hari tertentu (mis. Kamis/Sabtu
+// lebih pendek dari hari lain). Berjalan juga saat mode edit, tapi
+// hanya kalau Jam Mulai/Selesai masih kosong (lihat guard di bawah) —
+// supaya bisa dipakai untuk isi ulang entri lama yang Jam-nya belum
+// terisi, tanpa menimpa entri yang Jam-nya sudah benar.
 function _autoIsiJamDariJadwal_(){
-  if(editingJurnalId) return;
+  // Jangan timpa Jam yang sudah terisi (baik saat input baru maupun edit)
+  // — cuma bantu isi kalau memang masih kosong (mis. entri lama yang
+  // belum sempat diisi jam-nya).
+  if(jamMulai.value && jamSelesai.value) return;
   if(!kelas.value || !tanggal.value) return;
   const info = document.getElementById('jamAutoInfo');
   if(info) info.textContent = '⏳ Mencari jam dari Jadwal Mengajar...';
@@ -408,8 +413,8 @@ function loadSiswa(){
 
   if(!editingJurnalId){
     _populateSalinJurnalBox_(kelas.value);
-    _autoIsiJamDariJadwal_();
   }
+  _autoIsiJamDariJadwal_();
 }
 
 // Guru mengajar beberapa kelas tingkat sama (mis. 7A, 7B, 7C) dengan
@@ -524,7 +529,7 @@ function loadRiwayat(page = 1){
       if(tbody){
         tbody.innerHTML = `
           <tr>
-            <td colspan="13" class="muted">
+            <td colspan="10" class="muted">
               ❌ Gagal memuat riwayat jurnal
             </td>
           </tr>
@@ -575,7 +580,7 @@ function renderRiwayat(){
 
   if(pageData.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="13" class="muted">📭 Belum ada jurnal.</td></tr>';
+      '<tr><td colspan="10" class="muted">📭 Belum ada jurnal.</td></tr>';
     renderRiwayatPagination();
     return;
   }
@@ -587,21 +592,6 @@ function renderRiwayat(){
         ? x.foto
         : '-';
 
-    /* ================= REFLEKSI FIX ================= */
-    let refleksiTxt = '-';
-    if(x.refleksi && x.refleksi !== '-' && x.refleksi !== '[]'){
-      let ref = x.refleksi;
-      if(typeof ref === 'string'){
-        try{
-          const parsed = JSON.parse(ref);
-          if(typeof parsed === 'string'){
-            ref = parsed;
-          }
-        }catch(e){}
-      }
-      refleksiTxt = ref;
-    }
-
     /* ================= ROW RENDER ================= */
     tbody.innerHTML += `
       <tr class="${x.locked ? 'locked' : ''}">
@@ -611,28 +601,317 @@ function renderRiwayat(){
         <td>${_escAttr_(x.jam_ke) || '-'}</td>
         <td>${x.pertemuan || '-'}</td>
         <td class="left">${_clampCell_(x.materi)}</td>
-        <td class="left">${_clampCell_(x.tujuan)}</td>
         <td class="left">${_clampCell_(x.asesmen)}</td>
         <td class="left">${_clampCell_(x.absensi, x.absensiDetail)}</td>
         <td>${fotoHtml}</td>
-        <td class="left">${_clampCell_(refleksiTxt)}</td>
-        <td>
-          <span class="badge">
-            ${x.edit_count || 0} / 3
-          </span>
-        </td>
         <td class="actions">
-          <button onclick="editJurnal('${x.jurnalId}', event)"
-            ${x.locked ? 'disabled' : ''} title="Edit jurnal ini">✏️</button>
-          <button onclick="duplikatJurnal_('${x.jurnalId}')" title="Duplikat jadi jurnal baru">📋</button>
-          <button class="danger"
-            onclick="hapusJurnal('${x.jurnalId}')" title="Hapus jurnal ini">🗑️</button>
+          <button class="ghost" onclick="toggleAksiMenu_(event, '${x.jurnalId}')" title="Menu aksi">⋮</button>
         </td>
       </tr>
     `;
   });
 
   renderRiwayatPagination();
+}
+
+// Refleksi disimpan kadang sebagai string biasa, kadang ter-JSON-encode
+// dari perubahan lama — dipakai bersama oleh renderRiwayat (tidak lagi,
+// sejak kolom Refleksi dipindah ke modal Detail) dan showDetailJurnal_.
+function _normalisasiRefleksi_(raw){
+  let refleksiTxt = '-';
+  if(raw && raw !== '-' && raw !== '[]'){
+    let ref = raw;
+    if(typeof ref === 'string'){
+      try{
+        const parsed = JSON.parse(ref);
+        if(typeof parsed === 'string') ref = parsed;
+      }catch(e){}
+    }
+    refleksiTxt = ref;
+  }
+  return refleksiTxt;
+}
+
+// ===== FLOATING AKSI MENU (Detail / Edit / Duplikat / Hapus) =====
+let _aksiMenuOpenId_ = null;
+
+function toggleAksiMenu_(ev, id){
+  ev.stopPropagation();
+  const menu = document.getElementById('aksiFloatingMenu');
+  if(!menu) return;
+  if(_aksiMenuOpenId_ === id){
+    closeAksiMenu_();
+    return;
+  }
+  const x = riwayatData.find(r => String(r.jurnalId) === String(id));
+  if(!x) return;
+
+  menu.innerHTML = `
+    <button onclick="closeAksiMenu_();showDetailJurnal_('${id}')">🔍 Detail</button>
+    <button onclick="closeAksiMenu_();editJurnal('${id}', event)" ${x.locked ? 'disabled' : ''}>✏️ Edit</button>
+    <button onclick="closeAksiMenu_();duplikatJurnal_('${id}')">📋 Duplikat</button>
+    <button class="danger" onclick="closeAksiMenu_();hapusJurnal('${id}')">🗑️ Hapus</button>
+    <div class="aksi-menu-info">Diedit ${x.edit_count || 0}/3</div>
+  `;
+  menu.style.display = 'flex';
+
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const menuWidth = 176, menuHeightEstimate = 190;
+  let left = rect.right - menuWidth;
+  if(left < 8) left = 8;
+  if(left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+  let top = rect.bottom + 4;
+  if(top + menuHeightEstimate > window.innerHeight) top = rect.top - menuHeightEstimate;
+  if(top < 8) top = 8;
+  menu.style.left = left + 'px';
+  menu.style.top  = top + 'px';
+
+  _aksiMenuOpenId_ = id;
+}
+
+function closeAksiMenu_(){
+  const menu = document.getElementById('aksiFloatingMenu');
+  if(menu) menu.style.display = 'none';
+  _aksiMenuOpenId_ = null;
+}
+
+document.addEventListener('click', function(ev){
+  const menu = document.getElementById('aksiFloatingMenu');
+  if(menu && menu.style.display !== 'none' && !menu.contains(ev.target)){
+    closeAksiMenu_();
+  }
+});
+
+// ===== MODAL DETAIL JURNAL =====
+// Dibangun dari riwayatData yang sudah dimuat di client — tidak perlu
+// panggilan server baru, karena semua field (termasuk TP & Refleksi
+// yang sudah tidak tampil di kolom tabel) sudah ikut terkirim per baris.
+function showDetailJurnal_(id){
+  const x = riwayatData.find(r => String(r.jurnalId) === String(id));
+  if(!x) return;
+  const body = document.getElementById('detailJurnalBody');
+  if(!body) return;
+
+  const field = (label, val) => `
+    <div class="detail-jurnal-field">
+      <label>${label}</label>
+      <div class="val">${val || '-'}</div>
+    </div>`;
+
+  body.innerHTML =
+    `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+      ${field('Tanggal', x.tanggal)}
+      ${field('Kelas', x.kelas)}
+      ${field('Jam', _escAttr_(x.jam_ke))}
+      ${field('Pertemuan Ke', x.pertemuan)}
+    </div>` +
+    field('Materi', x.materi) +
+    field('Tujuan Pembelajaran', x.tujuan) +
+    field('Asesmen', x.asesmen) +
+    field('Absensi', (x.absensiDetail || x.absensi || '-').replace(/\n/g, '<br>')) +
+    field('Refleksi', _normalisasiRefleksi_(x.refleksi)) +
+    `<div class="detail-jurnal-field"><label>Dokumentasi</label><div class="val">${x.foto && x.foto !== '-' ? x.foto : '-'}</div></div>`;
+
+  const modal = document.getElementById('detailJurnalModal');
+  if(modal) modal.style.display = 'flex';
+}
+
+function tutupDetailJurnal_(){
+  const modal = document.getElementById('detailJurnalModal');
+  if(modal) modal.style.display = 'none';
+}
+
+// ===== MODAL & LAPORAN CETAK JURNAL (per Kelas & rentang tanggal) =====
+function cetakJurnalUI_(){
+  const sel = document.getElementById('cetakJurnalKelas');
+  if(sel && sel.options.length <= 1){
+    google.script.run.withSuccessHandler(d=>{
+      (d || []).forEach(k => sel.innerHTML += '<option>' + k + '</option>');
+    }).getKelas();
+  }
+  // Pastikan nama/NIP guru (dipakai di kop cetak) sudah tersedia — kalau
+  // guru belum pernah buka tab Setting/Nilai di sesi ini, window._settingCache
+  // masih kosong.
+  if(!window._settingCache){
+    google.script.run.withSuccessHandler(s=>{
+      window._settingCache = s || {};
+    }).getSetting();
+  }
+  // Default rentang tanggal: ikut filter Riwayat yang sedang aktif kalau ada
+  const dari   = document.getElementById('riwayatFilterDari');
+  const sampai = document.getElementById('riwayatFilterSampai');
+  const cDari   = document.getElementById('cetakJurnalDari');
+  const cSampai = document.getElementById('cetakJurnalSampai');
+  if(cDari)   cDari.value   = (dari && dari.value)     ? dari.value   : '';
+  if(cSampai) cSampai.value = (sampai && sampai.value) ? sampai.value : '';
+  const cKelas = document.getElementById('cetakJurnalKelas');
+  const fKelas = document.getElementById('riwayatFilterKelas');
+  if(cKelas) cKelas.value = (fKelas && fKelas.value) ? fKelas.value : '';
+
+  const modal = document.getElementById('cetakJurnalModal');
+  if(modal) modal.style.display = 'flex';
+}
+
+function tutupCetakJurnal_(){
+  const modal = document.getElementById('cetakJurnalModal');
+  if(modal) modal.style.display = 'none';
+}
+
+function prosesCetakJurnal_(){
+  const kelas  = (document.getElementById('cetakJurnalKelas')  || {}).value || '';
+  const dari   = (document.getElementById('cetakJurnalDari')   || {}).value || '';
+  const sampai = (document.getElementById('cetakJurnalSampai') || {}).value || '';
+  const kertas = (document.getElementById('cetakJurnalKertas') || {}).value || 'A4';
+
+  if(!dari || !sampai){
+    if(typeof showToast === 'function') showToast('⚠️ Isi Dari Tanggal dan Sampai Tanggal dulu', 'warning');
+    else alert('Isi Dari Tanggal dan Sampai Tanggal dulu');
+    return;
+  }
+  if(sampai < dari){
+    if(typeof showToast === 'function') showToast('⚠️ Sampai Tanggal tidak boleh sebelum Dari Tanggal', 'warning');
+    else alert('Sampai Tanggal tidak boleh sebelum Dari Tanggal');
+    return;
+  }
+
+  const btn = event && event.currentTarget ? event.currentTarget : null;
+  const btnOrigHtml = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Menyiapkan...'; }
+
+  google.script.run
+    .withSuccessHandler(rows=>{
+      if(btn){ btn.disabled = false; btn.innerHTML = btnOrigHtml; }
+      if(!rows || rows.length === 0){
+        if(typeof showToast === 'function') showToast('📭 Tidak ada jurnal pada rentang ini', 'warning');
+        else alert('Tidak ada jurnal pada rentang tanggal/kelas ini');
+        return;
+      }
+      _bukaJendelaCetakJurnal_(rows, kelas, dari, sampai, kertas);
+      tutupCetakJurnal_();
+    })
+    .withFailureHandler(err=>{
+      if(btn){ btn.disabled = false; btn.innerHTML = btnOrigHtml; }
+      if(typeof showToast === 'function') showToast('❌ Gagal menyiapkan laporan: ' + err.message, 'error');
+      else alert('Gagal menyiapkan laporan: ' + err.message);
+    })
+    .getJurnalUntukCetak(kelas, dari, sampai);
+}
+
+// Ukuran fisik kertas dalam mm — dipakai untuk @page (saat print/PDF)
+// DAN untuk lebar kotak ".page" di layar (supaya preview di layar benar-benar
+// mencerminkan proporsi kertas asli, bukan cuma tabel polos tanpa konteks
+// ukuran halaman). Selalu landscape sesuai permintaan (tabel jurnal lebar).
+const _UKURAN_KERTAS_MM_ = {
+  A4: { lebar: 297, tinggi: 210 },
+  F4: { lebar: 330, tinggi: 215 }
+};
+
+function _bukaJendelaCetakJurnal_(rows, kelas, dari, sampai, kertas){
+  const namaGuru = (window._settingCache && window._settingCache.nama_guru) || '-';
+  const nip      = (window._settingCache && window._settingCache.nip_guru)  || '-';
+  const judulKelas = kelas ? ('Kelas ' + kelas) : 'Semua Kelas';
+  const ukuran = _UKURAN_KERTAS_MM_[kertas] || _UKURAN_KERTAS_MM_.A4;
+  const namaKertas = kertas === 'F4' ? 'F4 (215 x 330 mm)' : 'A4 (210 x 297 mm)';
+
+  const baris = rows.map((r, i) => {
+    let photoHtml = '-';
+    if(r.foto && r.foto.length){
+      photoHtml = '<div style="display:flex;flex-wrap:wrap;gap:2px">' +
+        r.foto.map(id =>
+          `<img src="https://drive.google.com/thumbnail?id=${id}&sz=w150" ` +
+          `style="width:42px;height:42px;object-fit:cover;border-radius:3px" crossorigin="anonymous">`
+        ).join('') +
+        '</div>';
+    }
+    return `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td style="white-space:nowrap">${r.tanggal}</td>
+      <td style="text-align:center">${r.kelas}</td>
+      <td style="text-align:center;white-space:nowrap">${_escAttr_(r.jam_ke)}</td>
+      <td style="text-align:center">${r.pertemuan}</td>
+      <td>${r.materi}</td>
+      <td>${r.tujuan}</td>
+      <td>${r.asesmen}</td>
+      <td>${r.absensi}</td>
+      <td>${photoHtml}</td>
+      <td>${r.refleksi}</td>
+    </tr>
+  `;
+  }).join('');
+
+  const html = '<!DOCTYPE html><html><head>' +
+    '<meta charset="UTF-8">' +
+    '<title>Laporan Jurnal Mengajar</title>' +
+    '<style>' +
+      '*{ box-sizing:border-box; }' +
+      '@page{ size: ' + ukuran.lebar + 'mm ' + ukuran.tinggi + 'mm; margin: 12mm; }' +
+      'html,body{ margin:0; padding:0; }' +
+      'body{ font-family:Arial,sans-serif; font-size:12px; color:#111; background:#e5e7eb; padding:26px 12px; }' +
+      '.toolbar{ max-width:' + ukuran.lebar + 'mm; margin:0 auto 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }' +
+      '.toolbar .info{ font-size:12px; color:#374151; }' +
+      '.btn-cetak{ padding:10px 24px; background:#6C63FF; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; }' +
+      '.page{ background:#fff; width:' + ukuran.lebar + 'mm; min-height:' + ukuran.tinggi + 'mm; margin:0 auto; padding:12mm; box-shadow:0 6px 28px rgba(0,0,0,.28); }' +
+      'h2{ text-align:center; font-size:16px; margin-bottom:4px; }' +
+      'p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }' +
+      'table{ width:100%; border-collapse:collapse; margin-top:8px; table-layout:fixed; }' +
+      'th,td{ border:1px solid #bbb; padding:6px 5px; vertical-align:top; font-size:10.5px; overflow-wrap:break-word; word-break:break-word; }' +
+      'th{ background:#eef2ff; font-weight:700; text-align:center; }' +
+      '.ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }' +
+      '.ttd-box{ text-align:center; min-width:220px; }' +
+      '.ttd-box p{ margin:2px 0; }' +
+      '.garis-ttd{ margin-top:68px; border-top:1px solid #333; padding-top:4px; font-weight:700; }' +
+      '@media print{' +
+        'body{ background:#fff; padding:0; }' +
+        '.toolbar{ display:none; }' +
+        '.page{ box-shadow:none; margin:0; padding:0; width:auto; min-height:auto; }' +
+      '}' +
+    '</style>' +
+    '</head><body>' +
+    '<div class="toolbar">' +
+      '<span class="info">👁️ Preview cetak — kertas ' + namaKertas + ', landscape</span>' +
+      '<button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>' +
+    '</div>' +
+    '<div class="page">' +
+    '<h2>JURNAL MENGAJAR</h2>' +
+    '<p class="sub">' + namaGuru + ' &nbsp;&bull;&nbsp; NIP: ' + nip + ' &nbsp;&bull;&nbsp; ' + judulKelas + ' &nbsp;&bull;&nbsp; ' + dari + ' s/d ' + sampai + '</p>' +
+    '<table><colgroup>' +
+      '<col style="width:3%"><col style="width:7%"><col style="width:5%">' +
+      '<col style="width:7%"><col style="width:4%"><col style="width:12%">' +
+      '<col style="width:12%"><col style="width:10%"><col style="width:10%">' +
+      '<col style="width:12%"><col style="width:18%">' +
+    '</colgroup>' +
+    '<thead><tr>' +
+      '<th>No</th>' +
+      '<th>Tanggal</th>' +
+      '<th>Kelas</th>' +
+      '<th>Jam</th>' +
+      '<th>Pert.</th>' +
+      '<th>Materi</th>' +
+      '<th>Tujuan Pembelajaran</th>' +
+      '<th>Asesmen</th>' +
+      '<th>Absensi</th>' +
+      '<th>📸 Dokumentasi</th>' +
+      '<th>Refleksi</th>' +
+    '</tr></thead>' +
+    '<tbody>' + baris + '</tbody></table>' +
+    '<div class="ttd-wrap"><div class="ttd-box">' +
+      '<p><b>Mengetahui</b></p>' +
+      '<p>Guru Mapel</p>' +
+      '<div class="garis-ttd">' + namaGuru + '<br>' +
+        '<span style="font-weight:normal">NIP. ' + nip + '</span>' +
+      '</div>' +
+    '</div></div>' +
+    '</div>' +
+    '</body></html>';
+
+  const win = window.open('', '_blank', 'width=1000,height=720');
+  if(!win){
+    alert('Popup diblokir browser.\nAktifkan popup untuk halaman ini lalu coba lagi.');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
 }
 
 function editJurnal(id, ev){
@@ -815,7 +1094,7 @@ function renderRiwayatSkeleton(rows = 6){
   for(let i=0;i<rows;i++){
     tbody.innerHTML += `
       <tr class="skeleton-row">
-        ${'<td><div class="skeleton"></div></td>'.repeat(13)}
+        ${'<td><div class="skeleton"></div></td>'.repeat(10)}
       </tr>
     `;
   }

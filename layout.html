@@ -687,7 +687,10 @@
   <div class="card tab" id="riwayat" data-tabid="riwayat" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <h3 style="margin:0">📑 Riwayat Jurnal</h3>
-      <button onclick="mulaiJurnalBaru_()">➕ Input Jurnal</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="ghost" onclick="cetakJurnalUI_()">🖨️ Cetak Jurnal</button>
+        <button onclick="mulaiJurnalBaru_()">➕ Input Jurnal</button>
+      </div>
     </div>
     <p class="muted" style="font-size:12.5px;margin:8px 0 12px">Semua jurnal yang sudah disimpan lewat tab Jurnalku — filter berdasarkan tanggal/kelas/kata kunci materi, edit/duplikat/hapus lewat kolom Aksi, atau download rekap semester/bulanan di bagian bawah.</p>
 
@@ -736,12 +739,9 @@
             <th>Jam</th>
             <th>Pertemuan</th>
             <th>Materi</th>
-            <th title="Tujuan Pembelajaran">TP</th>
             <th>Asesmen</th>
             <th>Absensi</th>
             <th>📸 Dokumentasi</th>
-            <th>✍️ Refleksi</th>
-            <th>Edit</th>
             <th>Aksi</th>
           </tr>
         </thead>
@@ -2707,6 +2707,51 @@
     <div id="templateJurnalList"></div>
   </div>
 </div>
+
+<!-- ===== MODAL: DETAIL JURNAL ===== -->
+<div id="detailJurnalModal">
+  <div style="background:#fff;width:92%;max-width:640px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h3 style="margin:0">🔍 Detail Jurnal</h3>
+      <button onclick="tutupDetailJurnal_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <div id="detailJurnalBody"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL: CETAK JURNAL ===== -->
+<div id="cetakJurnalModal">
+  <div style="background:#fff;width:92%;max-width:440px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h3 style="margin:0">🖨️ Cetak Jurnal</h3>
+      <button onclick="tutupCetakJurnal_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <p class="muted" style="margin-bottom:14px;font-size:13px">Pilih Kelas dan rentang tanggal untuk membuat laporan jurnal yang bisa dicetak/di-PDF-kan.</p>
+    <label>Kelas</label>
+    <select id="cetakJurnalKelas" style="margin-bottom:12px">
+      <option value="">-- Semua Kelas --</option>
+    </select>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1">
+        <label>Dari Tanggal</label>
+        <input type="date" id="cetakJurnalDari">
+      </div>
+      <div style="flex:1">
+        <label>Sampai Tanggal</label>
+        <input type="date" id="cetakJurnalSampai">
+      </div>
+    </div>
+    <label style="margin-top:12px">Ukuran Kertas</label>
+    <select id="cetakJurnalKertas">
+      <option value="A4">A4 (Landscape)</option>
+      <option value="F4">F4 / Folio (Landscape)</option>
+    </select>
+    <button onclick="prosesCetakJurnal_()" style="margin-top:18px;width:100%">👁️ Lihat Preview</button>
+  </div>
+</div>
+
+<!-- ===== FLOATING AKSI MENU (Riwayat Jurnal) ===== -->
+<div id="aksiFloatingMenu" class="aksi-menu" style="display:none"></div>
 
 <!-- ===== LIGHTBOX MODAL ===== -->
 <div id="gwLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999999;align-items:center;justify-content:center" onclick="gwCloseLightbox_()">
