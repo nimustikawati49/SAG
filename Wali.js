@@ -195,6 +195,34 @@ function simpanJurnalGuruWali(data){
 }
 
 /**
+ * getJurnalGuruWaliTerakhir()
+ * Entri Jurnal Guru Wali TERBARU milik guru ini — dipakai supaya tombol
+ * "Salin dari entri terakhir" bisa isi ulang Fokus/Topik Pendampingan,
+ * Catatan, dan Tindak Lanjut tanpa perlu ketik ulang, tetap bisa diedit
+ * sebelum simpan.
+ */
+function getJurnalGuruWaliTerakhir(){
+  const auth = getAuth();
+  if (!auth.email) return null;
+
+  const sh = ensureJurnalGuruWaliSheet_();
+  const rows = sh.getDataRange().getValues();
+
+  for (let i = rows.length - 1; i >= 1; i--) {
+    const row = rows[i];
+    if (String(row[9] || '').toLowerCase().trim() !== auth.email) continue;
+    return {
+      fokus_pendampingan: row[4] || '',
+      topik_pendampingan: row[5] || '',
+      catatan           : row[6] || '',
+      tindak_lanjut     : row[7] || ''
+    };
+  }
+
+  return null;
+}
+
+/**
  * Upload 1–2 compressed photos to Drive, return public view URLs.
  * @param {string} email
  * @param {string} id  – jurnal ID (used as filename prefix)

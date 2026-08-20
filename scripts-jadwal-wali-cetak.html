@@ -16,6 +16,30 @@ function autoFillHariWali(dateStr){
   if(el) el.value = hariMap[d.getDay()] || '';
 }
 
+function salinJurnalWaliTerakhir_(){
+  google.script.run
+    .withSuccessHandler(d=>{
+      if(!d){
+        if(typeof showToast === 'function') showToast('📭 Belum ada entri jurnal sebelumnya untuk disalin', 'info');
+        else alert('Belum ada entri jurnal sebelumnya untuk disalin');
+        return;
+      }
+      const fokus = document.getElementById('gwFokus');
+      const topik = document.getElementById('gwTopik');
+      const catatan = document.getElementById('gwCatatan');
+      const tindak = document.getElementById('gwTindakLanjut');
+      if(fokus) fokus.value = d.fokus_pendampingan || fokus.value;
+      if(topik) topik.value = d.topik_pendampingan || '';
+      if(catatan) catatan.value = d.catatan && d.catatan !== '-' ? d.catatan : '';
+      if(tindak) tindak.value = d.tindak_lanjut && d.tindak_lanjut !== '-' ? d.tindak_lanjut : '';
+      if(typeof showToast === 'function') showToast('📋 Disalin dari entri terakhir — boleh diedit sebelum simpan', 'success', 3000);
+    })
+    .withFailureHandler(err=>{
+      if(typeof showToast === 'function') showToast('❌ Gagal ambil entri terakhir', 'error');
+    })
+    .getJurnalGuruWaliTerakhir();
+}
+
 let isSavingJurnalWali = false;
 
 /* ── Photo pick + compress helpers ── */

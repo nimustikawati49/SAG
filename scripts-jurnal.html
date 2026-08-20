@@ -341,6 +341,47 @@ function loadSiswa(){
       .withFailureHandler(function(){})
       .getNextPertemuanKe(kelas.value);
   }
+
+  if(!editingJurnalId){
+    _populateSalinJurnalBox_(kelas.value);
+  }
+}
+
+// Guru mengajar beberapa kelas tingkat sama (mis. 7A, 7B, 7C) dengan
+// Materi/Tujuan/Asesmen/Refleksi yang sama, cuma Kelas & Absensi yang
+// beda — box ini menawarkan salin dari kelas lain tingkat sama yang
+// sudah diisi duluan, supaya tidak ketik ulang. Tetap bisa diedit
+// setelah disalin.
+let _salinJurnalData_ = [];
+function _populateSalinJurnalBox_(kelasVal){
+  const box = document.getElementById('salinJurnalBox');
+  const sel = document.getElementById('salinJurnalSelect');
+  if(!box || !sel) return;
+  if(!kelasVal){ box.style.display = 'none'; return; }
+  google.script.run
+    .withSuccessHandler(list=>{
+      _salinJurnalData_ = list || [];
+      if(!_salinJurnalData_.length){ box.style.display = 'none'; return; }
+      sel.innerHTML = _salinJurnalData_.map((d,i)=>{
+        const ringkas = (d.materi || '').slice(0,40);
+        return `<option value="${i}">${d.kelas} — ${d.tanggal} — ${ringkas}${(d.materi||'').length>40?'…':''}</option>`;
+      }).join('');
+      box.style.display = 'block';
+    })
+    .withFailureHandler(()=>{ box.style.display = 'none'; })
+    .getRecentJurnalUntukSalin(kelasVal);
+}
+
+function salinJurnalDariKelasLain_(){
+  const sel = document.getElementById('salinJurnalSelect');
+  if(!sel || !_salinJurnalData_.length) return;
+  const d = _salinJurnalData_[Number(sel.value)];
+  if(!d) return;
+  if(typeof materi !== 'undefined' && materi) materi.value = d.materi || '';
+  if(typeof tujuan !== 'undefined' && tujuan) tujuan.value = d.tujuan || '';
+  if(typeof asesmen !== 'undefined' && asesmen) asesmen.value = d.asesmen || '';
+  if(typeof refleksi !== 'undefined' && refleksi) refleksi.value = d.refleksi || '';
+  if(typeof showToast === 'function') showToast('📋 Disalin dari ' + d.kelas + ' — boleh diedit sebelum simpan', 'success', 3000);
 }
 /* ================= RIWAYAT ================= */
 function loadRiwayatFilterKelas(){

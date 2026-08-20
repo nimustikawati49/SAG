@@ -289,6 +289,55 @@ function getNextPertemuanKe(kelas) {
 }
 
 /**
+ * getRecentJurnalUntukSalin(kelasSaatIni)
+ * Daftar entri jurnal terbaru milik guru ini di TINGKAT yang sama dengan
+ * kelasSaatIni (tingkat = angka di depan nama kelas, mis. "7A" -> "7"),
+ * TIDAK termasuk kelasSaatIni sendiri — supaya guru yang mengajar beberapa
+ * kelas tingkat sama dengan materi/tujuan/asesmen/refleksi yang sama tidak
+ * perlu ketik ulang, tinggal pilih & salin dari kelas lain yang sudah
+ * diisi duluan, lalu boleh diedit lagi sebelum simpan.
+ */
+function getRecentJurnalUntukSalin(kelasSaatIni) {
+  const auth = getAuth();
+  if (!auth.email || !kelasSaatIni) return [];
+
+  const tingkatMatch = String(kelasSaatIni).match(/^\d+/);
+  if (!tingkatMatch) return [];
+  const tingkat = tingkatMatch[0];
+
+  const setting = getSetting();
+  const activeTahun = setting.tahun_pelajaran || '';
+  const activeSemester = setting.semester || '';
+
+  const sh = sheet('JURNAL');
+  if (!sh) return [];
+  const rows = sh.getDataRange().getValues();
+
+  const hasil = [];
+  for (let i = rows.length - 1; i >= 1 && hasil.length < 5; i--) {
+    const row = rows[i];
+    if (String(row[12] || '').toLowerCase().trim() !== auth.email) continue;
+    const kelasRow = String(row[2] || '').trim();
+    if (!kelasRow || kelasRow === String(kelasSaatIni).trim()) continue;
+    const tingkatRow = kelasRow.match(/^\d+/);
+    if (!tingkatRow || tingkatRow[0] !== tingkat) continue;
+    if (activeTahun && row[18] && String(row[18]) !== activeTahun) continue;
+    if (activeSemester && row[13] && String(row[13]) !== activeSemester) continue;
+
+    hasil.push({
+      kelas   : kelasRow,
+      tanggal : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      materi  : row[5]  || '',
+      tujuan  : row[6]  || '',
+      asesmen : row[7]  || '',
+      refleksi: row[15] || ''
+    });
+  }
+
+  return hasil;
+}
+
+/**
  * _restFindOrCreateFolder_(token, name, parentId)
  * Cari/buat folder lewat Drive API v3 MURNI (UrlFetchApp + OAuth token),
  * bukan lewat service DriveApp bawaan — jalur kode yang BENAR-BENAR
