@@ -5,6 +5,133 @@
     didefinisikan di scripts-dashboard.html agar always-available)
    ===================================================== */
 
+/* ===================================================================
+   SISWA BINAAN YANG DIDAMPINGI — digabung dari fitur Catatan Murid (tab
+   terpisah yang sudah dihapus dari navigasi) supaya guru wali cuma
+   punya 1 tempat mencatat pendampingan siswa binaan. Cukup 1 daftar
+   centang selalu-terlihat (bukan toggle Individu/Kelompok + dropdown/
+   checklist terpisah seperti versi sebelumnya) — jenisnya (individu vs
+   kelompok) otomatis mengikuti jumlah yang dicentang saat Simpan.
+   =================================================================== */
+var _gwSiswaBinaanList_ = [];
+console.log('[GuruWali] scripts-jadwal-wali-cetak.html dimuat pada ' + new Date().toLocaleTimeString());
+
+function _gwEsc_(s){
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Panggilan MANDIRI (tidak numpang ke fungsi lain) supaya mudah dilacak
+// kalau gagal — hasilnya ditulis LANGSUNG ke daftar centang begitu
+// selesai (sukses ATAU gagal), jadi tidak ada lagi kondisi "diam macet
+// tanpa kabar" kalau ada masalah.
+function _gwLoadSiswaBinaanPicker_(){
+  console.log('[GuruWali] _gwLoadSiswaBinaanPicker_ dipanggil pada ' + new Date().toLocaleTimeString());
+  var box = document.getElementById('gwSiswaBinaanCkList');
+  var btn = document.getElementById('gwMuatUlangBtn');
+  var btnOrigText = btn ? btn.textContent : null;
+  // Tanda visual TEGAS bahwa klik ini benar-benar diterima (bukan cuma
+  // teks "Memuat..." yang sama tampil lagi, yang bisa terlihat SEPERTI
+  // tidak ada respons kalau kondisi sebelumnya juga sedang "Memuat...").
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ ...'; }
+  if(box) box.innerHTML = '<p class="muted" style="margin:6px;font-size:12px">⏳ Memuat daftar siswa... (diminta ' + new Date().toLocaleTimeString() + ')</p>';
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      console.log('[GuruWali] _gwLoadSiswaBinaanPicker_ SUKSES pada ' + new Date().toLocaleTimeString(), res);
+      if(btn){ btn.disabled = false; btn.textContent = btnOrigText; }
+      var data = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+      _gwSiswaBinaanList_ = data;
+      _gwRenderSiswaBinaanCkList_();
+    })
+    .withFailureHandler(function(err){
+      console.error('[GuruWali] _gwLoadSiswaBinaanPicker_ GAGAL pada ' + new Date().toLocaleTimeString() + ':', err && err.message);
+      if(btn){ btn.disabled = false; btn.textContent = btnOrigText; }
+      var msg = '❌ Gagal memuat: ' + (err && err.message ? err.message : 'tidak diketahui');
+      if(box) box.innerHTML = '<p style="margin:6px;font-size:12px;color:#dc2626">' + msg +
+        ' <button type="button" class="gw-retry-btn" style="font-size:11px;padding:2px 8px;margin-left:4px">coba lagi</button></p>';
+    })
+    .getSiswaBinaan(1, 20);
+}
+
+function _gwRenderSiswaBinaanCkList_(){
+  var box = document.getElementById('gwSiswaBinaanCkList');
+  if(!box) return;
+  if(!_gwSiswaBinaanList_.length){
+    box.innerHTML = '<p class="muted" style="margin:6px;font-size:12px">Belum ada siswa binaan — tambahkan dulu di kartu "Import Data Siswa Binaan" di atas.</p>';
+    _gwUpdateSiswaCounter_();
+    _gwSyncCentangSemua_();
+    return;
+  }
+  box.innerHTML = '<table style="width:100%;border-collapse:collapse"><tbody>' +
+    _gwSiswaBinaanList_.map(function(s){
+      var namaAttr = _gwEsc_(s.nama_siswa || '');
+      return '<tr>' +
+        '<td style="width:32px;text-align:center;padding:5px 4px;border-bottom:1px solid #f1f2f6">' +
+          '<input type="checkbox" class="gwSiswaCk" value="' + _gwEsc_(s.nis) + '" data-nama="' + namaAttr + '">' +
+        '</td>' +
+        '<td style="text-align:left;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px">' + namaAttr + '</td>' +
+        '<td style="width:80px;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px;color:#6b7280">' + _gwEsc_(s.nis) + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+  _gwUpdateSiswaCounter_();
+  _gwSyncCentangSemua_();
+}
+
+function _gwUpdateSiswaCounter_(){
+  var checked = document.querySelectorAll('.gwSiswaCk:checked');
+  var counter = document.getElementById('gwSiswaCounter');
+  if(!counter) return;
+  if(!checked.length){ counter.textContent = ''; return; }
+  counter.textContent = checked.length === 1
+    ? '(1 dipilih — individu)'
+    : '(' + checked.length + ' dipilih — kelompok)';
+}
+
+// Pasang event listener lewat JS (addEventListener), BUKAN atribut
+// onclick/onchange inline di HTML — supaya tidak bergantung sama sekali
+// pada bagaimana inline event handler attribute diproses (klik tombol
+// Muat Ulang & centang siswa sempat terlihat "tidak ada respons" tanpa
+// penyebab yang bisa dipastikan lewat atribut inline).
+function _gwSyncCentangSemua_(){
+  var all = document.querySelectorAll('.gwSiswaCk');
+  var checked = document.querySelectorAll('.gwSiswaCk:checked');
+  var master = document.getElementById('gwCentangSemuaCk');
+  if (master) master.checked = all.length > 0 && checked.length === all.length;
+}
+
+(function() {
+  function _gwAttachListeners() {
+    var muatUlangBtn = document.getElementById('gwMuatUlangBtn');
+    if (muatUlangBtn) {
+      muatUlangBtn.addEventListener('click', function(){ _gwLoadSiswaBinaanPicker_(); });
+    }
+    var ckList = document.getElementById('gwSiswaBinaanCkList');
+    if (ckList) {
+      ckList.addEventListener('change', function(ev){
+        if (ev.target && ev.target.classList.contains('gwSiswaCk')) {
+          _gwUpdateSiswaCounter_();
+          _gwSyncCentangSemua_();
+        }
+      });
+      ckList.addEventListener('click', function(ev){
+        if (ev.target && ev.target.classList.contains('gw-retry-btn')) _gwLoadSiswaBinaanPicker_();
+      });
+    }
+    var centangSemua = document.getElementById('gwCentangSemuaCk');
+    if (centangSemua) {
+      centangSemua.addEventListener('change', function(){
+        document.querySelectorAll('.gwSiswaCk').forEach(function(ck){ ck.checked = centangSemua.checked; });
+        _gwUpdateSiswaCounter_();
+      });
+    }
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(_gwAttachListeners, 500);
+  } else {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(_gwAttachListeners, 500); });
+  }
+})();
+
 function autoFillHariWali(dateStr){
   if(!dateStr) return;
   const hariMap = {
@@ -141,6 +268,17 @@ async function simpanJurnalWali(){
     return;
   }
 
+  // ===== Siswa binaan yang didampingi — jenisnya (individu/kelompok)
+  // otomatis mengikuti jumlah yang dicentang, bukan toggle terpisah. =====
+  const siswaTerpilih = Array.from(document.querySelectorAll('.gwSiswaCk:checked')).map(el => ({
+    nis: el.value, nama: el.getAttribute('data-nama') || ''
+  }));
+  if(!siswaTerpilih.length){
+    alert('⚠️ Pilih minimal satu siswa binaan yang didampingi');
+    return;
+  }
+  const gwTipe = siswaTerpilih.length === 1 ? 'individu' : 'kelompok';
+
   isSavingJurnalWali = true;
   const btn = document.getElementById('btnSimpanJurnalWali');
   if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
@@ -158,7 +296,9 @@ async function simpanJurnalWali(){
     topik_pendampingan: topik,
     catatan           : catatan  || '-',
     tindak_lanjut     : tindak   || '-',
-    fotos             : fotos
+    fotos             : fotos,
+    tipe              : gwTipe,
+    siswa             : siswaTerpilih
   };
 
   google.script.run
@@ -193,6 +333,10 @@ function resetFormGuruWali(){
     });
   const fokus = document.getElementById('gwFokus');
   if(fokus) fokus.selectedIndex = 0;
+  // reset pilihan siswa binaan
+  document.querySelectorAll('.gwSiswaCk:checked').forEach(el => { el.checked = false; });
+  _gwUpdateSiswaCounter_();
+  _gwSyncCentangSemua_();
   // reset ke hari ini
   const tglEl = document.getElementById('gwTanggal');
   if(tglEl){
@@ -326,7 +470,7 @@ function arsipJurnalWaliUI(){
 function loadRiwayatGuruWali(){
   const tbody = document.getElementById('riwayatGuruWaliBody');
   if(!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" class="muted"></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="muted"></td></tr>';
   const stopTimer = startElapsedNotice_(tbody.querySelector('td'), '⏳ Memuat...');
 
   google.script.run
@@ -340,7 +484,7 @@ function loadRiwayatGuruWali(){
       const tbody2 = document.getElementById('riwayatGuruWaliBody');
       if(tbody2)
         tbody2.innerHTML =
-          `<tr><td colspan="8" class="muted">❌ ${err.message}</td></tr>`;
+          `<tr><td colspan="9" class="muted">❌ ${err.message}</td></tr>`;
     })
     .getRiwayatJurnalGuruWali();
 }
@@ -389,7 +533,7 @@ function renderRiwayatGuruWali(){
 
   if(!filtered || filtered.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="8" class="muted">📭 ' +
+      '<tr><td colspan="9" class="muted">📭 ' +
       (filterBulan || filterFokus ? 'Tidak ada jurnal sesuai filter.' : 'Belum ada jurnal pendampingan.') +
       '</td></tr>';
     return;
@@ -417,11 +561,13 @@ function renderRiwayatGuruWali(){
         }).join('<span style="width:4px;display:inline-block"></span>');
       }
     }
+    const siswaHtml = _gwFormatSiswa_(r);
     return `
       <tr>
         <td>${i + 1}</td>
-        <td class="left">${r.tanggal || '-'}</td>
+        <td style="white-space:nowrap">${r.tanggal || '-'}</td>
         <td style="white-space:nowrap">${r.waktu || '-'}</td>
+        <td class="left">${siswaHtml}</td>
         <td><span class="badge">${r.fokus_pendampingan || '-'}</span></td>
         <td class="left">${r.topik_pendampingan || '-'}</td>
         <td class="left">${r.catatan || '-'}</td>
@@ -430,6 +576,19 @@ function renderRiwayatGuruWali(){
       </tr>
     `;
   }).join('');
+}
+
+// Kolom Siswa di tabel Riwayat & laporan cetak — 👤 untuk individu (1
+// nama langsung), 👥 + bullet list per nama untuk kelompok (>1 siswa)
+// supaya rapi (pola sama seperti kolom Absensi di Riwayat Jurnal Mengajar
+// & Rekap Absensi).
+function _gwFormatSiswa_(r){
+  const namaList = String(r.nama_siswa || '').split(',').map(s => s.trim()).filter(Boolean);
+  if(!namaList.length) return '-';
+  const label = r.tipe === 'kelompok' ? '👥 ' : '👤 ';
+  if(namaList.length === 1) return label + namaList[0];
+  return label + '(' + namaList.length + ' siswa):<ul style="margin:2px 0 0 14px;padding:0;font-size:11px">' +
+    namaList.map(n => '<li>' + n + '</li>').join('') + '</ul>';
 }
 
 function cetakLaporanGuruWali(){
@@ -468,6 +627,7 @@ function cetakLaporanGuruWali(){
       <td style="text-align:center">${i + 1}</td>
       <td>${r.tanggal || '-'}</td>
       <td style="text-align:center;white-space:nowrap">${r.waktu || '-'}</td>
+      <td>${_gwFormatSiswa_(r)}</td>
       <td style="text-align:center">${r.fokus_pendampingan || '-'}</td>
       <td>${r.topik_pendampingan || '-'}</td>
       <td>${r.catatan || '-'}</td>
@@ -501,6 +661,7 @@ function cetakLaporanGuruWali(){
       '<th style="width:30px">No</th>' +
       '<th>Hari/Tanggal</th>' +
       '<th style="white-space:nowrap">Waktu</th>' +
+      '<th>Siswa</th>' +
       '<th>Fokus Pendampingan</th>' +
       '<th>Topik Pendampingan</th>' +
       '<th>Catatan</th>' +

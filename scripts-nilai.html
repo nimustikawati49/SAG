@@ -783,14 +783,21 @@ function renderTabelNilai() {
     const rowRed = (nalq !== null && nalq !== undefined && nalq !== ''
       && !isNaN(Number(nalq)) && Number(nalq) < kkm);
 
-    // Belum ada nilai sama sekali (bukan wajib diisi — cuma pemberitahuan ke guru)
-    const uasKosong = isEmpty_(isGenap ? r.pat : r.pas);
-    const rowEmpty = r.rata_uh === null && r.rata_tugas === null
-      && isEmpty_(r.pts) && uasKosong;
+    // Tanda ⚠️ menandai jenis nilai yang MASIH KOSONG per siswa (bukan
+    // wajib diisi — cuma pemberitahuan ke guru supaya gampang lihat data
+    // yang belum lengkap). isEmpty_ dipakai supaya null dan '' (dua
+    // representasi "kosong" yang beda-beda dari server) dianggap sama.
+    const labelUas = isGenap ? 'PAT' : 'PAS';
+    const kosongList = [];
+    if (isEmpty_(r.rata_tugas)) kosongList.push('Tugas');
+    if (isEmpty_(r.rata_uh))    kosongList.push('Ulangan Harian');
+    if (isEmpty_(r.pts))        kosongList.push('PTS');
+    if (isEmpty_(isGenap ? r.pat : r.pas)) kosongList.push(labelUas);
+    const rowEmpty = kosongList.length > 0;
     const rowClass = rowRed ? 'row-kkm' : (rowEmpty ? 'row-nildata-empty' : '');
     const emptyBadge = rowEmpty ? ' ⚠️' : '';
     const namaEsc = String(r.nama_siswa || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-    const namaTitle = namaEsc + (rowEmpty ? ' — belum ada nilai yang diinput (tidak wajib)' : '');
+    const namaTitle = namaEsc + (rowEmpty ? ' — belum ada nilai: ' + kosongList.join(', ') : '');
 
     return `<tr class="${rowClass}" id="nilaiTr_${i}">
       <td class="ntd-plain" style="font-weight:600">${i + 1}</td>
@@ -1006,7 +1013,8 @@ function simpanSemuaNilai() {
   if (!kelas || !mapel || !rows.length) { alert('Tidak ada data untuk disimpan'); return; }
 
   const btn = document.getElementById('btnSimpanNilai');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+  if (btn) btn.disabled = true;
+  const stopElapsed = startElapsedNotice_(btn, '⏳ Menyimpan...');
 
   const payload = {
     kelas, mapel, tahun, semester, setting,
@@ -1023,6 +1031,7 @@ function simpanSemuaNilai() {
 
   google.script.run
     .withSuccessHandler(res => {
+      stopElapsed();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
       nilaiState.dataVersion = Number(res?.version || Date.now());
       clearNilaiDraftLocal_();
@@ -1030,6 +1039,7 @@ function simpanSemuaNilai() {
       setNilaiEditMode_(true); // auto-lock setelah simpan
     })
     .withFailureHandler(e => {
+      stopElapsed();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan'; }
       const msg = String(e?.message || 'Gagal menyimpan');
       if (msg.includes('KONFLIK_DATA')) {

@@ -297,6 +297,18 @@ function getNextPertemuanKe(kelas) {
  * perlu ketik ulang, tinggal pilih & salin dari kelas lain yang sudah
  * diisi duluan, lalu boleh diedit lagi sebelum simpan.
  */
+/**
+ * _isoKeDdMmYyyy_(isoStr)
+ * Ubah "yyyy-MM-dd" jadi "dd-MM-yyyy" untuk TAMPILAN tabel/printout saja —
+ * JANGAN dipakai untuk nilai yang perlu di-parse ulang/dibandingkan (mis.
+ * <input type="date">, sorting, duplicate-check), format itu wajib tetap
+ * ISO (yyyy-MM-dd).
+ */
+function _isoKeDdMmYyyy_(isoStr){
+  const m = String(isoStr || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? (m[3] + '-' + m[2] + '-' + m[1]) : String(isoStr || '');
+}
+
 function getRecentJurnalUntukSalin(kelasSaatIni) {
   const auth = getAuth();
   if (!auth.email || !kelasSaatIni) return [];
@@ -326,7 +338,7 @@ function getRecentJurnalUntukSalin(kelasSaatIni) {
 
     hasil.push({
       kelas   : kelasRow,
-      tanggal : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      tanggal : _isoKeDdMmYyyy_(Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
       materi  : row[5]  || '',
       tujuan  : row[6]  || '',
       asesmen : row[7]  || '',
@@ -545,28 +557,36 @@ function simpanJurnal(data){
     }
   }
 
-  let fotoArr = [];
-  let fotoUrls = [];
+  // keepFoto = URL foto jurnal SUMBER yang guru pilih pertahankan (dipakai
+  // saat Duplikat — lihat duplikatJurnal_ di scripts-jurnal.html: guru bisa
+  // hapus per-foto lewat tombol 🗑️ sebelum Simpan, jadi tidak wajib upload
+  // ulang semuanya cuma untuk buang 1-2 foto yang tidak relevan lagi).
+  // Foto ini TIDAK diupload ulang — cukup direferensikan lagi karena
+  // filenya sudah ada di Drive.
+  let fotoArr = (Array.isArray(data.keepFoto) ? data.keepFoto : [])
+    .filter(Boolean)
+    .map(u => ({ full: u }));
   let fotoGagal = false;
 
-  // Upload foto SENGAJA dibungkus try/catch terpisah dari sisa proses simpan
-  // — kalau DriveApp diblokir (mis. kebijakan domain Google Workspace yang
-  // membatasi akses Drive untuk web app, di luar kendali SuperAdmin
-  // aplikasi ini — pernah terjadi persis begini di deployment ini), jurnal
-  // TETAP tersimpan (cuma butuh akses Sheets, bukan Drive) alih-alih gagal
-  // total cuma karena fotonya tidak bisa diupload. fotoGagal dikirim balik
-  // ke client supaya guru diberi tahu jelas, bukan diam-diam kehilangan foto.
+  // Upload foto BARU SENGAJA dibungkus try/catch terpisah dari sisa proses
+  // simpan — kalau DriveApp diblokir (mis. kebijakan domain Google
+  // Workspace yang membatasi akses Drive untuk web app, di luar kendali
+  // SuperAdmin aplikasi ini — pernah terjadi persis begini di deployment
+  // ini), jurnal TETAP tersimpan (cuma butuh akses Sheets, bukan Drive)
+  // alih-alih gagal total cuma karena fotonya tidak bisa diupload. foto
+  // yang sudah dipertahankan (keepFoto) TETAP masuk walau upload foto baru
+  // gagal. fotoGagal dikirim balik ke client supaya guru diberi tahu
+  // jelas, bukan diam-diam kehilangan foto.
   if(data.dokumentasi && data.dokumentasi.length){
     try {
-      fotoArr = _uploadJurnalFotoList_(email, jurnalId, data.dokumentasi);
-      fotoUrls = fotoArr.map(f => f.full).filter(Boolean);
+      const uploaded = _uploadJurnalFotoList_(email, jurnalId, data.dokumentasi);
+      fotoArr = fotoArr.concat(uploaded);
     } catch (fotoErr) {
       fotoGagal = true;
-      fotoArr = [];
-      fotoUrls = [];
       try { logError_('simpanJurnal/uploadFoto', fotoErr); } catch (e2) {}
     }
   }
+  const fotoUrls = fotoArr.map(f => f.full).filter(Boolean);
 
   const dokumentasi_json = JSON.stringify(fotoArr);
   const foto_urls = fotoUrls.join(',');
@@ -704,16 +724,13 @@ function updateJurnal(data){
   const prevEditCount = Number(values[rowIndex][11]) || 0;
   sh.getRange(rowNumber, 12).setValue(prevEditCount + 1);
 
-  // Foto — CATATAN PENTING: client (scripts-jurnal.html) SELALU mengirim
-  // foto baru lewat key 'dokumentasi' (array base64), sama persis seperti
-  // simpanJurnal — TIDAK PERNAH mengirim 'keepFotos'/'replaceFotos'/
-  // 'newFotos' (versi lama fungsi ini salah asumsi menunggu key-key itu,
-  // yang tidak pernah ada isinya → finalFotos selalu [] → foto lama
-  // KETIMPA KOSONG tiap kali diedit, itu sebab laporan "foto hilang saat
-  // edit"). Sekarang: kalau ada foto BARU di 'dokumentasi', upload &
-  // GANTIKAN foto lama sepenuhnya (sama seperti simpanJurnal). Kalau
-  // 'dokumentasi' kosong (guru tidak menyentuh foto saat edit), foto LAMA
-  // dipertahankan apa adanya — TIDAK dihapus cuma karena tidak diisi ulang.
+  // Foto — client (scripts-jurnal.html) mengirim 'keepFoto' (array URL foto
+  // lama yang TIDAK ditandai hapus lewat tombol 🗑️ per-foto di
+  // existingFotoBox) + 'dokumentasi' (array base64 foto BARU yang mau
+  // ditambahkan). Foto lama yang TIDAK ada di keepFoto berarti sengaja
+  // dihapus guru. Kalau keepFoto tidak dikirim sama sekali (klien lama),
+  // fallback ke SEMUA foto lama dipertahankan (perilaku sebelumnya) supaya
+  // tidak diam-diam kehilangan foto.
   let existingFotos = [];
   try{
     const raw = values[rowIndex][14];
@@ -726,17 +743,22 @@ function updateJurnal(data){
   }
 
   let finalFotos = existingFotos;
-  let fotoGagal = false;
+  if (Array.isArray(data.keepFoto)) {
+    const keepSet = new Set(data.keepFoto.filter(Boolean));
+    finalFotos = existingFotos.filter(f => keepSet.has(f.full));
+  }
 
+  let fotoGagal = false;
   if(data.dokumentasi && data.dokumentasi.length){
     try {
-      // Upload sukses SEMUA baru menggantikan foto lama — kalau ada yang
-      // gagal di tengah jalan (exception dilempar dari dalam), foto lama
-      // TETAP dipertahankan (tidak separuh terganti separuh hilang).
-      finalFotos = _uploadJurnalFotoList_(getAuth().email, data.jurnalId, data.dokumentasi);
+      // Upload foto BARU digabung ke foto lama yang dipertahankan (bukan
+      // menggantikan sepenuhnya) — kalau gagal di tengah jalan, foto lama
+      // yang sudah difilter TETAP dipertahankan (tidak ikut hilang cuma
+      // karena upload foto baru gagal).
+      const uploaded = _uploadJurnalFotoList_(getAuth().email, data.jurnalId, data.dokumentasi);
+      finalFotos = finalFotos.concat(uploaded);
     } catch (fotoErr) {
       fotoGagal = true;
-      finalFotos = existingFotos; // gagal upload — foto lama tetap dipertahankan, bukan dihapus
       try { logError_('updateJurnal/uploadFoto', fotoErr); } catch (e2) {}
     }
   }
@@ -1006,7 +1028,7 @@ function getRiwayatJurnalPaged(page, pageSize, filters) {
     rows.push({
       no        : start + localIdx + 1,
       jurnalId  : jurnalId,
-      tanggal   : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      tanggal   : _isoKeDdMmYyyy_(Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
       kelas, jam_ke: row[3] || '', pertemuan: row[4] || '',
       materi    : row[5] || '', tujuan: row[6] || '-', asesmen: row[7] || '-',
       foto      : fotoHtml, refleksi: row[15] || '-',
@@ -1091,9 +1113,9 @@ function getJurnalUntukCetak(kelas, tglMulai, tglSampai){
       names.map(n => '<li>' + n + '</li>').join('') + '</ul>';
     let absRingkas = 'NIHIL';
     const blocks = [];
-    if (sakit.length) blocks.push('<b>Sakit:</b>' + bulletList(sakit));
-    if (izin.length)  blocks.push('<b>Izin:</b>'  + bulletList(izin));
-    if (alpha.length) blocks.push('<b>Alpa:</b>'  + bulletList(alpha));
+    if (sakit.length) blocks.push('🟠 <b>Sakit:</b>' + bulletList(sakit));
+    if (izin.length)  blocks.push('🔵 <b>Izin:</b>'  + bulletList(izin));
+    if (alpha.length) blocks.push('🔴 <b>Alpa:</b>'  + bulletList(alpha));
     if (blocks.length) absRingkas = blocks.join('');
 
     // ID file Drive dokumentasi (bukan HTML siap-pakai seperti di Riwayat)
@@ -1120,7 +1142,7 @@ function getJurnalUntukCetak(kelas, tglMulai, tglSampai){
     } catch (e) { fotoIds = []; }
 
     return {
-      tanggal   : Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      tanggal   : _isoKeDdMmYyyy_(Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
       kelas     : kelasRow,
       jam_ke    : row[3] || '-',
       pertemuan : row[4] || '-',
@@ -1286,11 +1308,11 @@ function getRiwayatJurnal(){
     result.push({
       no        : result.length + 1,
       jurnalId  : jurnalId,
-      tanggal   : Utilities.formatDate(
+      tanggal   : _isoKeDdMmYyyy_(Utilities.formatDate(
                     new Date(row[1]),
                     Session.getScriptTimeZone(),
                     "yyyy-MM-dd"
-                  ),
+                  )),
       kelas     : kelas,
       jam_ke    : row[3] || '',
       pertemuan : row[4] || '',
@@ -1325,26 +1347,35 @@ function getRekapAbsensi(dari, sampai){
     if(auth.role !== 'superadmin' && jurnal[i][12] !== auth.email) continue; 
     const tgl = new Date(jurnal[i][1]); 
     if(tgl < d1 || tgl > d2) continue; 
-    const jurnalId = jurnal[i][0]; 
-    let list = []; 
-    for(let a=1;a<absensi.length;a++){ 
-      if(absensi[a][0] == jurnalId && absensi[a][3] !== 'H'){ 
-        const s = siswaMap[String(absensi[a][2])]; 
-        const icon = absensi[a][3] === 'S' ? '\uD83D\uDFE1' : absensi[a][3] === 'I' ? '\uD83D\uDD35' : '\uD83D\uDD34'; 
+    const jurnalId = jurnal[i][0];
+    // Dikelompokkan per kategori (bukan daftar datar per siswa) \u2014 client
+    // (loadRekap di scripts-jurnal.html) dan PDF (exportRekapPDF di
+    // Export.js) yang menentukan format tampilannya sendiri-sendiri (HTML
+    // bullet list vs teks polos untuk sel Sheets), jadi di sini cukup
+    // kirim nama mentah per kategori.
+    let sakit = [], izin = [], alpha = [];
+    for(let a=1;a<absensi.length;a++){
+      if(absensi[a][0] == jurnalId && absensi[a][3] !== 'H'){
+        const s = siswaMap[String(absensi[a][2])];
         const nama = s ? s[3] : getNamaSiswaByNis_(absensi[a][2]);
-        list.push(icon + ' ' + nama + ' (' + absensi[a][3] + ')'); 
-      } 
-    } 
-    hasil.push({ 
-      no: no++, kelas: jurnal[i][2], 
-      tanggal: Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'yyyy-MM-dd'), 
-      pertemuan: jurnal[i][4], asesmen: jurnal[i][7] || '-', 
-      keterangan: list.length ? list.join('<br>') : '\u2705 NIHIL' 
-    }); 
-  } 
-  hasil.sort((a,b)=>a.tanggal.localeCompare(b.tanggal)); 
-  return hasil; 
-} 
+        if(absensi[a][3] === 'S') sakit.push(nama);
+        else if(absensi[a][3] === 'I') izin.push(nama);
+        else if(absensi[a][3] === 'A') alpha.push(nama);
+      }
+    }
+    hasil.push({
+      no: no++, kelas: jurnal[i][2],
+      // Disimpan ISO dulu untuk keperluan urut (localeCompare cuma benar
+      // kalau formatnya yyyy-MM-dd) — baru diubah ke dd-MM-yyyy untuk
+      // tampilan SETELAH diurutkan, di bawah.
+      tanggal: Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      sakit: sakit, izin: izin, alpha: alpha
+    });
+  }
+  hasil.sort((a,b)=>a.tanggal.localeCompare(b.tanggal));
+  hasil.forEach(function(h){ h.tanggal = _isoKeDdMmYyyy_(h.tanggal); });
+  return hasil;
+}
 
 /**
  * Laporan absensi per siswa dalam 1 kelas — bisa per bulan / semester / tahun pelajaran

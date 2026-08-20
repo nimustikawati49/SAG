@@ -98,7 +98,7 @@ function exportJurnalExcelBySemester(semester){
     const absText = tidakHadir.length ? tidakHadir.join(', ') : 'NIHIL';
     sh.getRange(row, 1, 1, 10).setValues([[
       i+1,
-      r[1] ? Utilities.formatDate(new Date(r[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd') : '-',
+      r[1] ? _isoKeDdMmYyyy_(Utilities.formatDate(new Date(r[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd')) : '-',
       r[2] || '-', r[4] || '-', r[5] || '-', r[7] || '-',
       r[15] || '-', fotoText, absText, r[11] || 0
     ]]);
@@ -233,7 +233,7 @@ function exportJurnalByBulan(bulan, tahun) {
     const absText    = tidakHadir.length ? tidakHadir.join(', ') : 'NIHIL';
     sh.getRange(row, 1, 1, 10).setValues([[
       i+1,
-      r[1] ? Utilities.formatDate(new Date(r[1]), tz, 'yyyy-MM-dd') : '-',
+      r[1] ? _isoKeDdMmYyyy_(Utilities.formatDate(new Date(r[1]), tz, 'yyyy-MM-dd')) : '-',
       r[2]||'-', r[4]||'-', r[5]||'-', r[7]||'-',
       r[15]||'-', fotoText, absText, r[11]||0
     ]]);
@@ -249,17 +249,60 @@ function exportJurnalByBulan(bulan, tahun) {
   return ss.getUrl().replace(/edit$/, 'export?format=xlsx&gid='+gid);
 }
 
-function exportRekapPDF(dari, sampai) {
+// Rich text (bukan teks polos) untuk sel Absensi di PDF — supaya label
+// Sakit/Ijin/Alpa tercetak TEBAL persis seperti gaya keterangan Absensi
+// di preview Cetak Jurnal Mengajar (bold + simbol warna), bukan cuma
+// teks datar. Kategori dengan >1 orang jadi daftar bullet "•" per baris
+// (didukung newline dalam 1 sel karena setWrap(true) dipakai di
+// exportRekapPDF), 1 orang cukup satu baris "🟠 Sakit: Nama".
+function _buildAbsensiRichText_(r) {
+  const kategori = [
+    { icon: '🟠', label: 'Sakit', arr: r.sakit },
+    { icon: '🔵', label: 'Ijin',  arr: r.izin  },
+    { icon: '🔴', label: 'Alpa',  arr: r.alpha }
+  ];
+
+  let text = '';
+  const boldRanges = [];
+  kategori.forEach(function(k) {
+    if (!k.arr || !k.arr.length) return;
+    const prefix = k.icon + ' ';
+    const boldStart = text.length + prefix.length;
+    const labelText = k.label + (k.arr.length > 1 ? ' (' + k.arr.length + ' orang)' : '');
+    text += prefix + labelText;
+    boldRanges.push([boldStart, text.length]);
+    text += k.arr.length > 1
+      ? ':\n' + k.arr.map(n => '• ' + n).join('\n') + '\n'
+      : ': ' + k.arr[0] + '\n';
+  });
+
+  if (!text) {
+    return SpreadsheetApp.newRichTextValue().setText('✅ NIHIL').build();
+  }
+  text = text.replace(/\n$/, '');
+
+  const builder = SpreadsheetApp.newRichTextValue().setText(text);
+  const boldStyle = SpreadsheetApp.newTextStyle().setBold(true).build();
+  boldRanges.forEach(function(range) {
+    builder.setTextStyle(range[0], range[1], boldStyle);
+  });
+  return builder.build();
+}
+
+function exportRekapPDF(dari, sampai, kertas) {
   assertLicenseActive();
   const auth    = getAuth();
   const setting = getSetting();
   const ss      = getSpreadsheet_();
+  // F4/Folio (215 x 330mm) tidak punya kode "size" khusus di export URL
+  // Google Sheets — dipetakan ke "folio" yang dimensinya sama persis.
+  const ukuranKertas = String(kertas || 'A4').toUpperCase() === 'F4' ? 'folio' : 'A4';
 
   let sh = ss.getSheetByName('_PDF_REKAP');
   if (sh) ss.deleteSheet(sh);
   sh = ss.insertSheet('_PDF_REKAP');
 
-  const cols = 6;
+  const cols = 4;
   sh.getRange(1, 1, 1, cols).merge()
     .setValue('Rekap Absensi \u2013 ' + (setting.sekolah || ''))
     .setFontSize(14).setFontWeight('bold').setHorizontalAlignment('center');
@@ -267,26 +310,25 @@ function exportRekapPDF(dari, sampai) {
     .setValue('Guru: ' + (setting.nama_guru || auth.email) + '  |  Mapel: ' + (setting.mata_pelajaran || '-'))
     .setFontSize(10).setHorizontalAlignment('center');
   sh.getRange(3, 1, 1, cols).merge()
-    .setValue('Periode: ' + (dari || '-') + ' s/d ' + (sampai || '-'))
+    .setValue('Periode: ' + (dari ? _isoKeDdMmYyyy_(dari) : '-') + ' s/d ' + (sampai ? _isoKeDdMmYyyy_(sampai) : '-'))
     .setFontSize(10).setHorizontalAlignment('center');
 
   sh.getRange(5, 1, 1, cols)
-    .setValues([['No', 'Kelas', 'Tanggal', 'Pertemuan', 'Asesmen', 'Keterangan']])
+    .setValues([['No', 'Kelas', 'Tanggal', 'Absensi']])
     .setFontWeight('bold').setBackground('#6366f1').setFontColor('#ffffff')
     .setHorizontalAlignment('center');
 
   const rekap = getRekapAbsensi(dari, sampai);
   if (rekap.length) {
-    const rows = rekap.map((r, i) => [
-      i + 1,
-      r.kelas      || '-',
-      r.tanggal    || '-',
-      r.pertemuan  || '-',
-      r.asesmen    || '-',
-      String(r.keterangan || '-').replace(/<br>/g, ', ')
-    ]);
-    sh.getRange(6, 1, rows.length, cols).setValues(rows).setWrap(true).setVerticalAlignment('top');
-    sh.getRange(5, 1, rows.length + 1, cols).setBorder(true, true, true, true, true, true);
+    const plainRows = rekap.map((r, i) => [i + 1, r.kelas || '-', r.tanggal || '-']);
+    sh.getRange(6, 1, plainRows.length, 3).setValues(plainRows).setWrap(true).setVerticalAlignment('top');
+
+    // Kolom Absensi ditulis terpisah lewat setRichTextValues (bukan
+    // setValues) supaya label Sakit/Ijin/Alpa bisa tebal per sel.
+    const richRows = rekap.map(r => [_buildAbsensiRichText_(r)]);
+    sh.getRange(6, 4, richRows.length, 1).setRichTextValues(richRows).setWrap(true).setVerticalAlignment('top');
+
+    sh.getRange(5, 1, plainRows.length + 1, cols).setBorder(true, true, true, true, true, true);
   } else {
     sh.getRange(6, 1, 1, cols).merge().setValue('Tidak ada data untuk periode ini')
       .setHorizontalAlignment('center').setFontColor('#6b7280');
@@ -295,13 +337,14 @@ function exportRekapPDF(dari, sampai) {
   sh.setColumnWidths(1, 1, 35);
   sh.setColumnWidths(2, 1, 65);
   sh.setColumnWidths(3, 1, 85);
-  sh.setColumnWidths(4, 1, 130);
-  sh.setColumnWidths(5, 1, 130);
-  sh.setColumnWidths(6, 1, 210);
+  sh.setColumnWidths(4, 1, 330);
 
   const gid     = sh.getSheetId();
   const baseUrl = ss.getUrl().replace(/\/edit.*$/, '');
   return baseUrl + '/export?format=pdf&gid=' + gid +
+    '&size=' + ukuranKertas +
     '&portrait=true&fitw=true&gridlines=false&printtitle=false' +
-    '&sheetnames=false&pagenum=UNDEFINED&attachment=false';
+    '&sheetnames=false&pagenum=UNDEFINED&attachment=false' +
+    '&horizontal_alignment=CENTER&vertical_alignment=TOP' +
+    '&top_margin=0.5&bottom_margin=0.5&left_margin=0.5&right_margin=0.5';
 }

@@ -289,6 +289,7 @@ if (document.readyState === 'interactive' || document.readyState === 'complete')
 function doExportRekapPDF() {
   const dari   = document.getElementById('dari').value;
   const sampai = document.getElementById('sampai').value;
+  const kertas = (document.getElementById('rekapPdfKertas') || {}).value || 'A4';
   if (!dari || !sampai) {
     alert('⚠️ Pilih periode (Dari – Sampai) terlebih dahulu');
     return;
@@ -303,7 +304,7 @@ function doExportRekapPDF() {
       endProgress();
       alert('❌ Gagal export PDF:\n' + err.message);
     })
-    .exportRekapPDF(dari, sampai);
+    .exportRekapPDF(dari, sampai, kertas);
 }
 
 /* =========================================================

@@ -57,6 +57,13 @@ function _siswaBinaanTahunColIdx_(sh){
   return idx === undefined ? 7 : idx;
 }
 
+// Kolom tambahan Individu/Kelompok — digabung dari fitur Catatan Murid
+// (tab terpisah yang sudah dihapus) supaya guru wali cuma punya 1 tempat
+// mencatat pendampingan siswa binaan. Ditambahkan idempoten di akhir
+// sheet (index kolom lama tidak berubah), sama seperti migrasi
+// SISWA_BINAAN_OPTIONAL_COLS_ di atas.
+const JURNAL_GURU_WALI_SISWA_COLS_ = ['tipe', 'nis_siswa', 'nama_siswa'];
+
 function ensureJurnalGuruWaliSheet_(){
   const ss = getSpreadsheet_();
   let sh = ss.getSheetByName('JURNAL_GURU_WALI');
@@ -67,7 +74,19 @@ function ensureJurnalGuruWaliSheet_(){
       'fokus_pendampingan','topik_pendampingan',
       'catatan','tindak_lanjut','dokumentasi',
       'guru_wali','nip','tahun_pelajaran'
-    ]);
+    ].concat(JURNAL_GURU_WALI_SISWA_COLS_));
+  } else {
+    let lastCol = sh.getLastColumn();
+    let header = lastCol > 0
+      ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h||'').toLowerCase().trim(); })
+      : [];
+    JURNAL_GURU_WALI_SISWA_COLS_.forEach(function(col){
+      if (header.indexOf(col) === -1) {
+        lastCol = sh.getLastColumn();
+        sh.getRange(1, lastCol + 1).setValue(col);
+        header.push(col);
+      }
+    });
   }
   return sh;
 }
@@ -154,6 +173,12 @@ function simpanJurnalGuruWali(data){
   if(!data.fokus_pendampingan) throw new Error('Fokus pendampingan wajib dipilih');
   if(!data.topik_pendampingan) throw new Error('Topik pendampingan wajib diisi');
 
+  // Individu/Kelompok — digabung dari fitur Catatan Murid, jadi 1 entri
+  // jurnal ini WAJIB menunjuk ke minimal 1 siswa binaan yang didampingi.
+  const tipe = data.tipe === 'kelompok' ? 'kelompok' : 'individu';
+  const siswaList = Array.isArray(data.siswa) ? data.siswa.filter(function(s){ return s && s.nis; }) : [];
+  if(!siswaList.length) throw new Error('Pilih minimal satu siswa binaan yang didampingi');
+
   const sh     = ensureJurnalGuruWaliSheet_();
   const id     = Date.now().toString();
 
@@ -184,7 +209,10 @@ function simpanJurnalGuruWali(data){
     dokumentasi,
     auth.email,
     setting.nip_guru || '-',
-    setting.tahun_pelajaran || ''
+    setting.tahun_pelajaran || '',
+    tipe,
+    siswaList.map(function(s){ return s.nis; }).join(','),
+    siswaList.map(function(s){ return s.nama; }).join(', ')
   ]);
 
   logAudit('SIMPAN_JURNAL_WALI', auth.email, data.topik_pendampingan);
@@ -287,7 +315,10 @@ function getRiwayatJurnalGuruWali(){
       topik_pendampingan: String(data[i][5]  || '-'),
       catatan           : String(data[i][6]  || '-'),
       tindak_lanjut     : String(data[i][7]  || '-'),
-      dokumentasi       : String(data[i][8]  || '-')
+      dokumentasi       : String(data[i][8]  || '-'),
+      tipe              : String(data[i][12] || 'individu'),
+      nis_siswa         : String(data[i][13] || ''),
+      nama_siswa        : String(data[i][14] || '')
     });
   }
 

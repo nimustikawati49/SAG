@@ -145,11 +145,12 @@
           <span class="sb-icon">🧑‍🎓</span>
           <span class="sb-label">Murid Binaan</span>
         </button>
-        <button class="sb-item sb-child admin-only" data-tab="catatanSiswa"
-                onclick="sbGo_('catatanSiswa', function(){ initCatatanSiswa(); })" data-tooltip="Catatan Murid">
-          <span class="sb-icon">📝</span>
-          <span class="sb-label">Catatan Murid</span>
-        </button>
+        <!-- Menu "Catatan Murid" terpisah (tab catatanSiswa) SENGAJA
+             dihapus dari navigasi — digabung ke Form Input Jurnal
+             Pendampingan (opsi Individu/Kelompok) supaya guru wali tidak
+             bingung ada 2 tempat mencatat pendampingan siswa. Tab & data
+             lamanya TIDAK dihapus, cuma tidak lagi punya jalan masuk dari
+             menu. -->
       </div>
     </div>
 
@@ -395,7 +396,7 @@
       </li>
       <li>
         <b>📝 Catatan Siswa Binaan</b><br>
-        Catat perilaku atau prestasi penting untuk siswa binaan Anda di menu Guru Wali → Catatan Murid.
+        Catat perilaku atau prestasi penting untuk siswa binaan Anda lewat Form Input Jurnal Pendampingan di menu Guru Wali → Murid Binaan (pilih Individu/Kelompok).
       </li>
      </ol>
     </div>
@@ -819,8 +820,12 @@
     <input type="date" id="dari">
     <label>Sampai</label>
     <input type="date" id="sampai">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;align-items:center">
       <button onclick="loadRekap()">Tampilkan</button>
+      <select id="rekapPdfKertas" style="min-width:150px" title="Ukuran kertas PDF">
+        <option value="A4">A4 (Portrait)</option>
+        <option value="F4">F4 / Folio (Portrait)</option>
+      </select>
       <button class="ghost" onclick="doExportRekapPDF()" title="Export rekap ke PDF">📄 Export PDF</button>
     </div>
     <div class="table-wrap">
@@ -830,9 +835,7 @@
             <th>No</th>
             <th>Kelas</th>
             <th>Tanggal</th>
-            <th>Pertemuan</th>
-            <th>Asesmen</th>
-            <th>Keterangan</th>
+            <th>Absensi</th>
           </tr>
         </thead>
         <tbody id="rekapBody"></tbody>
@@ -901,10 +904,12 @@
       </div>
     </div>
 
-    <!-- 1b. IMPORT SISWA BINAAN -->
-    <div class="card" style="margin-bottom:18px;background:#f8fafc;border-left:6px solid #22c55e">
-      <h4 style="margin-top:0">📊 Import Data Siswa Binaan</h4>
-      <p class="muted" style="margin-top:0">
+    <!-- 1b. IMPORT SISWA BINAAN — dibuat collapsible (details/summary),
+         cukup dipakai 1x saat setup awal daftar siswa binaan, jadi tidak
+         perlu selalu terbuka mengganggu tampilan tab Guru Wali sehari-hari. -->
+    <details class="card" style="margin-bottom:18px;background:#f8fafc;border-left:6px solid #22c55e">
+      <summary style="cursor:pointer;font-weight:700;font-size:15px;color:#166534">📊 Import Data Siswa Binaan <span class="muted" style="font-weight:400;font-size:12px">(klik untuk buka — cukup sekali saat setup awal)</span></summary>
+      <p class="muted" style="margin-top:14px">
         Download template, isi data siswa, lalu upload kembali.
         Maksimal <b>20 siswa</b> per guru wali.<br>
         Kolom wajib: <b>nama_siswa, nis, kelas, tahun_masuk, status</b>
@@ -963,36 +968,41 @@
           </button>
         </div>
       </div>
-    </div>
+    </details>
 
-    <!-- 2. DAFTAR SISWA BINAAN -->
-    <div class="card" style="margin-bottom:18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
-        <h4 style="margin:0">👥 Daftar Siswa Binaan</h4>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="badge" style="font-size:12px">Maks. 20 siswa</span>
+    <!-- 2. DAFTAR SISWA BINAAN — collapsible, cuma perlu dibuka kalau
+         mau lihat/refresh daftar lengkapnya; pemilihan siswa untuk
+         Jurnal Pendampingan sudah ada di daftar centang pada form
+         di bawah, jadi tabel ini tidak perlu selalu terbuka. -->
+    <details class="card" style="margin-bottom:18px">
+      <summary style="cursor:pointer;font-weight:700;font-size:15px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <span>👥 Daftar Siswa Binaan</span>
+        <span class="badge" style="font-size:12px">Maks. 20 siswa</span>
+      </summary>
+      <div style="margin-top:12px">
+        <div style="text-align:right;margin-bottom:10px">
           <button class="ghost" style="padding:5px 12px;font-size:12px"
                   onclick="loadSiswaBinaan()">🔄 Refresh</button>
         </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Nama Siswa</th>
+                <th>NIS</th>
+                <th>Kelas</th>
+                <th>Riwayat</th>
+              </tr>
+            </thead>
+            <tbody id="siswaBinaanBody">
+              <tr><td colspan="5" class="muted">⏳ Memuat...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="siswaBinaanPager" style="margin-top:8px;text-align:center"></div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>No</th>
-              <th>Nama Siswa</th>
-              <th>NIS</th>
-              <th>Kelas</th>
-              <th>Riwayat</th>
-            </tr>
-          </thead>
-          <tbody id="siswaBinaanBody">
-            <tr><td colspan="5" class="muted">⏳ Memuat...</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="siswaBinaanPager" style="margin-top:8px;text-align:center"></div>
-    </div>
+    </details>
 
     <!-- 3. FORM INPUT JURNAL -->
     <div class="card" style="margin-bottom:18px">
@@ -1000,6 +1010,31 @@
         📝 Form Input Jurnal Pendampingan
         <button type="button" onclick="salinJurnalWaliTerakhir_()" style="font-size:12px;padding:6px 12px;border-radius:8px;background:#eef2ff;color:#4338ca;box-shadow:none;font-weight:600">📋 Salin dari Entri Terakhir</button>
       </h4>
+
+      <!-- Siswa binaan yang didampingi — digabung dari fitur Catatan Murid
+           supaya cuma ada 1 menu tempat mencatat pendampingan siswa
+           binaan. Centang 1 siswa = pendampingan individu, centang lebih
+           dari 1 = kelompok (jenisnya otomatis mengikuti jumlah yang
+           dicentang, tidak perlu tombol toggle terpisah). -->
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <label style="margin:0">Siswa Binaan yang Didampingi <span style="color:#ef4444">*</span></label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="gwSiswaCounter" class="muted" style="font-size:12px"></span>
+            <button type="button" class="ghost" id="gwMuatUlangBtn"
+                    style="font-size:11px;padding:2px 8px">🔄 Muat Ulang</button>
+          </div>
+        </div>
+        <small class="helper">Centang 1 siswa untuk pendampingan individu, atau lebih dari 1 untuk kelompok (didampingi bersama di waktu yang sama).</small>
+        <label style="display:flex;align-items:center;gap:6px;margin:8px 0 0;font-weight:400;font-size:12.5px;cursor:pointer">
+          <input type="checkbox" id="gwCentangSemuaCk" style="width:auto">
+          Centang Semua
+        </label>
+        <div id="gwSiswaBinaanCkList" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-top:6px">
+          <p class="muted" style="margin:6px;font-size:12px">⏳ Memuat daftar siswa...</p>
+        </div>
+      </div>
+
       <div class="setting-grid">
         <!-- KIRI -->
         <div class="setting-col">
@@ -1111,6 +1146,7 @@
               <th>No</th>
               <th>Hari/Tanggal</th>
               <th>Waktu</th>
+              <th>Siswa</th>
               <th>Fokus Pendampingan</th>
               <th>Topik Pendampingan</th>
               <th>Catatan</th>
@@ -1119,7 +1155,7 @@
             </tr>
           </thead>
           <tbody id="riwayatGuruWaliBody">
-            <tr><td colspan="8" class="muted">⏳ Memuat...</td></tr>
+            <tr><td colspan="9" class="muted">⏳ Memuat...</td></tr>
           </tbody>
         </table>
       </div>

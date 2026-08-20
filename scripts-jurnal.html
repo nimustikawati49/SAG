@@ -347,6 +347,60 @@ function fabAction() {
   }
 }
 
+/* ================= FOTO DOKUMENTASI (existing/keep/hapus) ================= */
+// Foto yang sudah ada dari jurnal sumber (Edit: jurnal yang sedang
+// diedit; Duplikat: jurnal yang dijadikan template) — masing-masing item
+// {full, removed}. Guru bisa tandai hapus per-foto (tombol 🗑️ di
+// existingFotoBox) tanpa perlu upload ulang semuanya cuma untuk buang 1
+// foto yang tidak relevan lagi (mis. Duplikat 3 foto tapi Kelas baru
+// cukup 1 foto saja).
+let _existingFoto_ = [];
+
+function _renderExistingFotoBox_(){
+  const box = document.getElementById('existingFotoBox');
+  if(!box) return;
+  if(!_existingFoto_.length){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:6px">' +
+    '📷 Foto sebelumnya — klik 🗑️ untuk hapus salah satu (upload foto baru di bawah untuk mengganti/menambah):</div>' +
+    _existingFoto_.map((f, i) => {
+      const m = String(f.full || '').match(/[-\w]{25,}/);
+      const thumbUrl = m ? ('https://lh3.googleusercontent.com/d/' + m[0] + '=w150-h150') : f.full;
+      return '<div class="existing-foto-item' + (f.removed ? ' removed' : '') + '">' +
+        '<img src="' + thumbUrl + '" alt="Foto sebelumnya">' +
+        '<button type="button" class="existing-foto-remove-badge" onclick="_toggleExistingFoto_(' + i + ')" ' +
+        'title="' + (f.removed ? 'Batal hapus' : 'Hapus foto ini') + '">' + (f.removed ? '↩️' : '🗑️') + '</button>' +
+        '</div>';
+    }).join('');
+}
+
+function _toggleExistingFoto_(i){
+  if(!_existingFoto_[i]) return;
+  _existingFoto_[i].removed = !_existingFoto_[i].removed;
+  _renderExistingFotoBox_();
+}
+
+// Bersihkan semua state foto (existing + input file baru + preview) —
+// dipanggil setiap mulai form baru/batal edit, supaya foto dari
+// sesi Edit/Duplikat sebelumnya tidak nyangkut diam-diam ke jurnal
+// berikutnya.
+function _resetFotoInputs_(){
+  _existingFoto_ = [];
+  _renderExistingFotoBox_();
+  ['foto1','foto2','foto3'].forEach(function(id){
+    const input = document.getElementById(id);
+    if(input) input.value = '';
+  });
+  ['fotoPreview1','fotoPreview2','fotoPreview3'].forEach(function(id){
+    const img = document.getElementById(id);
+    if(img){ img.src = ''; img.style.display = 'none'; }
+  });
+}
+
 /* ================= KELAS & SISWA ================= */
 let pendingAbsensiData = []; // untuk restore absensi saat editJurnal
 
@@ -559,6 +613,14 @@ function _escAttr_(s){
     .replace(/>/g, '&gt;');
 }
 
+// Ubah "yyyy-mm-dd" (nilai <input type="date">) jadi "dd-mm-yyyy" untuk
+// TAMPILAN saja (mis. kop laporan cetak) — jangan dipakai untuk nilai
+// yang perlu ditulis balik ke input tanggal, formatnya wajib tetap ISO.
+function _isoKeDdMmYyyy_(isoStr){
+  const m = String(isoStr || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? (m[3] + '-' + m[2] + '-' + m[1]) : String(isoStr || '');
+}
+
 // Sel tabel Riwayat dengan teks panjang (Materi/TP/Asesmen/Absensi/
 // Refleksi) — dibatasi 2 baris lewat CSS (.riwayat-clamp), teks lengkap
 // (atau versi lain kalau hoverText dikasih terpisah, mis. Absensi yang
@@ -596,9 +658,9 @@ function renderRiwayat(){
     tbody.innerHTML += `
       <tr class="${x.locked ? 'locked' : ''}">
         <td>${x.no}</td>
-        <td>${x.tanggal || '-'}</td>
+        <td style="white-space:nowrap">${x.tanggal || '-'}</td>
         <td>${x.kelas || '-'}</td>
-        <td>${_escAttr_(x.jam_ke) || '-'}</td>
+        <td style="white-space:nowrap">${_escAttr_(x.jam_ke) || '-'}</td>
         <td>${x.pertemuan || '-'}</td>
         <td class="left">${_clampCell_(x.materi)}</td>
         <td class="left">${_clampCell_(x.asesmen)}</td>
@@ -874,7 +936,7 @@ function _bukaJendelaCetakJurnal_(rows, kelas, dari, sampai, kertas){
     '</div>' +
     '<div class="page">' +
     '<h2>JURNAL MENGAJAR</h2>' +
-    '<p class="sub">' + namaGuru + ' &nbsp;&bull;&nbsp; NIP: ' + nip + ' &nbsp;&bull;&nbsp; ' + judulKelas + ' &nbsp;&bull;&nbsp; ' + dari + ' s/d ' + sampai + '</p>' +
+    '<p class="sub">' + namaGuru + ' &nbsp;&bull;&nbsp; NIP: ' + nip + ' &nbsp;&bull;&nbsp; ' + judulKelas + ' &nbsp;&bull;&nbsp; ' + _isoKeDdMmYyyy_(dari) + ' s/d ' + _isoKeDdMmYyyy_(sampai) + '</p>' +
     '<table><colgroup>' +
       '<col style="width:3%"><col style="width:7%"><col style="width:5%">' +
       '<col style="width:7%"><col style="width:4%"><col style="width:12%">' +
@@ -954,6 +1016,9 @@ function editJurnal(id, ev){
     tujuan.value=d.tujuan||'';
     asesmen.value=d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
+    _resetFotoInputs_();
+    _existingFoto_ = (d.foto || []).map(f => ({ full: f.full, removed: false }));
+    _renderExistingFotoBox_();
     _isiKelasDenganRetry_(d.kelas);
     _setModeEditJurnalUI_(true);
     if(typeof showToast === 'function') showToast('✏️ Mode edit: kelas ' + d.kelas + ' · pertemuan ' + d.pertemuan, 'info', 4000);
@@ -983,6 +1048,12 @@ function duplikatJurnal_(id){
     tujuan.value = d.tujuan || '';
     asesmen.value = d.asesmen;
     if(typeof refleksi !== 'undefined') refleksi.value = d.refleksi && d.refleksi !== '-' ? d.refleksi : '';
+    _resetFotoInputs_();
+    // Foto jurnal sumber ikut ditawarkan sebagai "foto sebelumnya" — guru
+    // tinggal hapus (🗑️) yang tidak relevan lagi (mis. sumbernya 3 foto tapi
+    // untuk kelas baru ini cukup 1), atau biarkan semua kalau memang cocok.
+    _existingFoto_ = (d.foto || []).map(f => ({ full: f.full, removed: false }));
+    _renderExistingFotoBox_();
     _isiKelasDenganRetry_(d.kelas);
     _setModeEditJurnalUI_(false);
     if(typeof showToast === 'function') showToast('📋 Jurnal diduplikat — sesuaikan Kelas/Tanggal/Jam Ke/Absensi lalu Simpan', 'info', 4500);
@@ -1025,6 +1096,7 @@ function _setModeEditJurnalUI_(isEdit){
 function mulaiJurnalBaru_(){
   editingJurnalId = null;
   _setModeEditJurnalUI_(false);
+  _resetFotoInputs_();
   if(typeof openJurnalFocus === 'function') openJurnalFocus();
   else showTab('jurnalku');
 }
@@ -1032,6 +1104,7 @@ function mulaiJurnalBaru_(){
 function batalEditJurnal_(){
   editingJurnalId = null;
   _setModeEditJurnalUI_(false);
+  _resetFotoInputs_();
   if(typeof clearDraft_ === 'function') clearDraft_();
   showTab('riwayat');
   if(typeof loadRiwayat === 'function') loadRiwayat();
@@ -1079,13 +1152,27 @@ function loadRekap(){
         <td>${i+1}</td>
         <td>${x.kelas}</td>
         <td>${x.tanggal}</td>
-        <td>${x.pertemuan}</td>
-        <td>${x.asesmen}</td>
-        <td class="left">${x.keterangan}</td>
+        <td class="left">${_formatAbsensiRekap_(x)}</td>
       </tr>`;
     });
     endProgress();
   }).getRekapAbsensi(dari.value,sampai.value);
+}
+
+// NIHIL kalau semua siswa hadir; kalau tidak, dikelompokkan per kategori
+// (Sakit/Ijin/Alpa) dengan simbol warna + label ditebalkan (sama seperti
+// gaya keterangan Absensi di preview Cetak Jurnal Mengajar), dan
+// nama-namanya jadi bullet list satu baris per nama begitu kategorinya
+// lebih dari 1 orang (1 orang cukup ditulis langsung di baris judul).
+function _formatAbsensiRekap_(x){
+  const kategori = (icon, label, arr) => {
+    if(!arr || !arr.length) return '';
+    if(arr.length === 1) return '<div>' + icon + ' <b>' + label + '</b>: ' + arr[0] + '</div>';
+    return '<div>' + icon + ' <b>' + label + '</b> (' + arr.length + ' orang):<ul style="margin:2px 0 6px 16px;padding:0">' +
+      arr.map(n => '<li>' + n + '</li>').join('') + '</ul></div>';
+  };
+  const blocks = [kategori('🟠', 'Sakit', x.sakit), kategori('🔵', 'Ijin', x.izin), kategori('🔴', 'Alpa', x.alpha)].filter(Boolean);
+  return blocks.length ? blocks.join('') : '✅ NIHIL';
 }
 
 function renderRiwayatSkeleton(rows = 6){
@@ -1373,20 +1460,25 @@ async function simpan(){
     });
 
     // ===== VALIDASI FOTO =====
-    // Minimal 1 foto HANYA wajib untuk jurnal BARU — saat edit, guru boleh
-    // tidak menyentuh foto sama sekali (foto lama otomatis dipertahankan
-    // oleh updateJurnal di server, lihat Jurnal.js), jadi tidak boleh
-    // dipaksa pilih ulang file cuma untuk mengubah teks materi/refleksi.
+    // Total foto dihitung dari GABUNGAN foto lama yang masih dipertahankan
+    // (_existingFoto_ yang tidak ditandai hapus — lihat _toggleExistingFoto_)
+    // + foto baru yang diupload di foto1/2/3. Guru boleh tidak menyentuh
+    // foto sama sekali saat edit/duplikat (foto lama otomatis terhitung
+    // "dipertahankan"), atau hapus sebagian foto lama tanpa upload baru,
+    // atau ganti (hapus lama + upload baru) — semua kombinasi selama
+    // totalnya tetap 1-3.
     const fileInputs = ['foto1','foto2','foto3'];
     const fotoFiles = fileInputs
       .map(id => document.getElementById(id).files[0])
       .filter(f => f);
-    if(!editingJurnalId && fotoFiles.length < 1){
-      alert('⚠️ Minimal 1 foto dokumentasi wajib diupload');
+    const fotoDipertahankan = _existingFoto_.filter(f => !f.removed);
+    const totalFotoAkhir = fotoDipertahankan.length + fotoFiles.length;
+    if(totalFotoAkhir < 1){
+      alert('⚠️ Minimal 1 foto dokumentasi wajib ada (upload foto baru atau pertahankan foto lama)');
       throw new Error('Foto wajib');
     }
-    if(fotoFiles.length > 3){
-      alert('⚠️ Maksimal 3 foto dokumentasi');
+    if(totalFotoAkhir > 3){
+      alert('⚠️ Maksimal 3 foto dokumentasi (gabungan foto lama yang dipertahankan + foto baru)');
       throw new Error('Foto berlebih');
     }
 
@@ -1416,7 +1508,8 @@ async function simpan(){
       asesmen: asesmen.value || '-',
       refleksi: refleksi.value || '-',
       absensi: abs,
-      dokumentasi: fotos
+      dokumentasi: fotos,
+      keepFoto: fotoDipertahankan.map(f => f.full)
     };
 
     const fn = editingJurnalId ? 'updateJurnal' : 'simpanJurnal';
@@ -1451,6 +1544,7 @@ async function simpan(){
       }
       editingJurnalId = null;
       _setModeEditJurnalUI_(false);
+      _resetFotoInputs_();
       clearDraft_(); // 🗑 hapus draft setelah simpan sukses
       showTab('riwayat');
       loadRiwayat();

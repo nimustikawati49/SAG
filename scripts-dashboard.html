@@ -834,6 +834,38 @@ function loadSiswaBinaan(page){
     .withSuccessHandler(function(res){
       stopTimer();
       var data = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+
+      // Isi juga daftar centang Siswa Binaan di Form Jurnal Pendampingan —
+      // ditulis LANGSUNG di sini (bukan lewat pemanggilan fungsi terpisah
+      // di file lain) supaya tidak ada titik gagal tambahan di luar
+      // success handler ini, yang sudah terbukti selalu jalan (tabel di
+      // bawah selalu berhasil terisi).
+      if(p === 1){
+        var ckBox = document.getElementById('gwSiswaBinaanCkList');
+        if(ckBox){
+          if(!data.length){
+            ckBox.innerHTML = '<p class="muted" style="margin:6px;font-size:12px">Belum ada siswa binaan — tambahkan dulu di kartu "Import Data Siswa Binaan" di atas.</p>';
+          } else {
+            ckBox.innerHTML = '<table style="width:100%;border-collapse:collapse"><tbody>' +
+              data.map(function(s){
+                var nis = String(s.nis || '');
+                var nama = String(s.nama_siswa || '');
+                var namaEsc = nama.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                var nisEsc  = nis.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                return '<tr>' +
+                  '<td style="width:32px;text-align:center;padding:5px 4px;border-bottom:1px solid #f1f2f6">' +
+                    '<input type="checkbox" class="gwSiswaCk" value="' + nisEsc + '" data-nama="' + namaEsc + '">' +
+                  '</td>' +
+                  '<td style="text-align:left;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px">' + namaEsc + '</td>' +
+                  '<td style="width:80px;padding:5px 8px;border-bottom:1px solid #f1f2f6;font-size:12px;color:#6b7280">' + nisEsc + '</td>' +
+                '</tr>';
+              }).join('') + '</tbody></table>';
+          }
+          if(typeof _gwUpdateSiswaCounter_ === 'function') _gwUpdateSiswaCounter_();
+          if(typeof _gwSyncCentangSemua_ === 'function') _gwSyncCentangSemua_();
+        }
+      }
+
       if(!data.length){
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:16px">📭 Belum ada siswa binaan. Upload via template CSV.</td></tr>';
         return;
@@ -978,6 +1010,11 @@ function loadJurnalGuruWali(){
   if(typeof loadRiwayatGuruWali === 'function') loadRiwayatGuruWali();
   if(typeof loadStatusArsipWali === 'function') loadStatusArsipWali();
   if(typeof loadKelasUntukImportBinaan === 'function') loadKelasUntukImportBinaan();
+  // Daftar centang Siswa Binaan di Form Jurnal Pendampingan diisi dari
+  // dalam loadSiswaBinaan(1) di atas (lihat scripts-dashboard.html) —
+  // TIDAK ada panggilan getSiswaBinaan terpisah lagi di sini. Tombol
+  // "🔄 Muat Ulang" di form tetap tersedia sebagai cara memuat ulang
+  // manual (memanggil _gwLoadSiswaBinaanPicker_ sendiri) kalau perlu.
 
   // Set default tanggal hari ini
   var tglEl = document.getElementById('gwTanggal');
