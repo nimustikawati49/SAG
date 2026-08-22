@@ -33,14 +33,21 @@ function goHelperTab(tab){
 function loadDashboard(){
 }
 
+let _dashKpiStopElapsed_ = null;
 function showKpiSkeleton(){
   ['kpiJurnal','kpiKelas','kpiRata','kpiRisiko'].forEach(function(id){
     const el = document.getElementById(id);
     if(el){ el.innerHTML = '<div class="skeleton" style="height:28px;width:60%;margin:auto"></div>'; }
   });
+  if (_dashKpiStopElapsed_) { _dashKpiStopElapsed_(); _dashKpiStopElapsed_ = null; }
   if (typeof startElapsedNotice_ === 'function') {
-    startElapsedNotice_(document.getElementById('dashKpiLoadingText'), '⏳ Memuat dashboard...');
+    _dashKpiStopElapsed_ = startElapsedNotice_(document.getElementById('dashKpiLoadingText'), '⏳ Memuat dashboard...');
   }
+}
+function _dashKpiStopSkeleton_(){
+  if (_dashKpiStopElapsed_) { _dashKpiStopElapsed_(); _dashKpiStopElapsed_ = null; }
+  const el = document.getElementById('dashKpiLoadingText');
+  if (el) el.innerHTML = '';
 }
 
 /* ===== KPI KETUNTASAN KELAS (Predikat A-D) =====
@@ -235,6 +242,7 @@ function loadDashboardV4(){
 
   google.script.run
     .withFailureHandler(err=>{
+      _dashKpiStopSkeleton_();
       clearInterval(_pi);
       _dashSetProgress(0);
       document.getElementById('dashboard')
@@ -243,6 +251,7 @@ function loadDashboardV4(){
       else alert('Gagal memuat dashboard:\n' + err.message);
     })
     .withSuccessHandler(data=>{
+      _dashKpiStopSkeleton_();
       clearInterval(_pi);
       _dashSetProgress(100);
       setTimeout(function(){ _dashSetProgress(0); }, 600);
@@ -627,6 +636,7 @@ function initDashboardMeta(){
   // 7. Safety timeout lebih panjang — kalau BENAR-BENAR macet (bukan cuma
   //    lambat), baru tampilkan status gagal supaya user bisa coba lagi.
   const _skeletonTimeout = setTimeout(function(){
+    _dashKpiStopSkeleton_();
     clearInterval(_progInterval);
     _dashSetProgress(0);
     _metaCallInProgress = false;
@@ -642,6 +652,7 @@ function initDashboardMeta(){
   // 7. Single GAS call — getDashboardAllData() combines meta + V4
   google.script.run
     .withFailureHandler(function(err){
+      _dashKpiStopSkeleton_();
       clearTimeout(_slowWarnTimeout);
       clearTimeout(_skeletonTimeout);
       clearInterval(_progInterval);
@@ -652,6 +663,7 @@ function initDashboardMeta(){
         showToast('❌ Gagal memuat dashboard: ' + (err.message || 'Coba refresh'), 'error', 6000);
     })
     .withSuccessHandler(function(allData){
+      _dashKpiStopSkeleton_();
       clearTimeout(_slowWarnTimeout);
       clearTimeout(_skeletonTimeout);
       clearInterval(_progInterval);

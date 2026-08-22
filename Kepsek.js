@@ -17,6 +17,82 @@ function assertKepsek_() {
 
 /**
  * ================================================================
+ * KKTP (Kriteria Ketercapaian Tujuan Pembelajaran) PER FASE
+ * ================================================================
+ * Rentang ketuntasan resmi Kurikulum Merdeka, beda-beda tiap fase (jenjang
+ * kelas) — dipakai di getRekapSekolah() untuk "Ketuntasan Siswa per Kelas"
+ * supaya sesuai standar per fase, bukan satu KKM tunggal untuk semua
+ * jenjang. nilai_akhir siswa (skala 0-100) diperlakukan sebagai persentase
+ * ketercapaian tujuan pembelajaran.
+ */
+var KKTP_BANDS_A_ = [
+  { min: 0,  max: 50,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial total (bimbingan penuh dari guru dan keterlibatan orang tua).' },
+  { min: 51, max: 70,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial parsial pada indikator tujuan pembelajaran yang belum dikuasai.' },
+  { min: 71, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Lanjutkan ke materi/tujuan pembelajaran berikutnya.' },
+  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Berikan aktivitas pengayaan atau tantangan belajar mandiri.' }
+];
+var KKTP_BANDS_BC_ = [
+  { min: 0,  max: 45,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial terstruktur pada seluruh bagian materi.' },
+  { min: 46, max: 65,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial mandiri melalui tugas tambahan atau tutor sebaya pada bagian yang kurang.' },
+  { min: 66, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa direkomendasikan mempertahankan konsistensi belajar.' },
+  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Sistem otomatis merekomendasikan materi pengayaan tingkat lanjut.' }
+];
+var KKTP_BANDS_D_ = [
+  { min: 0,  max: 40,  status: 'Belum Mencapai Tujuan', tindak: 'Intervensi khusus (remedial terbimbing tatap muka dengan guru).' },
+  { min: 41, max: 65,  status: 'Belum Mencapai Tujuan', tindak: 'Perbaikan portofolio atau revisi tugas pada indikator yang lemah.' },
+  { min: 66, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa siap menghadapi asesmen sumatif lingkup materi berikutnya.' },
+  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Diberikan peran sebagai tutor sebaya atau proyek eksplorasi mandiri.' }
+];
+var KKTP_BANDS_EF_ = [
+  { min: 0,  max: 40,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial komprehensif (teori dan praktik ulang).' },
+  { min: 41, max: 70,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial terfokus melalui pengerjaan ulang instrumen asesmen yang gagal.' },
+  { min: 71, max: 88,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Kompetensi esensial telah terpenuhi dengan baik.' },
+  { min: 89, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa diarahkan ke pendalaman materi berbasis riset atau aplikasi projek nyata.' }
+];
+
+// Fase B & C dan Fase E & F masing-masing berbagi rentang persen yang
+// sama persis (cuma beda label/kelompok kelas) — jadi kunci berbeda
+// tapi menunjuk ke array band yang sama.
+var KKTP_FASE_BANDS_ = {
+  A: KKTP_BANDS_A_,
+  B: KKTP_BANDS_BC_,
+  C: KKTP_BANDS_BC_,
+  D: KKTP_BANDS_D_,
+  E: KKTP_BANDS_EF_,
+  F: KKTP_BANDS_EF_
+};
+
+var KKTP_FASE_LABEL_ = {
+  A: 'Fase A (Kelas 1–2 SD)',
+  B: 'Fase B (Kelas 3–4 SD)',
+  C: 'Fase C (Kelas 5–6 SD)',
+  D: 'Fase D (Kelas 7–9 SMP)',
+  E: 'Fase E (Kelas 10 SMA/SMK)',
+  F: 'Fase F (Kelas 11–12 SMA/SMK)'
+};
+
+/**
+ * Tentukan fase dari nama kelas (angka di depan, mis. "7A" -> 7).
+ * Penomoran kelas di Indonesia unik per jenjang (SD 1-6, SMP 7-9,
+ * SMA/SMK 10-12, tidak tumpang tindih) jadi angka kelas saja sudah
+ * cukup — tidak perlu baca teks kode_sekolah segala. Kalau angka
+ * kelasnya tidak jelas, fallback ke Fase D karena sistem ini paling
+ * banyak dipakai di jenjang SMP.
+ */
+function _kepsekFaseDariKelas_(kelas) {
+  var m = String(kelas || '').match(/(\d+)/);
+  var n = m ? parseInt(m[1], 10) : null;
+  if (n === null) return 'D';
+  if (n <= 2) return 'A';
+  if (n <= 4) return 'B';
+  if (n <= 6) return 'C';
+  if (n <= 9) return 'D';
+  if (n <= 10) return 'E';
+  return 'F';
+}
+
+/**
+ * ================================================================
  * MULTI-SPREADSHEET HELPERS (mode per_guru)
  * ================================================================
  * Di mode storage 'central' semua guru berbagi SATU spreadsheet, jadi
@@ -39,7 +115,10 @@ function assertKepsek_() {
  */
 
 /**
- * Daftar email guru/admin berstatus aktif, dari sheet USERS (selalu central).
+ * Daftar email guru/admin berstatus aktif ATAU trial, dari sheet USERS
+ * (selalu central) — guru trial sengaja ikut disertakan supaya Kepsek/
+ * SuperAdmin bisa memantau guru sejak masa coba 30 hari, sebelum
+ * diaktifkan penuh lewat "Aktifkan Penuh" di panel SuperAdmin.
  * Satu deployment ini bisa melayani BEBERAPA sekolah sekaligus — SuperAdmin
  * mengelompokkan tiap akun ke kode_sekolah lewat updateUserSekolah(). Baik
  * Kepsek MAUPUN SuperAdmin daftar gurunya otomatis DIPERSEMPIT ke guru
@@ -77,9 +156,20 @@ function _kepsekActiveGuruEmails_() {
     var uEmail = String(userData[ui][0] || '').toLowerCase().trim();
     var uRole  = String(userData[ui][1] || '').toLowerCase().trim();
     var uStatus= String(userData[ui][2] || '').toLowerCase().trim();
-    if (!uEmail || !(uRole === 'admin' || uRole === 'guru') || uStatus !== 'active') continue;
+    if (!uEmail || !(uRole === 'admin' || uRole === 'guru') || (uStatus !== 'active' && uStatus !== 'trial')) continue;
     if (scopeToSchool && String(userData[ui][4] || '').trim() !== callerKode) continue;
     guruEmails.push(uEmail);
+  }
+
+  // SuperAdmin kadang juga mengajar sendiri (isi Jurnal/Nilai lewat akun
+  // SuperAdmin-nya sendiri, bukan cuma mengelola sistem) — role-nya
+  // 'superadmin' jadi tidak lolos filter role di atas. Sertakan email
+  // SuperAdmin sendiri supaya data mengajarnya ikut terhitung di Rekap
+  // Sekolah/Rekap Guru Wali miliknya sendiri maupun milik Kepsek di
+  // sekolah yang sama. Kepsek TIDAK disertakan di sini karena perannya
+  // read-only, tidak pernah mengisi Jurnal/Nilai sendiri.
+  if (auth.role === 'superadmin' && guruEmails.indexOf(auth.email) === -1) {
+    guruEmails.push(auth.email);
   }
   return guruEmails;
 }
@@ -178,6 +268,35 @@ function _kepsekSemesterFromRow_(row, idx) {
 }
 
 /**
+ * _kepsekAktifTahunSemester_(ssMap, guruEmails)
+ * Tahun pelajaran & semester aktif sekolah ini (baris SETTING pertama
+ * yang terisi punya guru sekolah ini), fallback ke Setting akun pemanggil
+ * sendiri kalau belum ada guru yang mengisi. Dipakai buat menyaring data
+ * absensi/nilai supaya hanya periode ajaran yang sedang berjalan yang
+ * dihitung, bukan akumulasi dari tahun-tahun lama.
+ */
+function _kepsekAktifTahunSemester_(ssMap, guruEmails) {
+  var setAll = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
+  var sIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
+  var tahun_pelajaran = '';
+  var semester_aktif  = '';
+  for (var si = 1; si < setAll.length; si++) {
+    var rowTahun = _kepsekTahunFromRow_(setAll[si], sIdx);
+    if (rowTahun) tahun_pelajaran = rowTahun;
+    var rowSem = _kepsekSemesterFromRow_(setAll[si], sIdx);
+    if (rowSem) { semester_aktif = rowSem; break; }
+  }
+  if (!tahun_pelajaran || !semester_aktif) {
+    try {
+      var ownSetting = getSetting();
+      if (!tahun_pelajaran) tahun_pelajaran = ownSetting.tahun_pelajaran_aktif || ownSetting.tahun_pelajaran || '';
+      if (!semester_aktif) semester_aktif = ownSetting.semester_aktif || ownSetting.semester || '';
+    } catch (e) { /* getSetting gagal — biarkan tetap kosong */ }
+  }
+  return { tahun: tahun_pelajaran, semester: semester_aktif };
+}
+
+/**
  * getRekapSekolah()
  * Mengembalikan rekap seluruh guru di sekolah yang sama
  * (semua user bertipe 'admin' di USERS sheet).
@@ -193,7 +312,7 @@ function _kepsekSemesterFromRow_(row, idx) {
  *   totalSiswa       : number,
  *   guruList         : [{
  *     email, nama, totalJurnal, totalJurnalBulan,
- *     totalSiswa, totalKelas, lastJurnal,
+ *     totalSiswa, totalKelas, kelasList, mapelList, lastJurnal,
  *     statusJurnal: 'aktif'|'tidak_aktif'|'belum_mulai'
  *   }]
  * }
@@ -216,7 +335,6 @@ function getRekapSekolah(forceRefresh) {
   var siswaRows  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SISWA');
   var setAll     = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
   var nilaiRows  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'NILAI_SISWA');
-  var settingRowsNilai = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING_NILAI');
 
   // ── Setting sekolah (ambil baris pertama yang terisi) ──
   var sIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
@@ -293,16 +411,24 @@ function getRekapSekolah(forceRefresh) {
     guruMap[sOwner].totalSiswa++;
   }
 
-  // Kelas unik per guru dari jurnal
+  // Kelas & mapel unik per guru dari jurnal (yang BENAR-BENAR diajar,
+  // bukan sekadar didaftarkan di Setting) — dipakai utk kolom "Kelas
+  // Diampu" & "Mata Pelajaran" di tabel Guru supaya Kepsek tahu guru
+  // tsb mengajar kelas berapa saja dan mapel apa.
   var kelasPerGuru = {};
+  var mapelPerGuru = {};
   for (var kji = 1; kji < jurnalRows.length; kji++) {
     var kEmail = String(jurnalRows[kji][12] || '').toLowerCase().trim();
     if (!guruMap[kEmail]) continue;
     if (!kelasPerGuru[kEmail]) kelasPerGuru[kEmail] = new Set();
     if (jurnalRows[kji][2]) kelasPerGuru[kEmail].add(jurnalRows[kji][2]);
+    if (!mapelPerGuru[kEmail]) mapelPerGuru[kEmail] = new Set();
+    if (jurnalRows[kji][19]) mapelPerGuru[kEmail].add(jurnalRows[kji][19]);
   }
   guruEmails.forEach(function(email) {
     guruMap[email].totalKelas = kelasPerGuru[email] ? kelasPerGuru[email].size : 0;
+    guruMap[email].kelasList  = kelasPerGuru[email] ? Array.from(kelasPerGuru[email]).sort() : [];
+    guruMap[email].mapelList  = mapelPerGuru[email] ? Array.from(mapelPerGuru[email]).sort() : [];
   });
 
   // ── Status jurnal ──
@@ -320,6 +446,8 @@ function getRekapSekolah(forceRefresh) {
       totalJurnalBulan : g.totalJurnalBulan,
       totalSiswa       : g.totalSiswa,
       totalKelas       : g.totalKelas,
+      kelasList        : g.kelasList,
+      mapelList        : g.mapelList,
       lastJurnal       : g.lastJurnal
         ? Utilities.formatDate(g.lastJurnal, tz, 'dd MMM yyyy')
         : '-',
@@ -340,43 +468,38 @@ function getRekapSekolah(forceRefresh) {
   var totalJurnalBulan = guruList.reduce(function(s, g) { return s + g.totalJurnalBulan; }, 0);
   var totalSiswa       = guruList.reduce(function(s, g) { return s + g.totalSiswa; }, 0);
 
-  // ── Kelas favorit berdasarkan frekuensi jurnal ──
-  var kelasCount = {};
-  for (var kj = 1; kj < jurnalRows.length; kj++) {
-    var kelasKey = String(jurnalRows[kj][2] || '').trim();
-    var emailKey = String(jurnalRows[kj][12] || '').toLowerCase().trim();
-    if (!kelasKey || !guruMap[emailKey]) continue;
-    kelasCount[kelasKey] = (kelasCount[kelasKey] || 0) + 1;
-  }
-  var kelasFavorit = Object.keys(kelasCount).map(function(kelas) {
-    return { kelas: kelas, totalJurnal: kelasCount[kelas] };
-  }).sort(function(a, b) { return b.totalJurnal - a.totalJurnal; }).slice(0, 5);
-
-  // ── Ketuntasan siswa per kelas berdasarkan nilai akhir ──
+  // ── Ketuntasan siswa per kelas berdasarkan KKTP (rentang per Fase) ──
+  // Skor per siswa = rata-rata (Rata Harian + PTS + SAS/ASAT) digabung
+  // dari SEMUA mapel yang diampu guru-guru sekolah ini, lalu dibandingkan
+  // ke rentang KKTP sesuai fase jenjang kelasnya (lihat KKTP_FASE_BANDS_
+  // di atas) — bukan satu KKM tunggal, supaya sesuai standar Kurikulum
+  // Merdeka yang berbeda tiap fase.
   var kelasKetuntasan = [];
   if (nilaiRows.length > 1) {
       var nh = nilaiRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
       var nidx = {};
       nh.forEach(function(h, i) { nidx[h] = i; });
 
-      var settingRows = settingRowsNilai;
-      var kkmMap = {};
-      if (settingRows.length > 1) {
-        var shh = settingRows[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
-        var sidx = {};
-        shh.forEach(function(h, i) { sidx[h] = i; });
-        for (var si = 1; si < settingRows.length; si++) {
-          var klsSet = String(settingRows[si][sidx.kelas] || '').trim();
-          var thnSet = String(settingRows[si][sidx.tahun] || '').trim();
-          var semSet = String(settingRows[si][sidx.semester] || '').trim();
-          var kkmSet = Number(settingRows[si][sidx.kkm]);
-          if (!klsSet || !thnSet || !semSet || isNaN(kkmSet)) continue;
-          if (String(thnSet) !== String(tahun_pelajaran || '')) continue;
-          if (String(semSet).toLowerCase() !== String(semester_aktif || '').toLowerCase()) continue;
-          if (!kkmMap[klsSet]) kkmMap[klsSet] = [];
-          kkmMap[klsSet].push(kkmSet);
-        }
+      // Nama siswa (kelas -> nis -> nama) utk daftar "Belum Mencapai Tujuan".
+      var namaMapKtp = {};
+      for (var nsi = 1; nsi < siswaRows.length; nsi++) {
+        var kelasNs = String(siswaRows[nsi][0] || '');
+        var nisNs   = String(siswaRows[nsi][2] || '').trim();
+        var namaNs  = String(siswaRows[nsi][3] || '');
+        if (!namaMapKtp[kelasNs]) namaMapKtp[kelasNs] = {};
+        if (nisNs) namaMapKtp[kelasNs][nisNs] = namaNs;
       }
+
+      // Ketuntasan KKTP dihitung dari rata-rata (Rata Harian + PTS +
+      // SAS/ASAT) SAJA — bukan nilai_akhir/nilai_asli yang sudah ada
+      // (itu formula campuran 40% [Harian+Tugas] + 30% PTS + 30% UAS).
+      // Tugas Mandiri/Kelompok sengaja TIDAK ikut. Komponen yang kosong
+      // dilewati, rata-rata dihitung dari yang tersedia saja.
+      var _parseKtpNum_ = function(v) {
+        if (v === '' || v === null || v === undefined) return null;
+        var n = Number(v);
+        return isNaN(n) ? null : n;
+      };
 
       var classStudents = {};
       for (var ni = 1; ni < nilaiRows.length; ni++) {
@@ -387,40 +510,65 @@ function getRekapSekolah(forceRefresh) {
 
         var kelasNilai = String(nilaiRows[ni][nidx.kelas] || '').trim();
         var nisNilai = String(nilaiRows[ni][nidx.nis] || '').trim();
-        var akhirRaw = nilaiRows[ni][nidx.nilai_akhir];
-        var akhir = akhirRaw === '' || akhirRaw === null || akhirRaw === undefined ? null : Number(akhirRaw);
-        if (!kelasNilai || !nisNilai || isNaN(akhir)) continue;
+        if (!kelasNilai || !nisNilai) continue;
+
+        var rataHarian = _parseKtpNum_(nilaiRows[ni][nidx.rata_uh]);
+        var ptsVal     = _parseKtpNum_(nilaiRows[ni][nidx.pts]);
+        var isGenapRow = rowSem.indexOf('genap') > -1;
+        var uasVal     = _parseKtpNum_(nilaiRows[ni][isGenapRow ? nidx.pat : nidx.pas]);
+
+        var komponen = [rataHarian, ptsVal, uasVal].filter(function(v) { return v !== null; });
+        if (!komponen.length) continue;
+        var skor = komponen.reduce(function(a, b) { return a + b; }, 0) / komponen.length;
+
         if (!classStudents[kelasNilai]) classStudents[kelasNilai] = {};
         if (!classStudents[kelasNilai][nisNilai]) classStudents[kelasNilai][nisNilai] = [];
-        classStudents[kelasNilai][nisNilai].push(akhir);
+        classStudents[kelasNilai][nisNilai].push(skor);
       }
 
       Object.keys(classStudents).forEach(function(kelas) {
         var siswaMap = classStudents[kelas];
         var nisList = Object.keys(siswaMap);
         if (!nisList.length) return;
-        var kkmList = kkmMap[kelas] || [70];
-        var kkm = Math.round((kkmList.reduce(function(a, b) { return a + b; }, 0) / kkmList.length) * 100) / 100;
-        var tuntas = 0;
+
+        var fase = _kepsekFaseDariKelas_(kelas);
+        var bandDefs = KKTP_FASE_BANDS_[fase];
+        var siswaBelum = []; // {nis, nama, nilai} — nilai dipakai buat urutan, tidak ditampilkan
+
+        var tuntasCount = 0;
         nisList.forEach(function(nis) {
           var avg = siswaMap[nis].reduce(function(a, b) { return a + b; }, 0) / siswaMap[nis].length;
-          if (avg >= kkm) tuntas++;
+          var band = bandDefs[bandDefs.length - 1];
+          for (var bi = 0; bi < bandDefs.length; bi++) {
+            if (avg >= bandDefs[bi].min && avg <= bandDefs[bi].max) { band = bandDefs[bi]; break; }
+          }
+
+          if (band.status === 'Sudah Mencapai Tujuan') {
+            tuntasCount++;
+          } else {
+            siswaBelum.push({ nama: (namaMapKtp[kelas] && namaMapKtp[kelas][nis]) || nis, nilai: avg });
+          }
         });
+
+        siswaBelum.sort(function(a, b) { return a.nilai - b.nilai; });
+        var persenTuntas = Math.round((tuntasCount / nisList.length) * 100);
+
         kelasKetuntasan.push({
-          kelas: kelas,
-          totalSiswa: nisList.length,
-          tuntas: tuntas,
-          belumTuntas: nisList.length - tuntas,
-          kkm: kkm,
-          persenTuntas: Math.round((tuntas / nisList.length) * 100)
+          kelas               : kelas,
+          faseLabel           : KKTP_FASE_LABEL_[fase],
+          totalSiswa          : nisList.length,
+          persenTuntas        : persenTuntas,
+          persenPerluBimbingan: 100 - persenTuntas,
+          siswaBelum          : siswaBelum.map(function(s) { return s.nama; })
         });
       });
 
+      // Semua kelas yang punya data nilai ditampilkan (tidak dibatasi top-N)
+      // — satu kode_sekolah bisa punya banyak kelas dari gabungan semua
+      // guru/mapel yang pakai sistem ini, jadi tabelnya harus lengkap.
       kelasKetuntasan.sort(function(a, b) {
-        if (b.persenTuntas !== a.persenTuntas) return b.persenTuntas - a.persenTuntas;
-        return b.totalSiswa - a.totalSiswa;
+        return a.kelas < b.kelas ? -1 : (a.kelas > b.kelas ? 1 : 0);
       });
-      kelasKetuntasan = kelasKetuntasan.slice(0, 10);
     }
 
   var result = {
@@ -432,7 +580,6 @@ function getRekapSekolah(forceRefresh) {
     guruAktif       : guruAktif,
     totalJurnalBulan: totalJurnalBulan,
     totalSiswa      : totalSiswa,
-    kelasFavorit    : kelasFavorit,
     kelasKetuntasan : kelasKetuntasan,
     guruList        : guruList
   };
@@ -603,248 +750,195 @@ function getRekapGuruWaliDetail(email) {
 }
 
 /**
- * getRekapAbsensiSekolah(dari, sampai)
- * Rekap kehadiran semua kelas semua guru dalam rentang tanggal.
- * Return: array of { kelas, guru, email, H, S, I, A, total, persen }
+ * getEarlyWarningSiswa()
+ * Top 3 siswa dengan Sakit+Izin+Alpa terbanyak di tiap kelas (gabungan
+ * semua mapel/guru di sekolah ini), tampil otomatis begitu Rekap Sekolah
+ * dibuka.
+ * Returns: array of {kelas, siswa: [{nis, nama, S, I, A, totalSIA, persen, dominant}, ...]}
  */
-function getRekapAbsensiSekolah(dari, sampai) {
+function getEarlyWarningSiswa() {
   assertKepsek_();
 
-  var cacheKey = 'KEPSEK_REKAP_ABSENSI_' + String(dari || '') + '_' + String(sampai || '');
+  var cacheKey = 'KEPSEK_EARLY_WARNING';
   try {
     var cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) return JSON.parse(cached);
   } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  var guruEmails = _kepsekActiveGuruEmails_();
-  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
-  var guruSet    = new Set(guruEmails);
-
-  // Nama guru map
-  var setAll = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SETTING');
-  var setIdx = setAll.length ? _kepsekSettingIdx_(setAll[0]) : {};
-  var namaMap = {};
-  for (var si = 1; si < setAll.length; si++) {
-    var em = setIdx.email > -1 ? String(setAll[si][setIdx.email] || '').toLowerCase().trim() : '';
-    var nm = setIdx.guru > -1 ? String(setAll[si][setIdx.guru] || '').trim() : '';
-    if (em && nm) namaMap[em] = nm;
-  }
-
-  var from = dari   ? new Date(dari   + 'T00:00:00') : null;
-  var to   = sampai ? new Date(sampai + 'T23:59:59') : null;
-
-  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
-  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
-
-  // Build jurnal id → {email, kelas}
-  var jurnalMap = {};
-  for (var ji = 1; ji < jurnalData.length; ji++) {
-    var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
-    if (!guruSet.has(jEmail)) continue;
-    var tgl = jurnalData[ji][1] ? new Date(jurnalData[ji][1]) : null;
-    if (from && tgl < from) continue;
-    if (to   && tgl > to)   continue;
-    jurnalMap[jurnalData[ji][0]] = {
-      email : jEmail,
-      kelas : String(jurnalData[ji][2] || '')
-    };
-  }
-
-  // Accumulate absensi
-  var kelasMap = {};
-  for (var ai = 1; ai < absenData.length; ai++) {
-    var jId = absenData[ai][0];
-    var j   = jurnalMap[jId];
-    if (!j) continue;
-    var key = j.kelas + '___' + j.email;
-    if (!kelasMap[key]) {
-      kelasMap[key] = { kelas: j.kelas, email: j.email, H: 0, S: 0, I: 0, A: 0, total: 0 };
-    }
-    var status = String(absenData[ai][3] || '').toUpperCase();
-    if (kelasMap[key][status] !== undefined) kelasMap[key][status]++;
-    kelasMap[key].total++;
-  }
-
-  var result = Object.values(kelasMap).map(function(d) {
-    return {
-      kelas  : d.kelas,
-      guru   : namaMap[d.email] || d.email,
-      email  : d.email,
-      H      : d.H, S: d.S, I: d.I, A: d.A,
-      total  : d.total,
-      persen : d.total > 0 ? Math.round(d.H / d.total * 100) : 0
-    };
+  var siswaRows = _kepsekHitungAbsensiPerSiswa_();
+  var perKelas  = {};
+  siswaRows.forEach(function(d) {
+    var totalSIA = d.S + d.I + d.A;
+    if (totalSIA <= 0) return; // tidak ada yang perlu disorot
+    if (!perKelas[d.kelas]) perKelas[d.kelas] = [];
+    perKelas[d.kelas].push({
+      nis: d.nis, nama: d.nama, S: d.S, I: d.I, A: d.A, totalSIA: totalSIA,
+      persen: d.total > 0 ? Math.round(d.H / d.total * 100) : 0,
+      dominant: _kepsekDominanSIA_(d.S, d.I, d.A)
+    });
   });
 
-  result.sort(function(a, b) { return a.persen - b.persen; }); // risiko terbesar dulu
+  var result = Object.keys(perKelas).sort().map(function(kelas) {
+    var siswa = perKelas[kelas]
+      .sort(function(a, b) { return b.totalSIA - a.totalSIA; })
+      .slice(0, 3);
+    return { kelas: kelas, siswa: siswa };
+  });
 
   try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
   return result;
 }
+
 /**
- * getEarlyWarningSiswa(threshold)
- * Identifikasi siswa dengan kehadiran di bawah threshold (default 75%).
- * Returns: array of {kelas, nis, nama, H, S, I, A, total, persen}
+ * _kepsekHitungAbsensiPerSiswa_()
+ * Helper bersama: akumulasi H/S/I/A per siswa (semua kelas, semua guru
+ * di sekolah ini) dari sheet JURNAL+ABSENSI+SISWA, dibatasi ke tahun
+ * pelajaran & semester AKTIF saja (bukan akumulasi dari semester/tahun
+ * lama). ABSENSI sendiri TIDAK punya kolom nama (cuma
+ * jurnal_id/kelas/nis/status) — nama diambil dari sheet SISWA lewat
+ * namaMap.
+ *
+ * PENTING: siswa bisa dapat beberapa jurnal DI HARI YANG SAMA (satu per
+ * mapel/guru — bisa 3-4 mapel sehari), jadi absensi DIRINGKAS DULU per
+ * (siswa, tanggal) sebelum diakumulasi — kalau dalam 1 hari statusnya
+ * sama di beberapa mapel, dihitung 1 hari saja (bukan 3-4x). Kalau
+ * beda hari, baru dihitung terpisah. Kalau dalam 1 hari ada mapel yang
+ * beda status (jarang, tapi bisa), diambil yang paling parah (prioritas
+ * A > I > S > H).
+ *
+ * Dipakai oleh getRaportAbsensiSiswa() (rekap per kelas) dan
+ * _kepsekSiaTerbanyakPerKelas_() (siswa paling perlu perhatian).
+ * Returns: array of {kelas, nis, nama, H, S, I, A, total}
  */
-function getEarlyWarningSiswa(threshold) {
-  assertKepsek_();
-  var limit = (typeof threshold === 'number') ? threshold : 75;
-
-  var cacheKey = 'KEPSEK_EARLY_WARNING_' + limit;
-  try {
-    var cached = CacheService.getScriptCache().get(cacheKey);
-    if (cached) return JSON.parse(cached);
-  } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
-
+function _kepsekHitungAbsensiPerSiswa_() {
   var guruEmails = _kepsekActiveGuruEmails_();
   var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
   var guruSet    = new Set(guruEmails);
+  var periode    = _kepsekAktifTahunSemester_(ssMap, guruEmails);
+  var tz         = Session.getScriptTimeZone();
 
   var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
   var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
   var siswaData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'SISWA');
 
-  if (!jurnalData.length || !absenData.length || !siswaData.length) return [];
+  if (!jurnalData.length || !absenData.length) return [];
 
-  // Build jurnal id → kelas (hanya guru sekolah ini)
-  var jurnalMap  = {};
+  // jurnal id -> {kelas, tanggal} — dibatasi guru sekolah ini DAN
+  // tahun/semester aktif saja.
+  var jurnalMap = {};
   for (var ji = 1; ji < jurnalData.length; ji++) {
     var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
     if (!guruSet.has(jEmail)) continue;
-    jurnalMap[jurnalData[ji][0]] = {
-      kelas: String(jurnalData[ji][2] || ''),
-      email: jEmail
-    };
+    var jTahun = String(jurnalData[ji][18] || '').trim();
+    var jSem   = String(jurnalData[ji][13] || '').toLowerCase().trim();
+    if (periode.tahun && jTahun !== String(periode.tahun)) continue;
+    if (periode.semester && jSem !== String(periode.semester).toLowerCase()) continue;
+
+    var tglRaw = jurnalData[ji][1];
+    if (!tglRaw) continue;
+    var tglKey = Utilities.formatDate(new Date(tglRaw), tz, 'yyyy-MM-dd');
+    jurnalMap[jurnalData[ji][0]] = { kelas: String(jurnalData[ji][2] || ''), tanggal: tglKey };
   }
 
-  // Build siswa map: kelas → {nis → nama}
-  var siswaMap  = {};
+  var namaMap = {}; // kelas -> nis -> nama
   for (var si = 1; si < siswaData.length; si++) {
     var sOwner = String(siswaData[si][5] || '').toLowerCase().trim();
     if (!guruSet.has(sOwner)) continue;
-    var kelas = String(siswaData[si][0] || '');
-    var nis   = String(siswaData[si][2] || '');
-    var nama  = String(siswaData[si][3] || '');
-    if (!siswaMap[kelas]) siswaMap[kelas] = {};
-    if (nis) siswaMap[kelas][nis] = nama;
+    var kelasS = String(siswaData[si][0] || '');
+    var nisS   = String(siswaData[si][2] || '');
+    var namaS  = String(siswaData[si][3] || '');
+    if (!namaMap[kelasS]) namaMap[kelasS] = {};
+    if (nisS) namaMap[kelasS][nisS] = namaS;
   }
 
-  // Akumulasi absensi per siswa per kelas
-  // ABSENSI: [0]=jurnal_id, [1]=no_absen, [2]=nis, [3]=status, [4]=keterangan, [5]=nama
-  var siswaAbsen  = {}; // key: kelas+nis
+  // Ringkas dulu per (siswa, tanggal) — 1 hari = 1 status, prioritas
+  // A > I > S > H kalau beda mapel beda status di hari yang sama.
+  var STATUS_PRIORITAS_ = { A: 3, I: 2, S: 1, H: 0 };
+  var perHari = {}; // key: kelas__nis__tanggal
 
   for (var ai = 1; ai < absenData.length; ai++) {
     var jId = absenData[ai][0];
-    if (!jurnalMap[jId]) continue;
-
-    var kls    = jurnalMap[jId].kelas;
-    var nis_ab = String(absenData[ai][2] || '').trim();
-    var nama_ab = String(absenData[ai][5] || absenData[ai][1] || '').trim();
+    var j = jurnalMap[jId];
+    if (!j) continue;
+    var nisAb   = String(absenData[ai][2] || '').trim();
     var status  = String(absenData[ai][3] || '').toUpperCase();
-    if (!nis_ab) continue;
+    if (!nisAb || STATUS_PRIORITAS_[status] === undefined) continue;
 
-    var sKey = kls + '__' + nis_ab;
-    if (!siswaAbsen[sKey]) {
-      siswaAbsen[sKey] = { kelas: kls, nis: nis_ab, nama: nama_ab, H: 0, S: 0, I: 0, A: 0, total: 0 };
-    }
-    if (['H','S','I','A'].indexOf(status) > -1) {
-      siswaAbsen[sKey][status]++;
-      siswaAbsen[sKey].total++;
-    }
-    if (nama_ab && !siswaAbsen[sKey].nama) siswaAbsen[sKey].nama = nama_ab;
-  }
-
-  var result = [];
-  var keys = Object.keys(siswaAbsen);
-  for (var k = 0; k < keys.length; k++) {
-    var d = siswaAbsen[keys[k]];
-    var persen = d.total > 0 ? Math.round(d.H / d.total * 100) : 0;
-    if (persen < limit) {
-      result.push({
-        kelas  : d.kelas,
-        nis    : d.nis,
-        nama   : d.nama,
-        H      : d.H,
-        S      : d.S,
-        I      : d.I,
-        A      : d.A,
-        total  : d.total,
-        persen : persen
-      });
+    var hKey = j.kelas + '__' + nisAb + '__' + j.tanggal;
+    if (!perHari[hKey] || STATUS_PRIORITAS_[status] > STATUS_PRIORITAS_[perHari[hKey].status]) {
+      perHari[hKey] = { kelas: j.kelas, nis: nisAb, status: status };
     }
   }
-  result.sort(function(a, b) { return a.persen - b.persen; });
 
-  try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
-  return result;
+  // Baru akumulasi per siswa dari ringkasan per-hari (1 hari = 1 hitungan).
+  var siswaMap = {};
+  Object.values(perHari).forEach(function(d) {
+    var sKey = d.kelas + '__' + d.nis;
+    if (!siswaMap[sKey]) {
+      siswaMap[sKey] = {
+        kelas: d.kelas, nis: d.nis,
+        nama: (namaMap[d.kelas] && namaMap[d.kelas][d.nis]) || '',
+        H:0, S:0, I:0, A:0, total:0
+      };
+    }
+    siswaMap[sKey][d.status]++;
+    siswaMap[sKey].total++;
+  });
+
+  return Object.values(siswaMap);
+}
+
+/**
+ * _kepsekDominanSIA_(S, I, A)
+ * Kategori S/I/A yang paling parah buat satu siswa — dipakai supaya Early
+ * Warning cukup tampilkan 1 angka (mis. "I: 3") bukan tiga-tiganya
+ * sekaligus. Kalau seri, prioritas A (Alpa) > I (Izin) > S (Sakit) karena
+ * makin ke situ makin perlu perhatian.
+ */
+function _kepsekDominanSIA_(S, I, A) {
+  var opts = [{ kategori: 'A', jumlah: A }, { kategori: 'I', jumlah: I }, { kategori: 'S', jumlah: S }];
+  opts.sort(function(a, b) { return b.jumlah - a.jumlah; });
+  return opts[0];
 }
 
 /**
  * getRaportAbsensiSiswa()
- * Raport absensi per siswa (semua kelas, semua guru di sekolah ini).
- * Returns: array of {kelas, nis, nama, H, S, I, A, total, persen}
+ * Rekap absensi UMUM per kelas (bukan per-siswa satu-satu — dulu daftar
+ * seluruh siswa satu sekolah, terlalu panjang & duplikat rapor Dapodik).
+ * Returns: array of {kelas, totalSiswa, H, S, I, A, total, persenHadir}
  */
 function getRaportAbsensiSiswa() {
   assertKepsek_();
 
-  var cacheKey = 'KEPSEK_RAPORT_ABSENSI';
+  var cacheKey = 'KEPSEK_RAPORT_ABSENSI_KELAS';
   try {
     var cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) return JSON.parse(cached);
   } catch (e) { /* cache miss/corrupt, lanjut hitung ulang */ }
 
-  var guruEmails = _kepsekActiveGuruEmails_();
-  var ssMap      = _kepsekOpenSpreadsheetsMap_(guruEmails);
-  var guruSet    = new Set(guruEmails);
+  var siswaRows = _kepsekHitungAbsensiPerSiswa_();
+  if (!siswaRows.length) return [];
 
-  var jurnalData = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'JURNAL');
-  var absenData  = _kepsekReadSheetRowsMulti_(ssMap, guruEmails, 'ABSENSI');
-
-  if (!jurnalData.length || !absenData.length) return [];
-
-  var jurnalMap  = {};
-  for (var ji = 1; ji < jurnalData.length; ji++) {
-    var jEmail = String(jurnalData[ji][12] || '').toLowerCase().trim();
-    if (!guruSet.has(jEmail)) continue;
-    jurnalMap[jurnalData[ji][0]] = String(jurnalData[ji][2] || '');
-  }
-
-  var siswaMap   = {};
-
-  for (var ai = 1; ai < absenData.length; ai++) {
-    var jId = absenData[ai][0];
-    if (!jurnalMap[jId]) continue;
-    var kls     = jurnalMap[jId];
-    var nisAb   = String(absenData[ai][2] || '').trim();
-    var namaAb  = String(absenData[ai][5] || '').trim() || String(absenData[ai][1] || '').trim();
-    var status  = String(absenData[ai][3] || '').toUpperCase();
-    if (!nisAb) continue;
-    var sKey = kls + '__' + nisAb;
-    if (!siswaMap[sKey]) {
-      siswaMap[sKey] = { kelas: kls, nis: nisAb, nama: namaAb, H:0, S:0, I:0, A:0, total:0 };
+  var perKelas = {};
+  siswaRows.forEach(function(d) {
+    if (!perKelas[d.kelas]) {
+      perKelas[d.kelas] = { kelas: d.kelas, totalSiswa: 0, H:0, S:0, I:0, A:0, total:0 };
     }
-    if (['H','S','I','A'].indexOf(status) > -1) {
-      siswaMap[sKey][status]++;
-      siswaMap[sKey].total++;
-    }
-    if (namaAb && !siswaMap[sKey].nama) siswaMap[sKey].nama = namaAb;
-  }
+    var k = perKelas[d.kelas];
+    k.totalSiswa++;
+    k.H += d.H; k.S += d.S; k.I += d.I; k.A += d.A; k.total += d.total;
+  });
 
-  var result = Object.values(siswaMap).map(function(d) {
+  var result = Object.values(perKelas).map(function(k) {
     return {
-      kelas  : d.kelas,
-      nis    : d.nis,
-      nama   : d.nama,
-      H      : d.H, S: d.S, I: d.I, A: d.A,
-      total  : d.total,
-      persen : d.total > 0 ? Math.round(d.H / d.total * 100) : 0
+      kelas       : k.kelas,
+      totalSiswa  : k.totalSiswa,
+      H: k.H, S: k.S, I: k.I, A: k.A,
+      total       : k.total,
+      persenHadir : k.total > 0 ? Math.round(k.H / k.total * 100) : 0
     };
   });
-  result.sort(function(a, b) {
-    if (a.kelas < b.kelas) return -1;
-    if (a.kelas > b.kelas) return 1;
-    return a.nama < b.nama ? -1 : 1;
-  });
+  result.sort(function(a, b) { return a.kelas < b.kelas ? -1 : (a.kelas > b.kelas ? 1 : 0); });
 
   try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 180); } catch (e) { /* > 100KB, lewati cache */ }
   return result;
