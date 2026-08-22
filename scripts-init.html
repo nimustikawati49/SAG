@@ -65,6 +65,30 @@ function startElapsedNotice_(el, baseText) {
   return function stop(){ clearInterval(timer); };
 }
 
+/* =================================================================
+   FILTER STATUS (generik) — versi startElapsedNotice_ yang dipakai
+   khusus untuk area status kecil di bawah filter bertahap (mis.
+   Tahun → Kelas → Mapel), supaya tiap tahap loading punya pesan +
+   hitungan detik sendiri, lalu otomatis dibersihkan begitu tahap
+   berikutnya mulai atau selesai. Dipakai di banyak tab yang punya
+   filter cascading (Nilai, Rekap, Riwayat, dst) — bukan spesifik ke
+   1 fitur saja.
+   Pakai: filterStatusStart_('idElemenStatus', '⏳ Memuat...');
+          ...setelah selesai (sukses/gagal)...  filterStatusStop_('idElemenStatus');
+   ================================================================= */
+var _filterStatusStopElapsed_ = null;
+function filterStatusStart_(elId, text) {
+  if (_filterStatusStopElapsed_) { _filterStatusStopElapsed_(); _filterStatusStopElapsed_ = null; }
+  var el = document.getElementById(elId);
+  if (!el) return;
+  _filterStatusStopElapsed_ = startElapsedNotice_(el, text);
+}
+function filterStatusStop_(elId) {
+  if (_filterStatusStopElapsed_) { _filterStatusStopElapsed_(); _filterStatusStopElapsed_ = null; }
+  var el = document.getElementById(elId);
+  if (el) el.innerHTML = '';
+}
+
 function isMobile(){
   return window.innerWidth <= 768;
 }
@@ -509,17 +533,20 @@ window.addEventListener('online',  function(){ setOfflineBanner(false); if(typeo
 window.addEventListener('offline', function(){ setOfflineBanner(true);  if(typeof showToast==='function') showToast('⚡ Tidak ada koneksi internet', 'warning', 0); });
 
 /* ================= FOTO PREVIEW ================= */
-function previewFotoInput(input, previewId){
+function previewFotoInput(input, previewId, placeholderId){
   var img = document.getElementById(previewId);
   if(!img) return;
+  var placeholder = placeholderId ? document.getElementById(placeholderId) : null;
   if(input.files && input.files[0]){
     var url = URL.createObjectURL(input.files[0]);
     img.src = url;
     img.style.display = 'block';
     img.onload = function(){ URL.revokeObjectURL(url); };
+    if(placeholder) placeholder.style.display = 'none';
   } else {
     img.src = '';
     img.style.display = 'none';
+    if(placeholder) placeholder.style.display = 'block';
   }
 }
 

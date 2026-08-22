@@ -445,6 +445,31 @@ function getDashboardAllData() {
     v4 = _computeV4FromRows_(jurnalRows, absenRows, _email, _period, dari, sampai);
   } catch(e) { logError_('getDashboardAllData/v4', e); }
 
+  // Insight nilai — HANYA ditambahkan kalau memang sudah ada nilai yang
+  // diinput untuk periode aktif (getDashboardNilaiInsight_ return null
+  // kalau belum ada sama sekali), supaya tidak muncul insight kosong/0
+  // di dashboard guru yang belum sempat input nilai.
+  try {
+    var nilaiInsight = (typeof getDashboardNilaiInsight_ === 'function' && _email)
+      ? getDashboardNilaiInsight_(_email, _period.tahun_pelajaran, _period.semester)
+      : null;
+    if (nilaiInsight) {
+      var _labelKM = function(s) {
+        return s.kelas + (nilaiInsight.jumlahKelasMapel > 1 && s.mapel ? ' (' + s.mapel + ')' : '');
+      };
+      v4.insight.push(
+        'Rata-rata nilai kelas terbaik: ' + _labelKM(nilaiInsight.terbaik) +
+        ' (' + nilaiInsight.terbaik.rata2 + ') · ketuntasan KKM ' + nilaiInsight.terbaik.persenTuntas + '%'
+      );
+      if (nilaiInsight.jumlahKelasMapel > 1) {
+        v4.insight.push(
+          'Rata-rata nilai kelas terendah: ' + _labelKM(nilaiInsight.terendah) +
+          ' (' + nilaiInsight.terendah.rata2 + ') · ketuntasan KKM ' + nilaiInsight.terendah.persenTuntas + '%'
+        );
+      }
+    }
+  } catch(e) { logError_('getDashboardAllData/nilaiInsight', e); }
+
   var result = {
     setting     : setting,
     jadwal      : jadwal,

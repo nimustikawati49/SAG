@@ -44,8 +44,27 @@ function _isActiveNilaiPeriode_(tahun, semester) {
  * (mis. nilai kelas 7 tahun lalu), sesuai tingkat kelas siswa saat itu.
  * Kelas & Mapel ikut dimuat ulang setiap kali periode berubah.
  */
+// (filterStatusStart_/filterStatusStop_ — versi generik dipakai di sini —
+// didefinisikan di scripts-init.html, dipakai ulang oleh banyak tab lain
+// yang punya filter cascading, bukan spesifik ke Nilai saja.)
+
+// Kalau Mapel cuma 1 pilihan, langsung dipakai TANPA perlu dipilih ulang
+// user (dropdown dikunci/disabled, bukan sekadar di-default) — kalau ada
+// 2+ baru tampil sebagai pilihan aktif seperti biasa.
+function _isiMapelSelect_(sel, mapels) {
+  if (mapels.length === 1) {
+    sel.innerHTML = '<option value="' + mapels[0] + '" selected>' + mapels[0] + '</option>';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">-- Pilih Mapel --</option>' +
+      mapels.map(m => '<option value="' + m + '">' + m + '</option>').join('');
+  }
+}
+
 function initTabNilai() {
   _setMuatBtn_(false);
+  filterStatusStart_('nilaiFilterStatus', '⏳ Memuat pilihan tahun & semester...');
 
   const ensureSettingCache = (cb) => {
     if (window._settingCache) { cb(window._settingCache); return; }
@@ -79,6 +98,7 @@ function initTabNilai() {
       })
       .withFailureHandler(err => {
         console.error('[NILAI] getRiwayatPeriodeNilai:', err && err.message);
+        filterStatusStop_('nilaiFilterStatus');
         const cache = window._settingCache || {};
         const tSel = document.getElementById('nilaiTahunInput');
         if (tSel) tSel.innerHTML = '<option value="' + (cache.tahun_pelajaran || '') + '">' + (cache.tahun_pelajaran || '-') + '</option>';
@@ -104,11 +124,13 @@ function refreshNilaiKelasDropdown_() {
   if (!tahun || !sem) {
     sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
     _setMuatBtn_(false);
+    filterStatusStop_('nilaiFilterStatus');
     return;
   }
 
   _setMuatBtn_(false);
   sel.innerHTML = '<option value="">Memuat...</option>';
+  filterStatusStart_('nilaiFilterStatus', '⏳ Memuat daftar kelas...');
   google.script.run
     .withSuccessHandler(list => {
       sel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
@@ -117,10 +139,27 @@ function refreshNilaiKelasDropdown_() {
     })
     .withFailureHandler(err => {
       console.error('[NILAI] getKelasNilaiUntukPeriode:', err && err.message);
+      filterStatusStop_('nilaiFilterStatus');
       sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
       _setMuatBtn_(true);
     })
     .getKelasNilaiUntukPeriode(tahun, sem);
+}
+
+/** Daftar mapel guru (dari Setting) kalau punya persis 1 mapel — sumber sama dengan Modul Ajar (getMapelListGuru) */
+function _mapelTunggalGuru_() {
+  const cache = window._settingCache || {};
+  const raw = String(cache.mata_pelajaran || '').split(/,\s*/).map(m => m.trim()).filter(Boolean);
+  // Dedupe case-insensitive — kolom Mata Pelajaran di Setting kadang
+  // ke-input dobel/beda kapital ("IPA, IPA" / "IPA, ipa") padahal
+  // sebenarnya cuma 1 mapel yang diampu.
+  const seen = new Set();
+  const unique = [];
+  raw.forEach(m => {
+    const key = m.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); unique.push(m); }
+  });
+  return unique;
 }
 
 /** Muat ulang daftar Mapel sesuai Kelas/Tahun/Semester yang dipilih */
@@ -130,27 +169,306 @@ function refreshNilaiMapelDropdown_() {
   const kelas = (document.getElementById('nilaiKelasSelect') || {}).value || '';
   const sel   = document.getElementById('nilaiMapelSelect');
   if (!sel) return;
+
+  // Guru yang cuma ampu 1 mapel: langsung kunci begitu Setting termuat,
+  // tidak perlu menunggu Kelas dipilih dulu ataupun panggilan server —
+  // mapelnya sudah pasti itu-itu saja di kelas manapun.
+  const mapelTunggal = _mapelTunggalGuru_();
+  if (mapelTunggal.length === 1) {
+    _isiMapelSelect_(sel, mapelTunggal);
+    _setMuatBtn_(!!kelas);
+    filterStatusStop_('nilaiFilterStatus');
+    return;
+  }
+
   if (!kelas) {
     sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
     _setMuatBtn_(true);
+    filterStatusStop_('nilaiFilterStatus');
     return;
   }
 
   sel.innerHTML = '<option value="">Memuat...</option>';
+  filterStatusStart_('nilaiFilterStatus', '⏳ Memuat daftar mapel...');
   google.script.run
     .withSuccessHandler(list => {
-      const mapels = list || [];
-      sel.innerHTML = '<option value="">-- Pilih Mapel --</option>' +
-        mapels.map(m => '<option value="' + m + '">' + m + '</option>').join('');
-      if (mapels.length === 1) sel.value = mapels[0];
+      filterStatusStop_('nilaiFilterStatus');
+      _isiMapelSelect_(sel, list || []);
       _setMuatBtn_(true);
     })
     .withFailureHandler(err => {
       console.error('[NILAI] getMapelNilaiUntukPeriode:', err && err.message);
+      filterStatusStop_('nilaiFilterStatus');
+      sel.disabled = false;
       sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
       _setMuatBtn_(true);
     })
     .getMapelNilaiUntukPeriode(kelas, tahun, sem);
+}
+
+/* =====================================================================
+   MONITORING: RIWAYAT NILAI — cek kelengkapan nilai murni per kelas.
+   Numpang lengkap ke server function yang sama dengan tab Input Nilai
+   (getRiwayatPeriodeNilai/getKelasNilaiUntukPeriode/
+   getMapelNilaiUntukPeriode/getDataSiswaUntukNilai/getNilaiBundle) —
+   endpoint yang sama, sudah terbukti reliable, cuma cara tampilnya beda
+   (baca-saja, tanpa edit/Katrol/draft).
+   ===================================================================== */
+function initMonitoringNilai() {
+  filterStatusStart_('monNilaiFilterStatus', '⏳ Memuat pilihan tahun & semester...');
+  const ensureSettingCache = (cb) => {
+    if (window._settingCache) { cb(window._settingCache); return; }
+    google.script.run
+      .withSuccessHandler(s => { window._settingCache = s || {}; cb(window._settingCache); })
+      .withFailureHandler(() => cb({}))
+      .getSetting();
+  };
+
+  ensureSettingCache(() => {
+    google.script.run
+      .withSuccessHandler(res => {
+        const periods = (res && res.periods) || [];
+        const active  = (res && res.active) || {};
+
+        const tahunList = [...new Set(periods.map(p => p.tahun).filter(Boolean))];
+        if (active.tahun && tahunList.indexOf(active.tahun) === -1) tahunList.unshift(active.tahun);
+        tahunList.sort().reverse();
+
+        const tSel = document.getElementById('monNilaiTahunInput');
+        if (tSel) {
+          tSel.innerHTML = tahunList.length
+            ? tahunList.map(y => '<option value="' + y + '">' + y + '</option>').join('')
+            : '<option value="">-- Tidak ada data --</option>';
+          if (active.tahun) tSel.value = active.tahun;
+        }
+        const sSel = document.getElementById('monNilaiSemesterSelect');
+        if (sSel) sSel.innerHTML = _semesterOptionsHtml_nilai_(active.semester);
+
+        refreshMonNilaiKelasDropdown_();
+      })
+      .withFailureHandler(err => {
+        console.error('[MON-NILAI] getRiwayatPeriodeNilai:', err && err.message);
+        filterStatusStop_('monNilaiFilterStatus');
+        const cache = window._settingCache || {};
+        const tSel = document.getElementById('monNilaiTahunInput');
+        if (tSel) tSel.innerHTML = '<option value="' + (cache.tahun_pelajaran || '') + '">' + (cache.tahun_pelajaran || '-') + '</option>';
+        const sSel = document.getElementById('monNilaiSemesterSelect');
+        if (sSel) sSel.innerHTML = _semesterOptionsHtml_nilai_(cache.semester);
+        refreshMonNilaiKelasDropdown_();
+      })
+      .getRiwayatPeriodeNilai();
+  });
+}
+
+function onMonNilaiPeriodeChange_() {
+  refreshMonNilaiKelasDropdown_();
+}
+
+function refreshMonNilaiKelasDropdown_() {
+  const tahun = (document.getElementById('monNilaiTahunInput') || {}).value || '';
+  const sem   = (document.getElementById('monNilaiSemesterSelect') || {}).value || '';
+  const sel   = document.getElementById('monNilaiKelasSelect');
+  const btn   = document.getElementById('btnMonMuatNilai');
+  if (!sel) return;
+  if (!tahun || !sem) {
+    sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+    if (btn) btn.disabled = true;
+    filterStatusStop_('monNilaiFilterStatus');
+    return;
+  }
+  if (btn) btn.disabled = true;
+  sel.innerHTML = '<option value="">Memuat...</option>';
+  filterStatusStart_('monNilaiFilterStatus', '⏳ Memuat daftar kelas...');
+  google.script.run
+    .withSuccessHandler(list => {
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
+        (list || []).map(k => '<option value="' + k + '">' + k + '</option>').join('');
+      refreshMonNilaiMapelDropdown_();
+    })
+    .withFailureHandler(err => {
+      console.error('[MON-NILAI] getKelasNilaiUntukPeriode:', err && err.message);
+      filterStatusStop_('monNilaiFilterStatus');
+      sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+    })
+    .getKelasNilaiUntukPeriode(tahun, sem);
+}
+
+function refreshMonNilaiMapelDropdown_() {
+  const tahun = (document.getElementById('monNilaiTahunInput') || {}).value || '';
+  const sem   = (document.getElementById('monNilaiSemesterSelect') || {}).value || '';
+  const kelas = (document.getElementById('monNilaiKelasSelect') || {}).value || '';
+  const sel   = document.getElementById('monNilaiMapelSelect');
+  const btn   = document.getElementById('btnMonMuatNilai');
+  if (!sel) return;
+
+  const mapelTunggal = _mapelTunggalGuru_();
+  if (mapelTunggal.length === 1) {
+    _isiMapelSelect_(sel, mapelTunggal);
+    if (btn) btn.disabled = !kelas;
+    filterStatusStop_('monNilaiFilterStatus');
+    return;
+  }
+
+  if (!kelas) {
+    sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
+    if (btn) btn.disabled = true;
+    filterStatusStop_('monNilaiFilterStatus');
+    return;
+  }
+  sel.innerHTML = '<option value="">Memuat...</option>';
+  filterStatusStart_('monNilaiFilterStatus', '⏳ Memuat daftar mapel...');
+  google.script.run
+    .withSuccessHandler(list => {
+      filterStatusStop_('monNilaiFilterStatus');
+      _isiMapelSelect_(sel, list || []);
+      if (btn) btn.disabled = false;
+    })
+    .withFailureHandler(err => {
+      console.error('[MON-NILAI] getMapelNilaiUntukPeriode:', err && err.message);
+      filterStatusStop_('monNilaiFilterStatus');
+      sel.disabled = false;
+      sel.innerHTML = '<option value="">-- Pilih Mapel --</option>';
+    })
+    .getMapelNilaiUntukPeriode(kelas, tahun, sem);
+}
+
+function muatMonitoringNilai() {
+  const kelas = (document.getElementById('monNilaiKelasSelect')  || {}).value || '';
+  const mapel = (document.getElementById('monNilaiMapelSelect')  || {}).value || '';
+  const tahun = (document.getElementById('monNilaiTahunInput')   || {}).value || '';
+  const sem   = (document.getElementById('monNilaiSemesterSelect')|| {}).value || '';
+  const wrap  = document.getElementById('monNilaiWrap');
+  if (!kelas || !mapel || !tahun || !sem) { alert('Pilih Tahun Pelajaran, Semester, Kelas, dan Mapel terlebih dahulu'); return; }
+
+  const isActivePeriode = _isActiveNilaiPeriode_(tahun, sem);
+  const btn = document.getElementById('btnMonMuatNilai');
+  if (btn) btn.disabled = true;
+  if (typeof startProgress === 'function') startProgress();
+  const stopElapsed = startElapsedNotice_(btn, '⏳ Memuat...');
+  if (wrap) wrap.innerHTML = '<p class="muted">⏳ Memuat data...</p>';
+
+  const done = { siswa: isActivePeriode ? false : true, nilai: false };
+  let siswaData = [], nilaiData = [];
+
+  const tryRender = () => {
+    if (!done.siswa || !done.nilai) return;
+    stopElapsed();
+    if (typeof endProgress === 'function') endProgress();
+    if (btn) { btn.disabled = false; btn.textContent = '🔎 Tampilkan'; }
+
+    const nilaiMap = {};
+    nilaiData.forEach(n => { if (n.nis) nilaiMap[String(n.nis).trim()] = n; });
+
+    const rows = siswaData.map(s => {
+      const saved = nilaiMap[String(s.nis || '').trim()] || {};
+      return {
+        nis: s.nis, nama_siswa: s.nama,
+        tgs1: saved.tgs1, tgs2: saved.tgs2, tgs3: saved.tgs3,
+        tgsk1: saved.tgsk1, tgsk2: saved.tgsk2, tgsk3: saved.tgsk3,
+        uh1: saved.uh1, uh2: saved.uh2, uh3: saved.uh3,
+        pts: saved.pts, pas: saved.pas, pat: saved.pat,
+        rata_uh: saved.rata_uh, nilai_asli: saved.nilai_asli
+      };
+    });
+
+    _renderMonitoringNilaiTable_(rows, sem);
+  };
+
+  if (isActivePeriode) {
+    google.script.run
+      .withSuccessHandler(d => { siswaData = d || []; done.siswa = true; tryRender(); })
+      .withFailureHandler(e => {
+        console.error('[MON-NILAI] getDataSiswaUntukNilai:', e && e.message);
+        siswaData = []; done.siswa = true; tryRender();
+      })
+      .getDataSiswaUntukNilai(kelas);
+  }
+
+  google.script.run
+    .withSuccessHandler(d => {
+      nilaiData = d?.rows || [];
+      if (!isActivePeriode) {
+        siswaData = nilaiData
+          .map(n => ({ nis: n.nis, nama: n.nama_siswa }))
+          .sort((a, b) => String(a.nama || '').localeCompare(String(b.nama || '')));
+        done.siswa = true;
+      }
+      done.nilai = true;
+      tryRender();
+    })
+    .withFailureHandler(e => {
+      console.error('[MON-NILAI] getNilaiBundle:', e && e.message);
+      nilaiData = [];
+      if (!isActivePeriode) { siswaData = []; done.siswa = true; }
+      done.nilai = true;
+      tryRender();
+    })
+    .getNilaiBundle(kelas, mapel, tahun, sem);
+}
+
+// Sel ditandai ⚠️ HANYA kalau kosong DAN ada siswa lain di kelas/mapel
+// yang sama sudah punya nilai untuk komponen itu (relatif terhadap
+// teman sekelas) — bukan sekadar kosong sendirian (itu wajar kalau
+// memang belum ada satu pun yang dinilai untuk komponen itu).
+function _renderMonitoringNilaiTable_(rows, semester) {
+  const wrap = document.getElementById('monNilaiWrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<p class="muted">📭 Belum ada siswa di kelas ini.</p>';
+    return;
+  }
+  const isGenap = String(semester || '').toLowerCase().includes('genap');
+  const labelUas = isGenap ? 'ASAT' : 'SAS';
+  const isEmpty_ = v => v === null || v === undefined || v === '';
+  const avg = arr => {
+    const nums = arr.filter(v => !isEmpty_(v)).map(Number).filter(n => !isNaN(n));
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+  };
+
+  rows.forEach(r => {
+    r._tgsM = avg([r.tgs1, r.tgs2, r.tgs3]);
+    r._tgsK = avg([r.tgsk1, r.tgsk2, r.tgsk3]);
+    r._uas  = isGenap ? r.pat : r.pas;
+  });
+
+  const checkCols = ['_tgsM', '_tgsK', 'uh1', 'uh2', 'uh3', 'pts', '_uas'];
+  const colLabel  = { _tgsM: 'Tugas Mandiri', _tgsK: 'Tugas Kelompok', uh1: 'UH1', uh2: 'UH2', uh3: 'UH3', pts: 'PTS', _uas: labelUas };
+  const hasAny = {};
+  checkCols.forEach(k => { hasAny[k] = rows.some(r => !isEmpty_(r[k])); });
+
+  const fmt = v => isEmpty_(v) ? '-' : (Math.round(Number(v) * 100) / 100);
+  const esc = s => String(s || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const cell = (key, r) => {
+    const val = r[key];
+    const warn = isEmpty_(val) && hasAny[key];
+    return warn
+      ? '<td style="text-align:center;background:#fef3c7" title="Sebagian besar teman sekelas sudah punya nilai ' + colLabel[key] + ', siswa ini belum">' + fmt(val) + ' ⚠️</td>'
+      : '<td style="text-align:center">' + fmt(val) + '</td>';
+  };
+
+  let html = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>No</th><th>NIS</th><th class="left">Nama Siswa</th>' +
+    '<th>Tugas Mandiri</th><th>Tugas Kelompok</th>' +
+    '<th>UH1</th><th>UH2</th><th>UH3</th>' +
+    '<th>PTS</th><th>' + labelUas + '</th>' +
+    '<th>Rata Harian</th><th>Nilai Akhir</th>' +
+  '</tr></thead><tbody>';
+
+  rows.forEach((r, i) => {
+    html += '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + esc(r.nis) + '</td>' +
+      '<td class="left">' + esc(r.nama_siswa) + '</td>' +
+      cell('_tgsM', r) + cell('_tgsK', r) +
+      cell('uh1', r) + cell('uh2', r) + cell('uh3', r) +
+      cell('pts', r) + cell('_uas', r) +
+      '<td style="text-align:center">' + fmt(r.rata_uh) + '</td>' +
+      '<td style="text-align:center;font-weight:700">' + fmt(r.nilai_asli) + '</td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
 }
 
 let _nilaiBatchTimer = null;
@@ -1717,12 +2035,15 @@ function exportNilaiExcelUI() {
 function loadAuditNilai() {
   const wrap = document.getElementById('auditNilaiWrap');
   if (!wrap) return;
-  wrap.innerHTML = '<p class="muted">⏳ Memuat riwayat...</p>';
+  wrap.innerHTML = '<p class="muted" id="auditNilaiLoadingText"></p>';
+  const stopElapsed = startElapsedNotice_(document.getElementById('auditNilaiLoadingText'), '⏳ Memuat riwayat...');
   google.script.run
     .withFailureHandler(function(err) {
+      stopElapsed();
       wrap.innerHTML = '<p style="color:#dc2626">❌ ' + err.message + '</p>';
     })
     .withSuccessHandler(function(data) {
+      stopElapsed();
       if (!data || !data.length) {
         wrap.innerHTML = '<p class="muted">📭 Belum ada riwayat perubahan nilai.</p>';
         return;

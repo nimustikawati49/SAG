@@ -497,6 +497,69 @@ function getSettingNilai(kelas, mapel, tahun, semester) {
 }
 
 /**
+ * getDashboardNilaiInsight_(email, tahun, semester)
+ * Insight ringkas nilai untuk Dashboard — kelas/mapel dengan rata-rata
+ * TERBAIK & TERENDAH (dari nilai_akhir; fallback ke nilai_asli kalau
+ * belum sempat di-Katrol/disimpan ulang), plus persentase ketuntasan
+ * KKM masing-masing. Dikelompokkan per (kelas, mapel) karena KKM
+ * disetel per kombinasi itu, bukan per kelas saja. null kalau belum
+ * ada nilai sama sekali untuk periode aktif — supaya insight ini
+ * TIDAK ditampilkan sama sekali (bukan tampil dengan angka 0/kosong).
+ */
+function getDashboardNilaiInsight_(email, tahun, semester) {
+  const sh = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  const h = rows[0];
+  const idx = (n) => h.indexOf(n);
+
+  const groups = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[idx('owner_email')]).toLowerCase().trim() !== email) continue;
+    if (String(r[idx('tahun')]).trim() !== String(tahun).trim()) continue;
+    if (String(r[idx('semester')]).trim().toLowerCase() !== String(semester).trim().toLowerCase()) continue;
+
+    let nilai = r[idx('nilai_akhir')];
+    if (nilai === '' || nilai === null || nilai === undefined) nilai = r[idx('nilai_asli')];
+    if (nilai === '' || nilai === null || nilai === undefined || isNaN(Number(nilai))) continue;
+
+    const kelas = String(r[idx('kelas')] || '').trim();
+    const mapel = String(r[idx('mapel')] || '').trim();
+    if (!kelas) continue;
+    const key = kelas + '||' + mapel;
+    if (!groups[key]) groups[key] = { kelas, mapel, nilaiList: [] };
+    groups[key].nilaiList.push(Number(nilai));
+  }
+
+  const keys = Object.keys(groups);
+  if (!keys.length) return null;
+
+  const summaries = keys.map(key => {
+    const g = groups[key];
+    const avg = g.nilaiList.reduce((a, b) => a + b, 0) / g.nilaiList.length;
+    let kkm = 70;
+    try { kkm = getSettingNilai(g.kelas, g.mapel, tahun, semester).kkm || 70; } catch (e) {}
+    const tuntas = g.nilaiList.filter(n => n >= kkm).length;
+    return {
+      kelas: g.kelas, mapel: g.mapel,
+      jumlahSiswa: g.nilaiList.length,
+      rata2: Math.round(avg * 100) / 100,
+      kkm: kkm,
+      persenTuntas: Math.round((tuntas / g.nilaiList.length) * 100)
+    };
+  });
+
+  summaries.sort((a, b) => b.rata2 - a.rata2);
+
+  return {
+    terbaik: summaries[0],
+    terendah: summaries[summaries.length - 1],
+    jumlahKelasMapel: summaries.length
+  };
+}
+
+/**
  * Simpan pengaturan nilai (upsert).
  */
 function simpanSettingNilai(obj) {

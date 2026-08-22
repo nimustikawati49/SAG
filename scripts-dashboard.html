@@ -846,6 +846,68 @@ function _gwToggleCentangSemua_(){
   }
 }
 
+/* ── Foto Jurnal Guru Wali: pick + compress ──
+   Dipindah dari scripts-jadwal-wali-cetak.html ke sini — file itu pernah
+   terbukti tidak reliable untuk JS interaktif baru terkait Guru Wali
+   (lihat riwayat "Centang Semua"), jadi logika foto ditaruh di file yang
+   sudah terbukti stabil (loadSiswaBinaan() di bawah ini sudah lama jalan
+   normal). _gwFotos tetap variabel global — dibaca simpanJurnalWali() di
+   scripts-jadwal-wali-cetak.html seperti biasa. */
+var _gwFotos = { 1: null, 2: null }; // stored compressed data URLs
+
+function gwPickFoto_(slot, input){
+  const file = input.files[0];
+  if(!file) return;
+  _gwCompressFoto_(file, function(dataUrl){
+    _gwFotos[slot] = { data: dataUrl, type: 'image/jpeg', name: file.name };
+    const preview = document.getElementById('gwFotoPreview'+slot);
+    const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+    const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+    if(preview){ preview.src = dataUrl; preview.style.display = 'block'; }
+    if(placeholder) placeholder.style.display = 'none';
+    if(removeBtn) removeBtn.style.display = 'block';
+  });
+  input.value = ''; // biar bisa pilih file yang sama lagi dari sumber lain (kamera/galeri) tanpa perlu ganti nama
+}
+
+function gwRemoveFoto_(slot){
+  _gwFotos[slot] = null;
+  const input   = document.getElementById('gwFotoInput'+slot);
+  const inputCam= document.getElementById('gwFotoInput'+slot+'Camera');
+  const preview = document.getElementById('gwFotoPreview'+slot);
+  const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+  const removeBtn    = document.getElementById('gwFotoRemove'+slot);
+  if(input)   { input.value = ''; }
+  if(inputCam){ inputCam.value = ''; }
+  if(preview){ preview.src = ''; preview.style.display = 'none'; }
+  if(placeholder) placeholder.style.display = 'block';
+  if(removeBtn) removeBtn.style.display = 'none';
+}
+
+/**
+ * Client-side image compression using Canvas.
+ * Target: ≤500KB, max 1200px wide, JPEG quality 0.75
+ */
+function _gwCompressFoto_(file, callback){
+  const MAX_W = 1200;
+  const QUALITY = 0.75;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      let w = img.width, h = img.height;
+      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', QUALITY));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function loadSiswaBinaan(page){
   var tbody = document.getElementById('siswaBinaanBody');
   if(!tbody) return;

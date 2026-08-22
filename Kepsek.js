@@ -41,13 +41,17 @@ function assertKepsek_() {
 /**
  * Daftar email guru/admin berstatus aktif, dari sheet USERS (selalu central).
  * Satu deployment ini bisa melayani BEBERAPA sekolah sekaligus — SuperAdmin
- * mengelompokkan tiap akun ke kode_sekolah lewat updateUserSekolah(). Kalau
- * pemanggilnya seorang Kepsek, daftar guru otomatis DIPERSEMPIT ke guru
- * dengan kode_sekolah yang SAMA dengan Kepsek itu — kalau Kepsek-nya sendiri
- * belum di-assign sekolah, hasilnya sengaja dikosongkan (bukan malah
- * menampilkan guru yang juga belum di-assign) supaya tidak bocor data
- * sekolah lain. SuperAdmin (bukan kepsek) tetap melihat semua sekolah
- * sekaligus seperti sebelumnya.
+ * mengelompokkan tiap akun ke kode_sekolah lewat updateUserSekolah(). Baik
+ * Kepsek MAUPUN SuperAdmin daftar gurunya otomatis DIPERSEMPIT ke guru
+ * dengan kode_sekolah yang SAMA dengan akun pemanggil itu sendiri — kalau
+ * pemanggilnya sendiri belum di-assign sekolah, hasilnya sengaja
+ * dikosongkan (bukan malah menampilkan guru yang juga belum di-assign)
+ * supaya tidak bocor data sekolah lain. SuperAdmin diperlakukan sama
+ * seperti Kepsek di sini karena satu akun SuperAdmin sudah dipetakan ke
+ * SATU kode_sekolah lewat panel SuperAdmin (kolom "Kode/Nama Sekolah") —
+ * kalau kelak ada kebutuhan SuperAdmin memantau lebih dari satu sekolah
+ * sekaligus, itu perlu fitur "pilih sekolah" terpisah, bukan default view
+ * gabungan semua sekolah seperti sebelumnya.
  */
 function _kepsekActiveGuruEmails_() {
   var auth  = getAuth();
@@ -57,7 +61,7 @@ function _kepsekActiveGuruEmails_() {
 
   var userData = shUsers.getDataRange().getValues();
 
-  var scopeToSchool = auth.role === 'kepsek';
+  var scopeToSchool = auth.role === 'kepsek' || auth.role === 'superadmin';
   var callerKode = '';
   if (scopeToSchool) {
     for (var ci = 1; ci < userData.length; ci++) {
@@ -66,7 +70,7 @@ function _kepsekActiveGuruEmails_() {
         break;
       }
     }
-    if (!callerKode) return guruEmails; // Kepsek belum di-assign sekolah — kosongkan, jangan tebak
+    if (!callerKode) return guruEmails; // Belum di-assign sekolah — kosongkan, jangan tebak
   }
 
   for (var ui = 1; ui < userData.length; ui++) {
@@ -225,6 +229,17 @@ function getRekapSekolah(forceRefresh) {
     if (rowTahun) tahun_pelajaran = rowTahun;
     var rowSem = _kepsekSemesterFromRow_(setAll[si], sIdx);
     if (rowSem) { semester_aktif = rowSem; break; }
+  }
+  // Fallback: kalau belum ada guru yang punya baris SETTING terisi (mis.
+  // sekolah baru/belum ada guru mengisi Setting), pakai tahun/semester
+  // aktif milik akun pemanggil sendiri (Kepsek/SuperAdmin) supaya kartu
+  // ini tidak nongol "-" walau periode ajaran sekolah sudah ditentukan.
+  if (!tahun_pelajaran || !semester_aktif) {
+    try {
+      var ownSetting = getSetting();
+      if (!tahun_pelajaran) tahun_pelajaran = ownSetting.tahun_pelajaran_aktif || ownSetting.tahun_pelajaran || '';
+      if (!semester_aktif) semester_aktif = ownSetting.semester_aktif || ownSetting.semester || '';
+    } catch (e) { /* getSetting gagal — biarkan tetap kosong */ }
   }
 
   // ── Baca setting per guru (nama_guru) ──
@@ -466,6 +481,14 @@ function getRekapGuruWali(forceRefresh) {
       var rowTahun = _kepsekTahunFromRow_(setAll[si], sIdx);
       if (rowTahun) activeTahun = rowTahun;
     }
+  }
+  // Fallback sama seperti getRekapSekolah(): kalau belum ada guru dengan
+  // baris SETTING terisi, pakai tahun aktif milik akun pemanggil sendiri.
+  if (!activeTahun) {
+    try {
+      var ownSettingGw = getSetting();
+      activeTahun = ownSettingGw.tahun_pelajaran_aktif || ownSettingGw.tahun_pelajaran || '';
+    } catch (e) { /* getSetting gagal — biarkan tetap kosong */ }
   }
 
   var now      = new Date();

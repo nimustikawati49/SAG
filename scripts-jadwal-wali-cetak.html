@@ -125,34 +125,11 @@ function salinJurnalWaliTerakhir_(){
 
 let isSavingJurnalWali = false;
 
-/* ── Photo pick + compress helpers ── */
-var _gwFotos = { 1: null, 2: null }; // stored compressed data URLs
-
-function gwPickFoto_(slot, input){
-  const file = input.files[0];
-  if(!file) return;
-  _gwCompressFoto_(file, function(dataUrl){
-    _gwFotos[slot] = { data: dataUrl, type: 'image/jpeg', name: file.name };
-    const preview = document.getElementById('gwFotoPreview'+slot);
-    const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
-    const removeBtn   = document.getElementById('gwFotoRemove'+slot);
-    if(preview){ preview.src = dataUrl; preview.style.display = 'block'; }
-    if(placeholder) placeholder.style.display = 'none';
-    if(removeBtn) removeBtn.style.display = 'block';
-  });
-}
-
-function gwRemoveFoto_(slot){
-  _gwFotos[slot] = null;
-  const input  = document.getElementById('gwFotoInput'+slot);
-  const preview= document.getElementById('gwFotoPreview'+slot);
-  const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
-  const removeBtn   = document.getElementById('gwFotoRemove'+slot);
-  if(input)  { input.value = ''; }
-  if(preview){ preview.src = ''; preview.style.display = 'none'; }
-  if(placeholder) placeholder.style.display = 'block';
-  if(removeBtn) removeBtn.style.display = 'none';
-}
+// _gwFotos, gwPickFoto_, gwRemoveFoto_, _gwCompressFoto_ dipindah ke
+// scripts-dashboard.html (lihat catatan di sana) — file ini (-cetak.html)
+// pernah terbukti tidak reliable untuk JS interaktif baru terkait Guru
+// Wali (lihat riwayat "Centang Semua"), jadi logika foto baru ditaruh di
+// file yang sudah terbukti stabil, bukan di sini.
 
 function gwOpenLightbox_(url){
   const lb  = document.getElementById('gwLightbox');
@@ -177,30 +154,6 @@ function gwResetFilter_(){
   if(b) b.value = '';
   if(f) f.selectedIndex = 0;
   renderRiwayatGuruWali();
-}
-
-/**
- * Client-side image compression using Canvas.
- * Target: ≤500KB, max 1200px wide, JPEG quality 0.75
- */
-function _gwCompressFoto_(file, callback){
-  const MAX_W = 1200;
-  const QUALITY = 0.75;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const img = new Image();
-    img.onload = function(){
-      let w = img.width, h = img.height;
-      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL('image/jpeg', QUALITY));
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
 }
 
 async function simpanJurnalWali(){

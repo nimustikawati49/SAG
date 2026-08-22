@@ -1330,15 +1330,18 @@ function loadLaporanAbsensi(){
 
   if(mode === 'bulan' && !period){ alert('Pilih bulan'); return; }
 
-  wrap.innerHTML = '<p class="muted">⏳ Memuat laporan...</p>';
+  wrap.innerHTML = '<p class="muted" id="laporanAbsensiLoadingText"></p>';
+  const stopElapsed = startElapsedNotice_(document.getElementById('laporanAbsensiLoadingText'), '⏳ Memuat laporan...');
   startProgress();
 
   google.script.run
     .withFailureHandler(err=>{
+      stopElapsed();
       endProgress();
       wrap.innerHTML = `<p style="color:#dc2626">❌ ${err.message}</p>`;
     })
     .withSuccessHandler(data=>{
+      stopElapsed();
       endProgress();
       laporanAbsensiData = data || [];
       renderLaporanAbsensi(data, kelas, mode, period);

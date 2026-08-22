@@ -357,7 +357,16 @@ function getMapelListGuru() {
   const setting = getSetting();
   const raw = String(setting.mata_pelajaran || '').trim();
   if (!raw) return [];
-  return raw.split(/,\s*/).map(function(m) { return m.trim(); }).filter(Boolean);
+  const list = raw.split(/,\s*/).map(function(m) { return m.trim(); }).filter(Boolean);
+  // Dedupe case-insensitive — kolom Mata Pelajaran di Setting kadang
+  // ke-input dobel/beda kapital padahal sebenarnya cuma 1 mapel diampu.
+  const seen = {};
+  const unique = [];
+  list.forEach(function(m) {
+    const key = m.toLowerCase();
+    if (!seen[key]) { seen[key] = true; unique.push(m); }
+  });
+  return unique;
 }
 
 // =========================================================

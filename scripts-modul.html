@@ -123,13 +123,18 @@ function _loadMapelOptions_() {
       const selEdit = document.getElementById('editModulMapel');
       if (!sel) return;
 
-      const opts = '<option value="">-- Pilih Mapel --</option>'
-        + (list || []).map(function(m) {
-            return '<option value="' + escHtml_(m) + '">' + escHtml_(m) + '</option>';
-          }).join('');
-
-      sel.innerHTML     = opts;
-      if (selEdit) selEdit.innerHTML = opts;
+      const mapels = list || [];
+      if (typeof _isiMapelSelect_ === 'function') {
+        _isiMapelSelect_(sel, mapels);
+        if (selEdit) _isiMapelSelect_(selEdit, mapels);
+      } else {
+        const opts = '<option value="">-- Pilih Mapel --</option>'
+          + mapels.map(function(m) {
+              return '<option value="' + escHtml_(m) + '">' + escHtml_(m) + '</option>';
+            }).join('');
+        sel.innerHTML     = opts;
+        if (selEdit) selEdit.innerHTML = opts;
+      }
     })
     .withFailureHandler(function() {
       // fallback: biarkan kosong

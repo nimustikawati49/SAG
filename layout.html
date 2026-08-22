@@ -122,6 +122,11 @@
           <span class="sb-icon">📊</span>
           <span class="sb-label">Rekap Absensi</span>
         </button>
+        <button class="sb-item sb-child" data-tab="riwayatNilai"
+                onclick="sbGo_('riwayatNilai', function(){ initMonitoringNilai(); })" data-tooltip="Riwayat Nilai">
+          <span class="sb-icon">📋</span>
+          <span class="sb-label">Riwayat Nilai</span>
+        </button>
       </div>
     </div>
 
@@ -659,14 +664,40 @@
           Ukuran bebas, akan otomatis dioptimalkan.
         </p>
         <div id="existingFotoBox" style="display:none"></div>
-        <input type="file" id="foto1" accept="image/*" onchange="previewFotoInput(this,'fotoPreview1')">
-        <img id="fotoPreview1" class="foto-preview" style="display:none" alt="Preview foto 1">
-        <input type="file" id="foto2" accept="image/*" onchange="previewFotoInput(this,'fotoPreview2')">
-        <img id="fotoPreview2" class="foto-preview" style="display:none" alt="Preview foto 2">
-        <input type="file" id="foto3" accept="image/*" onchange="previewFotoInput(this,'fotoPreview3')">
-        <img id="fotoPreview3" class="foto-preview" style="display:none" alt="Preview foto 3">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+          <div class="gw-foto-slot" style="width:120px;height:90px;position:relative;flex-shrink:0">
+            <label for="foto1" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:2px dashed #c7d2fe;border-radius:12px;cursor:pointer;overflow:hidden;background:#f5f3ff;transition:border-color .2s">
+              <div id="fotoPlaceholder1" style="font-size:30px;opacity:.4">📷</div>
+              <img id="fotoPreview1" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Preview foto 1">
+              <input type="file" id="foto1" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview1','fotoPlaceholder1')">
+            </label>
+            <label for="foto1Camera" title="Ambil foto dari kamera" style="display:flex;align-items:center;justify-content:center;position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">📷
+              <input type="file" id="foto1Camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview1','fotoPlaceholder1')">
+            </label>
+          </div>
+          <div class="gw-foto-slot" style="width:120px;height:90px;position:relative;flex-shrink:0">
+            <label for="foto2" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:2px dashed #c7d2fe;border-radius:12px;cursor:pointer;overflow:hidden;background:#f5f3ff;transition:border-color .2s">
+              <div id="fotoPlaceholder2" style="font-size:30px;opacity:.4">📷</div>
+              <img id="fotoPreview2" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Preview foto 2">
+              <input type="file" id="foto2" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview2','fotoPlaceholder2')">
+            </label>
+            <label for="foto2Camera" title="Ambil foto dari kamera" style="display:flex;align-items:center;justify-content:center;position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">📷
+              <input type="file" id="foto2Camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview2','fotoPlaceholder2')">
+            </label>
+          </div>
+          <div class="gw-foto-slot" style="width:120px;height:90px;position:relative;flex-shrink:0">
+            <label for="foto3" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:2px dashed #c7d2fe;border-radius:12px;cursor:pointer;overflow:hidden;background:#f5f3ff;transition:border-color .2s">
+              <div id="fotoPlaceholder3" style="font-size:30px;opacity:.4">📷</div>
+              <img id="fotoPreview3" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Preview foto 3">
+              <input type="file" id="foto3" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview3','fotoPlaceholder3')">
+            </label>
+            <label for="foto3Camera" title="Ambil foto dari kamera" style="display:flex;align-items:center;justify-content:center;position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">📷
+              <input type="file" id="foto3Camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="previewFotoInput(this,'fotoPreview3','fotoPlaceholder3')">
+            </label>
+          </div>
+        </div>
         <small class="helper">
-          Minimal 1 foto · Maksimal 3 foto
+          Minimal 1 foto · Maksimal 3 foto · Klik kotak untuk galeri, atau ikon 📷 kecil di pojok untuk buka kamera langsung
         </small>
         <hr style="margin:24px 0">
         <h4>✍️ Refleksi / Catatan Guru</h4>
@@ -880,6 +911,46 @@
     </div>
   </div>
 
+  <!-- ================= RIWAYAT NILAI (MONITORING) =================
+       Cek kelengkapan nilai per kelas — menampilkan nilai MURNI yang
+       diinput guru (sebelum Katrol), bukan nilai rapor akhir. Tanda ⚠️
+       muncul di sel yang kosong TAPI ada siswa lain di kelas & mapel
+       yang sama sudah punya nilai untuk komponen itu (siswa itu
+       "tertinggal" dari teman sekelasnya), bukan sekadar kosong. -->
+  <div class="card tab" id="riwayatNilai" data-tabid="riwayatNilai" style="display:none">
+    <h3>📋 Riwayat Nilai</h3>
+    <p class="muted" style="margin-bottom:10px">Cek kelengkapan nilai murni (sebelum Katrol) tiap siswa per kelas — tanda ⚠️ menandai siswa yang belum punya nilai pada komponen yang teman sekelasnya sudah punya.</p>
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="font-size:12px">Tahun Pelajaran</label>
+          <select id="monNilaiTahunInput" style="min-width:120px" onchange="onMonNilaiPeriodeChange_()"></select>
+        </div>
+        <div>
+          <label style="font-size:12px">Semester</label>
+          <select id="monNilaiSemesterSelect" style="min-width:110px" onchange="onMonNilaiPeriodeChange_()"></select>
+        </div>
+        <div>
+          <label style="font-size:12px">Kelas</label>
+          <select id="monNilaiKelasSelect" style="min-width:120px" onchange="refreshMonNilaiMapelDropdown_()">
+            <option value="">-- Pilih Kelas --</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px">Mapel</label>
+          <select id="monNilaiMapelSelect" style="min-width:140px">
+            <option value="">-- Pilih Mapel --</option>
+          </select>
+        </div>
+        <button id="btnMonMuatNilai" onclick="muatMonitoringNilai()" disabled>🔎 Tampilkan</button>
+      </div>
+      <div id="monNilaiFilterStatus" class="muted" style="font-size:12px;margin-top:6px"></div>
+    </div>
+    <div id="monNilaiWrap">
+      <p class="muted">Pilih Tahun Pelajaran, Semester, Kelas, dan Mapel lalu klik Tampilkan.</p>
+    </div>
+  </div>
+
   <!-- ================= JURNAL GURU WALI ================= -->
   <div class="card tab" id="jurnalGuruWali" data-tabid="jurnalGuruWali" style="display:none">
     <h3>👨‍🏫 Jurnal Guru Wali</h3>
@@ -1077,24 +1148,32 @@
 
           <label>📸 Dokumentasi (1–2 Foto)</label>
           <div id="gwFotoArea" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
-            <div class="gw-foto-slot" id="gwFotoSlot1" onclick="document.getElementById('gwFotoInput1').click()"
-                 style="width:120px;height:90px;border:2px dashed #c7d2fe;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#f5f3ff;flex-shrink:0;transition:border-color .2s">
-              <div id="gwFotoPlaceholder1" style="font-size:30px;opacity:.4">📷</div>
-              <img id="gwFotoPreview1" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 1">
-              <button id="gwFotoRemove1" onclick="event.stopPropagation();gwRemoveFoto_(1)"
+            <div class="gw-foto-slot" style="width:120px;height:90px;position:relative;flex-shrink:0">
+              <label for="gwFotoInput1" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:2px dashed #c7d2fe;border-radius:12px;cursor:pointer;overflow:hidden;background:#f5f3ff;transition:border-color .2s">
+                <div id="gwFotoPlaceholder1" style="font-size:30px;opacity:.4">📷</div>
+                <img id="gwFotoPreview1" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 1">
+                <input type="file" id="gwFotoInput1" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="gwPickFoto_(1,this)">
+              </label>
+              <label for="gwFotoInput1Camera" title="Ambil foto dari kamera" style="display:flex;align-items:center;justify-content:center;position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">📷
+                <input type="file" id="gwFotoInput1Camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="gwPickFoto_(1,this)">
+              </label>
+              <button type="button" id="gwFotoRemove1" onclick="gwRemoveFoto_(1)"
                 style="display:none;position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:18px;text-align:center">×</button>
-              <input type="file" id="gwFotoInput1" accept="image/*" style="display:none" onchange="gwPickFoto_(1,this)">
             </div>
-            <div class="gw-foto-slot" id="gwFotoSlot2" onclick="document.getElementById('gwFotoInput2').click()"
-                 style="width:120px;height:90px;border:2px dashed #c7d2fe;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#f5f3ff;flex-shrink:0;transition:border-color .2s">
-              <div id="gwFotoPlaceholder2" style="font-size:30px;opacity:.4">📷</div>
-              <img id="gwFotoPreview2" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 2">
-              <button id="gwFotoRemove2" onclick="event.stopPropagation();gwRemoveFoto_(2)"
+            <div class="gw-foto-slot" style="width:120px;height:90px;position:relative;flex-shrink:0">
+              <label for="gwFotoInput2" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:2px dashed #c7d2fe;border-radius:12px;cursor:pointer;overflow:hidden;background:#f5f3ff;transition:border-color .2s">
+                <div id="gwFotoPlaceholder2" style="font-size:30px;opacity:.4">📷</div>
+                <img id="gwFotoPreview2" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:10px" alt="Foto 2">
+                <input type="file" id="gwFotoInput2" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="gwPickFoto_(2,this)">
+              </label>
+              <label for="gwFotoInput2Camera" title="Ambil foto dari kamera" style="display:flex;align-items:center;justify-content:center;position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer">📷
+                <input type="file" id="gwFotoInput2Camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" onchange="gwPickFoto_(2,this)">
+              </label>
+              <button type="button" id="gwFotoRemove2" onclick="gwRemoveFoto_(2)"
                 style="display:none;position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:18px;text-align:center">×</button>
-              <input type="file" id="gwFotoInput2" accept="image/*" style="display:none" onchange="gwPickFoto_(2,this)">
             </div>
           </div>
-          <small class="helper">Optional · Klik kotak untuk pilih foto · Foto dikompres otomatis</small>
+          <small class="helper">Optional · Klik kotak untuk galeri, atau ikon 📷 kecil di pojok untuk buka kamera langsung · Foto dikompres otomatis</small>
         </div>
       </div>
       <div class="setting-actions">
@@ -2202,6 +2281,7 @@
         <button id="btnMuatNilai" onclick="muatDataNilai()">📂 Muat Data Siswa</button>
       </div>
     </div>
+    <div id="nilaiFilterStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
   </div>
 
   <!-- Konten utama (tampil setelah muat) -->
