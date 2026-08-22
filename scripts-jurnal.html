@@ -878,10 +878,15 @@ function _bukaJendelaCetakJurnal_(rows, kelas, dari, sampai, kertas){
   const baris = rows.map((r, i) => {
     let photoHtml = '-';
     if(r.foto && r.foto.length){
-      photoHtml = '<div style="display:flex;flex-wrap:wrap;gap:2px">' +
+      // lh3.googleusercontent.com (bukan drive.google.com/thumbnail) —
+      // endpoint yang sama dipakai tabel Riwayat Jurnal Mengajar
+      // (getRiwayatJurnalPaged di Jurnal.js), terbukti reliable untuk
+      // di-embed langsung sebagai <img>.
+      photoHtml = '<div style="display:flex;flex-wrap:wrap;gap:3px">' +
         r.foto.map(id =>
-          `<img src="https://drive.google.com/thumbnail?id=${id}&sz=w150" ` +
-          `style="width:42px;height:42px;object-fit:cover;border-radius:3px" crossorigin="anonymous">`
+          `<img src="https://lh3.googleusercontent.com/d/${id}=w300-h300" ` +
+          `style="width:58px;height:58px;object-fit:cover;border-radius:4px;border:1px solid #d1d5db" ` +
+          `onerror="this.style.display='none'">`
         ).join('') +
         '</div>';
     }
@@ -1036,7 +1041,9 @@ function editJurnal(id, ev){
 // dibiarkan sama. Boleh dipakai walau jurnal sumbernya sudah terkunci
 // (≥45 hari) atau sudah 3x diedit, karena tidak mengubah baris itu sendiri.
 function duplikatJurnal_(id){
+  if (typeof startProgress === 'function') startProgress();
   google.script.run.withSuccessHandler(d=>{
+    if (typeof endProgress === 'function') endProgress();
     editingJurnalId = null;
     pendingAbsensiData = d.absensi || [];
     showTab('jurnalku');
@@ -1058,6 +1065,7 @@ function duplikatJurnal_(id){
     _setModeEditJurnalUI_(false);
     if(typeof showToast === 'function') showToast('📋 Jurnal diduplikat — sesuaikan Kelas/Tanggal/Jam Ke/Absensi lalu Simpan', 'info', 4500);
   }).withFailureHandler(err=>{
+    if (typeof endProgress === 'function') endProgress();
     if(typeof showToast === 'function') showToast('❌ Gagal memuat jurnal untuk diduplikat', 'error');
   }).getJurnalDetail(id);
 }
@@ -1177,13 +1185,22 @@ function _formatAbsensiRekap_(x){
 
 function renderRiwayatSkeleton(rows = 6){
   const tbody = document.getElementById('riwayatBody');
-  tbody.innerHTML = '';
+  let rowsHtml = '';
   for(let i=0;i<rows;i++){
-    tbody.innerHTML += `
+    rowsHtml += `
       <tr class="skeleton-row">
         ${'<td><div class="skeleton"></div></td>'.repeat(10)}
       </tr>
     `;
+  }
+  // Baris status "...detik" di atas skeleton — colspan lebar (12) supaya
+  // aman dipakai fungsi lain yang jumlah kolomnya beda (loadRekap,
+  // loadStatistikGuruKPI, loadArsipRiwayat — semua numpang fungsi ini).
+  tbody.innerHTML =
+    '<tr><td colspan="12" style="padding:2px 6px"><p class="muted" id="riwayatSkelLoadingText" style="font-size:12px;margin:2px 0"></p></td></tr>' +
+    rowsHtml;
+  if (typeof startElapsedNotice_ === 'function') {
+    startElapsedNotice_(document.getElementById('riwayatSkelLoadingText'), '⏳ Memuat...');
   }
 }
 
@@ -1200,13 +1217,19 @@ function exportSemester(semester){
   const skel = document.getElementById('exportSkeleton');
   if(skel) skel.style.display = 'block';
   startProgress();
+  const stopElapsed = typeof startElapsedNotice_ === 'function' ? startElapsedNotice_(document.getElementById('exportSemesterInfo'), '⏳ Menyiapkan file Excel...') : function(){};
+  const infoEl = document.getElementById('exportSemesterInfo');
   google.script.run
     .withFailureHandler(err=>{
+      stopElapsed();
+      if(infoEl) infoEl.textContent = '';
       endProgress();
       if(skel) skel.style.display = 'none';
       alert('❌ Gagal export jurnal semester:\n' + err.message);
     })
     .withSuccessHandler(url=>{
+      stopElapsed();
+      if(infoEl) infoEl.textContent = '';
       endProgress();
       if(skel) skel.style.display = 'none';
       window.open(url,'_blank');

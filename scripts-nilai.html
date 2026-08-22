@@ -1307,11 +1307,13 @@ function simpanPengaturanNilai(ev) {
 
   const btn = (ev && ev.currentTarget) ? ev.currentTarget : document.querySelector('button[onclick*="simpanPengaturanNilai"]');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+  if (typeof startProgress === 'function') startProgress();
 
   nilaiState.setting = { nilai_min_target: minT, nilai_max_target: maxT, kkm };
 
   google.script.run
     .withSuccessHandler(() => {
+      if (typeof endProgress === 'function') endProgress();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Pengaturan'; }
       showSoftPopup('Berhasil', 'Pengaturan nilai tersimpan');
       nilaiHitungKatrolBatch_UI();
@@ -1319,6 +1321,7 @@ function simpanPengaturanNilai(ev) {
       renderTabelNilai(); // update baris merah sesuai KKM baru
     })
     .withFailureHandler(e => {
+      if (typeof endProgress === 'function') endProgress();
       if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Pengaturan'; }
       alert('Gagal: ' + e.message);
     })
@@ -1392,8 +1395,10 @@ function importNilaiExcelUI(btnEl) {
       const ws      = wb.Sheets[wb.SheetNames[0]];
       const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
+      if (typeof startProgress === 'function') startProgress();
       google.script.run
         .withSuccessHandler(res => {
+          if (typeof endProgress === 'function') endProgress();
           btn.disabled = false; btn.textContent = '📊 Import';
           if (!res.success) { alert(res.message || 'Gagal parse data'); return; }
           if (res.errors && res.errors.length)
@@ -1420,6 +1425,7 @@ function importNilaiExcelUI(btnEl) {
           showSoftPopup('Import Berhasil', `${res.data.length} siswa diimport`);
         })
         .withFailureHandler(e => {
+          if (typeof endProgress === 'function') endProgress();
           btn.disabled = false; btn.textContent = '📊 Import';
           alert('Error: ' + e.message);
         })

@@ -100,8 +100,10 @@ function autoFillHariWali(dateStr){
 }
 
 function salinJurnalWaliTerakhir_(){
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(d=>{
+      if (typeof endProgress === 'function') endProgress();
       if(!d){
         if(typeof showToast === 'function') showToast('📭 Belum ada entri jurnal sebelumnya untuk disalin', 'info');
         else alert('Belum ada entri jurnal sebelumnya untuk disalin');
@@ -118,6 +120,7 @@ function salinJurnalWaliTerakhir_(){
       if(typeof showToast === 'function') showToast('📋 Disalin dari entri terakhir — boleh diedit sebelum simpan', 'success', 3000);
     })
     .withFailureHandler(err=>{
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast === 'function') showToast('❌ Gagal ambil entri terakhir', 'error');
     })
     .getJurnalGuruWaliTerakhir();
@@ -156,105 +159,12 @@ function gwResetFilter_(){
   renderRiwayatGuruWali();
 }
 
-async function simpanJurnalWali(){
-  if(isSavingJurnalWali) return;
-
-  const tgl    = document.getElementById('gwTanggal').value;
-  const hari   = document.getElementById('gwHari').value.trim();
-  const mulai  = document.getElementById('gwWaktuMulai').value;
-  const selesai= document.getElementById('gwWaktuSelesai').value;
-  const fokus  = document.getElementById('gwFokus').value;
-  const topik  = document.getElementById('gwTopik').value.trim();
-  const catatan= document.getElementById('gwCatatan').value.trim();
-  const tindak = document.getElementById('gwTindakLanjut').value.trim();
-
-  if(!tgl || !mulai || !selesai || !fokus || !topik){
-    alert('⚠️ Lengkapi semua field yang bertanda *');
-    return;
-  }
-  if(mulai >= selesai){
-    alert('⚠️ Waktu selesai harus lebih besar dari waktu mulai');
-    return;
-  }
-
-  // ===== Siswa binaan yang didampingi — jenisnya (individu/kelompok)
-  // otomatis mengikuti jumlah yang dicentang, bukan toggle terpisah. =====
-  const siswaTerpilih = Array.from(document.querySelectorAll('.gwSiswaCk:checked')).map(el => ({
-    nis: el.value, nama: el.getAttribute('data-nama') || ''
-  }));
-  if(!siswaTerpilih.length){
-    alert('⚠️ Pilih minimal satu siswa binaan yang didampingi');
-    return;
-  }
-  const gwTipe = siswaTerpilih.length === 1 ? 'individu' : 'kelompok';
-
-  isSavingJurnalWali = true;
-  const btn = document.getElementById('btnSimpanJurnalWali');
-  if(btn){ btn.disabled = true; btn.innerText = '⏳ Menyimpan...'; }
-  startProgress();
-
-  // Collect compressed photos
-  const fotos = [_gwFotos[1], _gwFotos[2]].filter(Boolean);
-
-  const payload = {
-    tanggal           : tgl,
-    hari              : hari.toUpperCase(),
-    waktu_mulai       : mulai,
-    waktu_selesai     : selesai,
-    fokus_pendampingan: fokus,
-    topik_pendampingan: topik,
-    catatan           : catatan  || '-',
-    tindak_lanjut     : tindak   || '-',
-    fotos             : fotos,
-    tipe              : gwTipe,
-    siswa             : siswaTerpilih
-  };
-
-  google.script.run
-    .withSuccessHandler(res=>{
-      endProgress();
-      isSavingJurnalWali = false;
-      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
-      if(res && res.status){
-        showToast('✅ Jurnal berhasil disimpan', 'success');
-        gwClearDraft_();
-        resetFormGuruWali();
-        loadRiwayatGuruWali();
-      }else{
-        showToast('❌ Gagal menyimpan jurnal', 'error');
-      }
-    })
-    .withFailureHandler(err=>{
-      endProgress();
-      isSavingJurnalWali = false;
-      if(btn){ btn.disabled = false; btn.innerText = '💾 Simpan Jurnal'; }
-      showToast('❌ ' + err.message, 'error');
-    })
-    .simpanJurnalGuruWali(payload);
-}
-
-function resetFormGuruWali(){
-  ['gwWaktuMulai','gwWaktuSelesai','gwTopik',
-   'gwCatatan','gwTindakLanjut']
-    .forEach(id=>{
-      const el = document.getElementById(id);
-      if(el) el.value = '';
-    });
-  const fokus = document.getElementById('gwFokus');
-  if(fokus) fokus.selectedIndex = 0;
-  // reset pilihan siswa binaan
-  document.querySelectorAll('.gwSiswaCk:checked').forEach(el => { el.checked = false; });
-  _gwUpdateSiswaCounter_();
-  // reset ke hari ini
-  const tglEl = document.getElementById('gwTanggal');
-  if(tglEl){
-    tglEl.value = new Date().toISOString().slice(0,10);
-    autoFillHariWali(tglEl.value);
-  }
-  // reset photo slots
-  gwRemoveFoto_(1);
-  gwRemoveFoto_(2);
-}
+// simpanJurnalWali(), resetFormGuruWali(), editJurnalWali_(), duplikatJurnalWali_(),
+// hapusJurnalWali_(), toggleAksiMenuWali_() dipindah ke scripts-dashboard.html
+// (lihat catatan di sana) — file ini (-cetak.html) pernah terbukti tidak
+// reliable untuk JS interaktif baru terkait Guru Wali (lihat riwayat "Centang
+// Semua" & upload foto), jadi logika baru ditaruh di file yang sudah terbukti
+// stabil, bukan di sini.
 
 /* ===================================================================
    DRAFT AUTO-SAVE — form Jurnal Guru Wali, mirip pola di Jurnalku
@@ -361,14 +271,17 @@ function arsipJurnalWaliUI(){
   if(!confirm('Arsip jurnal guru wali tahun aktif?\nData akan DIHAPUS dari sheet dan disimpan ke Google Drive.\n\nLanjutkan?')) return;
   const btn = document.getElementById('btnArsipWali');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Mengarsipkan...'; }
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(res => {
+      if (typeof endProgress === 'function') endProgress();
       alert(`✅ ${res.jumlah} entri jurnal guru wali tahun ${res.tahun} berhasil diarsipkan ke Google Drive.`);
       if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
       loadStatusArsipWali();
       loadRiwayatGuruWali();
     })
     .withFailureHandler(err => {
+      if (typeof endProgress === 'function') endProgress();
       alert('❌ Arsip gagal: ' + err.message);
       if(btn){ btn.disabled = false; btn.textContent = '📦 Arsip Jurnal Guru Wali Tahun Ini'; }
     })
@@ -378,7 +291,7 @@ function arsipJurnalWaliUI(){
 function loadRiwayatGuruWali(){
   const tbody = document.getElementById('riwayatGuruWaliBody');
   if(!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="9" class="muted"></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" class="muted"></td></tr>';
   const stopTimer = startElapsedNotice_(tbody.querySelector('td'), '⏳ Memuat...');
 
   google.script.run
@@ -392,7 +305,7 @@ function loadRiwayatGuruWali(){
       const tbody2 = document.getElementById('riwayatGuruWaliBody');
       if(tbody2)
         tbody2.innerHTML =
-          `<tr><td colspan="9" class="muted">❌ ${err.message}</td></tr>`;
+          `<tr><td colspan="10" class="muted">❌ ${err.message}</td></tr>`;
     })
     .getRiwayatJurnalGuruWali();
 }
@@ -441,32 +354,36 @@ function renderRiwayatGuruWali(){
 
   if(!filtered || filtered.length === 0){
     tbody.innerHTML =
-      '<tr><td colspan="9" class="muted">📭 ' +
+      '<tr><td colspan="10" class="muted">📭 ' +
       (filterBulan || filterFokus ? 'Tidak ada jurnal sesuai filter.' : 'Belum ada jurnal pendampingan.') +
       '</td></tr>';
     return;
   }
 
   tbody.innerHTML = filtered.map((r, i)=>{
-    // Build thumbnail HTML from comma-separated Drive URLs
+    // Thumbnail dokumentasi — pakai endpoint lh3.googleusercontent.com
+    // (sama seperti Riwayat Jurnal Mengajar, lihat getRiwayatJurnalPaged
+    // di Jurnal.js) karena drive.google.com/thumbnail?id= sering gagal
+    // tampil kalau langsung di-embed sebagai <img>. Hover-zoom numpang
+    // _fotoZoomShow_/_fotoZoomMove_/_fotoZoomHide_ yang sudah ada
+    // (scripts-jurnal.html) supaya perilakunya sama persis.
     let dokHtml = '-';
     if(r.dokumentasi && r.dokumentasi !== '-'){
       const urls = r.dokumentasi.split(',').map(u=>u.trim()).filter(Boolean);
       if(urls.length > 0){
-        dokHtml = urls.map(url=>{
-          // Extract file ID for thumbnail URL
+        const thumbs = urls.map(url=>{
           const match = url.match(/[?&]id=([\w-]+)/);
-          const thumbUrl = match
-            ? 'https://drive.google.com/thumbnail?id='+match[1]+'&sz=w90'
-            : url;
-          return `<span onclick="gwOpenLightbox_('${url.replace(/'/g,"\\'")}')"
-            title="Lihat foto" style="cursor:zoom-in;display:inline-block;">
-            <img src="${thumbUrl}" alt="Foto" loading="lazy"
-              style="width:44px;height:36px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;transition:transform .15s"
-              onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''"
-              onerror="this.style.display='none'">
-          </span>`;
-        }).join('<span style="width:4px;display:inline-block"></span>');
+          if(!match) return '';
+          const fileId = match[1];
+          return '<a href="https://drive.google.com/file/d/' + fileId + '/view" target="_blank" ' +
+            'title="Sorot untuk perbesar, klik untuk buka penuh" ' +
+            'onmouseenter="_fotoZoomShow_(event,\'' + fileId + '\')" onmousemove="_fotoZoomMove_(event)" onmouseleave="_fotoZoomHide_()" ' +
+            'ontouchstart="_fotoZoomShow_(event,\'' + fileId + '\')" ontouchend="_fotoZoomHide_()" ontouchcancel="_fotoZoomHide_()">' +
+            '<img src="https://lh3.googleusercontent.com/d/' + fileId + '=w80-h80" ' +
+            'style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;margin:2px" ' +
+            'loading="lazy" alt="Dokumentasi" onerror="this.parentElement.style.display=\'none\'"></a>';
+        }).filter(Boolean).join('');
+        if(thumbs) dokHtml = '<div style="display:flex;flex-wrap:wrap">' + thumbs + '</div>';
       }
     }
     const siswaHtml = _gwFormatSiswa_(r);
@@ -477,124 +394,43 @@ function renderRiwayatGuruWali(){
         <td style="white-space:nowrap">${r.waktu || '-'}</td>
         <td class="left">${siswaHtml}</td>
         <td><span class="badge">${r.fokus_pendampingan || '-'}</span></td>
-        <td class="left">${r.topik_pendampingan || '-'}</td>
-        <td class="left">${r.catatan || '-'}</td>
-        <td class="left">${r.tindak_lanjut || '-'}</td>
+        <td class="left">${_clampCell_(r.topik_pendampingan)}</td>
+        <td class="left">${_clampCell_(r.catatan)}</td>
+        <td class="left">${_clampCell_(r.tindak_lanjut)}</td>
         <td style="white-space:nowrap">${dokHtml}</td>
+        <td><button class="ghost" onclick="toggleAksiMenuWali_(event, '${r.id}')">⋮</button></td>
       </tr>
     `;
   }).join('');
 }
 
-// Kolom Siswa di tabel Riwayat & laporan cetak — 👤 untuk individu (1
-// nama langsung), 👥 + bullet list per nama untuk kelompok (>1 siswa)
-// supaya rapi (pola sama seperti kolom Absensi di Riwayat Jurnal Mengajar
-// & Rekap Absensi).
+// Kolom Siswa di tabel Riwayat & laporan cetak — 👤 nama langsung untuk
+// individu; untuk kelompok: kalau SEMUA siswa binaan dicentang cukup
+// "N siswa (Semua)" (tidak perlu daftar nama sepanjang itu), kalau
+// sebagian (1-5 dst) tetap tampilkan daftar nama. Dibungkus .riwayat-clamp
+// (sama seperti kolom Materi/Absensi di Riwayat Jurnal Mengajar) supaya
+// baris tabel tetap 1-2 baris rapi — daftar nama lengkap tetap ada lewat
+// tooltip hover.
 function _gwFormatSiswa_(r){
   const namaList = String(r.nama_siswa || '').split(',').map(s => s.trim()).filter(Boolean);
   if(!namaList.length) return '-';
-  const label = r.tipe === 'kelompok' ? '👥 ' : '👤 ';
-  if(namaList.length === 1) return label + namaList[0];
-  return label + '(' + namaList.length + ' siswa):<ul style="margin:2px 0 0 14px;padding:0;font-size:11px">' +
-    namaList.map(n => '<li>' + n + '</li>').join('') + '</ul>';
+  if(namaList.length === 1) return '👤 ' + _gwEsc_(namaList[0]);
+
+  const total = Number(r.total_siswa_binaan) || 0;
+  const semua = total > 0 && namaList.length >= total;
+  const visible = semua
+    ? '👥 ' + namaList.length + ' siswa (Semua)'
+    : '👥 ' + namaList.length + ' siswa: ' + namaList.join(', ');
+  const hover = '👥 Kelompok (' + namaList.length + (total ? ' dari ' + total + ' siswa binaan' : '') + '):\n' +
+    namaList.map((n, i) => (i + 1) + '. ' + n).join('\n');
+  const hoverAttr = typeof _escAttr_ === 'function' ? _escAttr_(hover) : _gwEsc_(hover);
+  return '<span class="riwayat-clamp" title="' + hoverAttr + '">' + _gwEsc_(visible) + '</span>';
 }
 
-function cetakLaporanGuruWali(){
-  if(!riwayatGuruWaliData || riwayatGuruWaliData.length === 0){
-    alert('⚠️ Belum ada jurnal untuk dicetak');
-    return;
-  }
-
-  // Apply current filter so print matches what user sees
-  const filterBulan = (document.getElementById('gwFilterBulan') || {}).value || '';
-  const filterFokus = (document.getElementById('gwFilterFokus') || {}).value || '';
-  let dataCetak = riwayatGuruWaliData.filter(r => {
-    if(filterBulan && !(r.iso_tanggal || '').startsWith(filterBulan)) return false;
-    if(filterFokus && r.fokus_pendampingan !== filterFokus) return false;
-    return true;
-  });
-  if(dataCetak.length === 0){ dataCetak = riwayatGuruWaliData; }
-
-  const namaGuru = document.getElementById('gwNamaGuru').innerText || '-';
-  const nip      = document.getElementById('gwNip').innerText      || '-';
-
-  const baris = dataCetak.map((r, i)=>{
-    // Build photo thumbnails for print
-    let photoHtml = '-';
-    if(r.dokumentasi && r.dokumentasi !== '-'){
-      const imgs = r.dokumentasi.split(',').map(u => u.trim()).filter(Boolean).map(u => {
-        const m = u.match(/[?&]id=([\w-]+)/);
-        return m
-          ? `<img src="https://drive.google.com/thumbnail?id=${m[1]}&sz=w120" style="max-width:110px;max-height:90px;border-radius:4px;margin:2px;object-fit:cover" crossorigin="anonymous">`
-          : '';
-      }).join('');
-      if(imgs) photoHtml = `<div style="display:flex;flex-wrap:wrap;gap:4px">${imgs}</div>`;
-    }
-    return `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td>${r.tanggal || '-'}</td>
-      <td style="text-align:center;white-space:nowrap">${r.waktu || '-'}</td>
-      <td>${_gwFormatSiswa_(r)}</td>
-      <td style="text-align:center">${r.fokus_pendampingan || '-'}</td>
-      <td>${r.topik_pendampingan || '-'}</td>
-      <td>${r.catatan || '-'}</td>
-      <td>${r.tindak_lanjut || '-'}</td>
-      <td>${photoHtml}</td>
-    </tr>
-  `}).join('');
-
-  const html = '<!DOCTYPE html><html><head>' +
-    '<meta charset="UTF-8">' +
-    '<title>Laporan Jurnal Guru Wali</title>' +
-    '<style>' +
-      '*{ box-sizing:border-box; }' +
-      'body{ font-family:Arial,sans-serif; font-size:12px; margin:24px; color:#111; }' +
-      'h2{ text-align:center; font-size:16px; margin-bottom:4px; }' +
-      'p.sub{ text-align:center; font-size:12px; color:#555; margin:2px 0 16px; }' +
-      'table{ width:100%; border-collapse:collapse; margin-top:8px; }' +
-      'th,td{ border:1px solid #bbb; padding:7px 6px; vertical-align:top; font-size:11px; }' +
-      'th{ background:#eef2ff; font-weight:700; text-align:center; }' +
-      '.ttd-wrap{ margin-top:52px; display:flex; justify-content:flex-end; }' +
-      '.ttd-box{ text-align:center; min-width:220px; }' +
-      '.ttd-box p{ margin:2px 0; }' +
-      '.garis-ttd{ margin-top:68px; border-top:1px solid #333; padding-top:4px; font-weight:700; }' +
-      '.btn-cetak{ display:block; margin:20px auto 0; padding:10px 28px; background:#6C63FF; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; }' +
-      '@media print{ .btn-cetak{ display:none; } }' +
-    '</style>' +
-    '</head><body>' +
-    '<h2>JURNAL PENDAMPINGAN GURU WALI</h2>' +
-    '<p class="sub">' + namaGuru + ' &nbsp;&bull;&nbsp; NIP: ' + nip + '</p>' +
-    '<table><thead><tr>' +
-      '<th style="width:30px">No</th>' +
-      '<th>Hari/Tanggal</th>' +
-      '<th style="white-space:nowrap">Waktu</th>' +
-      '<th>Siswa</th>' +
-      '<th>Fokus Pendampingan</th>' +
-      '<th>Topik Pendampingan</th>' +
-      '<th>Catatan</th>' +
-      '<th>Tindak Lanjut</th>' +
-      '<th>Dokumentasi</th>' +
-    '</tr></thead>' +
-    '<tbody>' + baris + '</tbody></table>' +
-    '<div class="ttd-wrap"><div class="ttd-box">' +
-      '<p><b>Mengetahui</b></p>' +
-      '<p>Guru Wali</p>' +
-      '<div class="garis-ttd">' + namaGuru + '<br>' +
-        '<span style="font-weight:normal">NIP. ' + nip + '</span>' +
-      '</div>' +
-    '</div></div>' +
-    '<button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>' +
-    '</body></html>';
-
-  const win = window.open('', '_blank', 'width=960,height=720');
-  if(!win){
-    alert('Popup diblokir browser.\nAktifkan popup untuk halaman ini lalu coba lagi.');
-    return;
-  }
-  win.document.write(html);
-  win.document.close();
-}
+// cetakLaporanGuruWali() (cetak langsung tanpa preview/pilihan kertas)
+// digantikan oleh cetakJurnalWaliUI_() + _bukaJendelaCetakJurnalWali_() di
+// scripts-dashboard.html — preview dulu, bisa pilih rentang tanggal &
+// ukuran kertas A4/F4 landscape, sama seperti Cetak Jurnal Mengajar.
 
 // Ditugaskan eksplisit ke window — pola yang sudah dipakai di file lain
 // (mis. startProgress/endProgress di scripts-jurnal.html, saveJadwalUI

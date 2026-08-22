@@ -780,28 +780,6 @@ body.dark .grid-dashboard .stat .value{
   .stat .value{font-size:22px}
 }
 
-/* ===== INSIGHT BOX ===== */
-#insightBox{
-  margin:0;
-  padding:0;
-  list-style:none;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-#insightBox li{
-  padding:10px 14px;
-  border-radius:10px;
-  background:#f8fafc;
-  border-left:4px solid #6366f1;
-  font-size:13px;
-  color:#374151;
-  line-height:1.5;
-}
-#insightBox li:nth-child(2){ border-left-color:#22c55e; }
-#insightBox li:nth-child(3){ border-left-color:#f97316; }
-#insightBox li:nth-child(4){ border-left-color:#ef4444; }
-body.dark #insightBox li{ background:#1e293b; color:#e2e8f0; }
 /* ===== DASHBOARD SHIMMER ===== */
 .dashboard-loading{
   position:relative;
@@ -1959,7 +1937,8 @@ body.dark .nav-mobile{
 
   /* ===== DETAIL JURNAL & CETAK JURNAL MODAL (Riwayat Jurnal) ===== */
   #detailJurnalModal,
-  #cetakJurnalModal {
+  #cetakJurnalModal,
+  #cetakJurnalWaliModal {
     display: none;
     position: fixed;
     inset: 0;
@@ -1986,13 +1965,15 @@ body.dark .nav-mobile{
     line-height: 1.5;
   }
   body.dark #detailJurnalModal > div,
-  body.dark #cetakJurnalModal > div {
+  body.dark #cetakJurnalModal > div,
+  body.dark #cetakJurnalWaliModal > div {
     background: #1f2937 !important;
     color: #e5e7eb !important;
     border: 1px solid #374151;
   }
   body.dark #detailJurnalModal h3,
-  body.dark #cetakJurnalModal h3 { color: #f9fafb; }
+  body.dark #cetakJurnalModal h3,
+  body.dark #cetakJurnalWaliModal h3 { color: #f9fafb; }
   body.dark .detail-jurnal-field label { color: #9ca3af; }
 
   /* ===== AKSI FLOATING MENU (Riwayat Jurnal) ===== */

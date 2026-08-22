@@ -497,6 +497,203 @@ function getSettingNilai(kelas, mapel, tahun, semester) {
 }
 
 /**
+ * PREDIKAT_BANDS_NILAI_
+ * Rubrik predikat A-D tetap (bukan berdasarkan KKM per mapel) — dipakai
+ * KPI "Ketuntasan Kelas" di Dashboard untuk mengelompokkan Total Nilai
+ * MURNI (nilai_asli, sebelum Katrol) tiap siswa ke kategori pencapaian +
+ * saran tindak lanjut baku, terpisah dari status Tuntas/Belum Tuntas
+ * berbasis KKM yang sudah ada di fitur lain (Riwayat Nilai/Rekap Sekolah).
+ */
+const PREDIKAT_BANDS_NILAI_ = [
+  { min: 86, max: 100, kode: 'A', status: 'Tuntas (Sangat Baik)',
+    tindak: 'Siswa melampaui target kompetensi. Diberikan materi pengayaan atau tantangan soal yang lebih tinggi (HOTS).' },
+  { min: 71, max: 85, kode: 'B', status: 'Tuntas (Baik)',
+    tindak: 'Siswa mencapai target kompetensi bab dengan baik. Tidak perlu remedial dan bisa langsung lanjut ke materi berikutnya.' },
+  { min: 56, max: 70, kode: 'C', status: 'Belum Tuntas (Cukup)',
+    tindak: 'Siswa belum mencapai batas minimal 71. Wajib remedial hanya pada bab/indikator materi tertentu yang nilainya lemah.' },
+  { min: 0, max: 55, kode: 'D', status: 'Belum Tuntas (Kurang)',
+    tindak: 'Siswa tertinggal jauh di materi tersebut. Wajib remedial total dengan pendampingan intensif dari guru.' }
+];
+
+function _predikatDariNilaiMurni_(n) {
+  for (let i = 0; i < PREDIKAT_BANDS_NILAI_.length; i++) {
+    const b = PREDIKAT_BANDS_NILAI_[i];
+    if (n >= b.min && n <= b.max) return b;
+  }
+  return n > 100 ? PREDIKAT_BANDS_NILAI_[0] : PREDIKAT_BANDS_NILAI_[PREDIKAT_BANDS_NILAI_.length - 1];
+}
+
+/**
+ * getKetuntasanPredikatKelas()
+ * KPI "Ketuntasan Kelas" untuk Dashboard — kelompokkan Total Nilai MURNI
+ * (nilai_asli, sebelum Katrol) tiap siswa per (kelas, mapel) periode
+ * aktif guru ke predikat A/B/D (lihat PREDIKAT_BANDS_NILAI_), plus daftar
+ * nama siswa berpredikat C/D (perlu tindak lanjut) diurutkan dari nilai
+ * terendah supaya yang paling butuh perhatian tampil duluan.
+ */
+function getKetuntasanPredikatKelas() {
+  const auth    = getAuth();
+  const setting = getSetting();
+  const tahun   = setting.tahun_pelajaran || '';
+  const semester= setting.semester || '';
+  if (!tahun || !semester) return [];
+
+  const sh = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return [];
+  const h = rows[0];
+  const idx = (n) => h.indexOf(n);
+
+  const groups = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[idx('owner_email')]).toLowerCase().trim() !== auth.email) continue;
+    if (String(r[idx('tahun')]).trim() !== String(tahun).trim()) continue;
+    if (String(r[idx('semester')]).trim().toLowerCase() !== String(semester).trim().toLowerCase()) continue;
+
+    const nilaiRaw = r[idx('nilai_asli')];
+    if (nilaiRaw === '' || nilaiRaw === null || nilaiRaw === undefined || isNaN(Number(nilaiRaw))) continue;
+    const nilai = Number(nilaiRaw);
+
+    const kelas = String(r[idx('kelas')] || '').trim();
+    const mapel = String(r[idx('mapel')] || '').trim();
+    const nama  = String(r[idx('nama_siswa')] || '').trim();
+    if (!kelas) continue;
+
+    const key = kelas + '||' + mapel;
+    if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
+    groups[key].siswa.push({ nama, nilai });
+  }
+
+  const keys = Object.keys(groups).sort();
+  return keys.map((key) => {
+    const g = groups[key];
+    const counts = { A: 0, B: 0, C: 0, D: 0 };
+    const perluTindakLanjut = [];
+    g.siswa.forEach((s) => {
+      const band = _predikatDariNilaiMurni_(s.nilai);
+      counts[band.kode]++;
+      if (band.kode === 'C' || band.kode === 'D') {
+        perluTindakLanjut.push({ nama: s.nama, nilai: s.nilai, predikat: band.kode });
+      }
+    });
+    perluTindakLanjut.sort((a, b) => a.nilai - b.nilai);
+
+    const total  = g.siswa.length;
+    const tuntas = counts.A + counts.B;
+    return {
+      kelas: g.kelas,
+      mapel: g.mapel,
+      total,
+      counts,
+      persenTuntas: total ? Math.round((tuntas / total) * 100) : 0,
+      perluTindakLanjut
+    };
+  });
+}
+
+/**
+ * getSiswaPotensiBelumAdaNilai()
+ * KPI Dashboard — deteksi dini siswa yang "berpotensi belum ada nilai" di
+ * BEBERAPA komponen sekaligus (Tugas Mandiri/Kelompok, UH1-3, PTS,
+ * SAS/ASAT), dibandingkan RELATIF terhadap teman sekelasnya (sama seperti
+ * tanda ⚠️ di Riwayat Nilai) — bukan absolut, supaya komponen yang memang
+ * belum diisi SIAPA PUN di kelas itu (guru belum sempat input) tidak ikut
+ * menandai siswa seolah dia yang bermasalah. Siswa ditandai kalau MINIMAL
+ * 2 komponen kosong padahal komponen itu sudah diisi untuk siswa lain di
+ * kelas+mapel yang sama — sinyal dini "berpotensi belum ada nilai/kurang
+ * aktif", BUKAN vonis pasti (guru yang menentukan tindak lanjutnya).
+ */
+function getSiswaPotensiBelumAdaNilai() {
+  const auth    = getAuth();
+  const setting = getSetting();
+  const tahun   = setting.tahun_pelajaran || '';
+  const semester= setting.semester || '';
+  if (!tahun || !semester) return [];
+  const isGenap = normalizeSemesterServer_(semester) === 'Genap';
+
+  const kosong_ = (v) => v === '' || v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+  const avgOrKosong_ = (vals) => {
+    const nums = vals.filter(v => !kosong_(v)).map(Number).filter(n => !isNaN(n));
+    return nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length) : '';
+  };
+
+  const sh = sheetNilai_();
+  const rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return [];
+  const h = rows[0];
+  const idx = (n) => h.indexOf(n);
+
+  const KOMPONEN_LABEL = {
+    tgsM: 'Tugas Mandiri', tgsK: 'Tugas Kelompok',
+    uh1: 'UH1', uh2: 'UH2', uh3: 'UH3',
+    pts: 'PTS', uas: isGenap ? 'ASAT' : 'SAS'
+  };
+  const compKeys = Object.keys(KOMPONEN_LABEL);
+
+  const groups = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[idx('owner_email')]).toLowerCase().trim() !== auth.email) continue;
+    if (String(r[idx('tahun')]).trim() !== String(tahun).trim()) continue;
+    if (String(r[idx('semester')]).trim().toLowerCase() !== String(semester).trim().toLowerCase()) continue;
+
+    const kelas = String(r[idx('kelas')] || '').trim();
+    const mapel = String(r[idx('mapel')] || '').trim();
+    if (!kelas) continue;
+    const key = kelas + '||' + mapel;
+    if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
+
+    groups[key].siswa.push({
+      nama: String(r[idx('nama_siswa')] || '').trim(),
+      nis:  String(r[idx('nis')] || '').trim(),
+      komponen: {
+        tgsM: avgOrKosong_([r[idx('tgs1')], r[idx('tgs2')], r[idx('tgs3')]]),
+        tgsK: avgOrKosong_([r[idx('tgsk1')], r[idx('tgsk2')], r[idx('tgsk3')]]),
+        uh1: r[idx('uh1')], uh2: r[idx('uh2')], uh3: r[idx('uh3')],
+        pts: r[idx('pts')],
+        uas: isGenap ? r[idx('pat')] : r[idx('pas')]
+      }
+    });
+  }
+
+  const keys = Object.keys(groups).sort();
+  const result = [];
+  keys.forEach((key) => {
+    const g = groups[key];
+    if (g.siswa.length < 2) return; // butuh minimal 2 siswa buat pembanding relatif
+
+    const hasAny = {};
+    compKeys.forEach((ck) => {
+      hasAny[ck] = g.siswa.some((s) => !kosong_(s.komponen[ck]));
+    });
+
+    const flagged = [];
+    g.siswa.forEach((s) => {
+      const missing = [];
+      compKeys.forEach((ck) => {
+        if (hasAny[ck] && kosong_(s.komponen[ck])) missing.push(KOMPONEN_LABEL[ck]);
+      });
+      if (missing.length >= 2) {
+        flagged.push({ nama: s.nama, nis: s.nis, jumlahKosong: missing.length, komponenKosong: missing });
+      }
+    });
+
+    if (flagged.length) {
+      flagged.sort((a, b) => b.jumlahKosong - a.jumlahKosong);
+      result.push({
+        kelas: g.kelas,
+        mapel: g.mapel,
+        totalSiswa: g.siswa.length,
+        siswaBerpotensi: flagged
+      });
+    }
+  });
+
+  return result;
+}
+
+/**
  * getDashboardNilaiInsight_(email, tahun, semester)
  * Insight ringkas nilai untuk Dashboard — kelas/mapel dengan rata-rata
  * TERBAIK & TERENDAH (dari nilai_akhir; fallback ke nilai_asli kalau

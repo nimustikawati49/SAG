@@ -164,11 +164,13 @@ function loadSiswaUntukImportBinaan(){
   }
 
   box.style.display = 'block';
-  box.innerHTML = '<p class="muted" style="margin:4px">Memuat siswa...</p>';
+  box.innerHTML = '<p class="muted" id="binaanImportSiswaLoadingText" style="margin:4px"></p>';
   if(btn) btn.disabled = true;
+  const stopTimer = startElapsedNotice_(document.getElementById('binaanImportSiswaLoadingText'), '⏳ Memuat siswa...');
 
   google.script.run
     .withSuccessHandler(list => {
+      stopTimer();
       const siswa = list || [];
       if(!siswa.length){
         box.innerHTML = '<p class="muted" style="margin:4px">Tidak ada siswa di kelas ini untuk tahun ajaran aktif.</p>';
@@ -211,6 +213,7 @@ function loadSiswaUntukImportBinaan(){
       _updateBinaanImportCounter_();
     })
     .withFailureHandler(err => {
+      stopTimer();
       box.innerHTML = '<p style="color:red">Gagal memuat siswa: ' + (err && err.message ? err.message : err) + '</p>';
     })
     .getSiswaUntukImportBinaan(kelas);

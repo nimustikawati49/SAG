@@ -504,7 +504,7 @@
     <ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.7">
       <li>Kartu <b>KPI</b> (Total Jurnal, Total Kelas, Rata-rata Hadir, Kelas Risiko) dihitung dari jurnal &amp; absensi dalam rentang tanggal <b>Dari – Sampai</b> di bawah — ubah rentangnya lalu klik <b>Terapkan</b> untuk memfilter ulang.</li>
       <li><b>Kelas Risiko</b> = kelas dengan rata-rata kehadiran di bawah 80% pada rentang tanggal terpilih — cek kelas ini lebih dulu kalau ada.</li>
-      <li><b>Insight Otomatis</b> di paling bawah merangkum poin-poin di atas secara otomatis, tidak perlu dibaca satu-satu kalau sudah lihat KPI &amp; ranking.</li>
+      <li><b>🔎 Siswa Berpotensi Belum Ada Nilai</b> &amp; <b>📊 Ketuntasan Kelas</b> di bawah dihitung dari data Input Nilai, terpisah dari rentang tanggal KPI di atas (selalu mengikuti tahun pelajaran &amp; semester aktif).</li>
       <li>Tahun pelajaran &amp; semester yang dipakai selalu mengikuti periode aktif di tab <b>⚙️ Pengaturan</b> — tidak perlu dipilih ulang di sini.</li>
     </ol>
   </details>
@@ -549,6 +549,7 @@
   </div>
 
   <!-- KPI CARDS — lihat "Cara Membaca Dashboard" di atas untuk arti tiap kartu. -->
+  <p class="muted" id="dashKpiLoadingText" style="font-size:12px;margin:0 0 6px"></p>
   <div class="grid-dashboard">
     <div class="card stat blue">
       <div class="label">📘 Total Jurnal</div>
@@ -571,29 +572,52 @@
     </div>
   </div>
 
-  <!-- Grafik kehadiran per kelas (stacked H/S/I/A) + ranking kelas berdasar
-       persentase hadir, keduanya dari rentang tanggal filter yang sama. -->
-  <div class="dash-grid" style="margin-top:28px">
 
-    <div class="card">
-      <h3>📊 Kehadiran per Kelas</h3>
-      <canvas id="chartStackedV4"></canvas>
+  <!-- ===== KPI SISWA BERPOTENSI BELUM ADA NILAI =====
+       Deteksi dini siswa dengan ≥2 komponen nilai (Tugas Mandiri/Kelompok,
+       UH1-3, PTS, SAS/ASAT) yang masih kosong PADAHAL sudah diisi untuk
+       siswa lain di kelas+mapel yang sama (relatif, bukan absolut) —
+       lihat getSiswaPotensiBelumAdaNilai() di api_nilai.js. Sinyal dini,
+       bukan vonis: bisa juga karena guru belum sempat input, bukan
+       berarti siswanya pasti tidak aktif. -->
+  <details class="card" style="margin-top:24px" open ontoggle="if(this.open) loadSiswaPotensiBelumAdaNilai()">
+    <summary style="cursor:pointer;font-weight:700;font-size:16px">🔎 Siswa Berpotensi Belum Ada Nilai <span class="muted" style="font-weight:400;font-size:12px">— deteksi dini dari kelengkapan komponen nilai</span></summary>
+    <p class="muted" style="margin:10px 0;font-size:12.5px">Siswa ditandai kalau minimal 2 komponen nilai (Tugas Mandiri/Kelompok, UH1-3, PTS, SAS/ASAT) masih kosong, padahal komponen itu sudah diisi untuk teman sekelasnya. Bisa jadi siswa belum mengumpulkan tugas — bisa juga nilainya memang belum sempat diinput. Cek dulu sebelum menyimpulkan.</p>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+      <button class="ghost" onclick="loadSiswaPotensiBelumAdaNilai()" style="font-size:13px">🔄 Muat</button>
     </div>
+    <div id="siswaPotensiKosongBox"><p class="muted">Klik "Muat" untuk menampilkan.</p></div>
+  </details>
 
-    <div class="card">
-      <h3>🏆 Ranking Kelas</h3>
-      <div id="rankingBox"></div>
+  <!-- ===== KPI KETUNTASAN KELAS (Predikat A-D) =====
+       Total Nilai MURNI (nilai_asli, sebelum Katrol) tiap siswa per
+       kelas+mapel periode aktif dikelompokkan ke rubrik predikat tetap
+       (lihat PREDIKAT_BANDS_NILAI_ di api_nilai.js) — terpisah dari
+       status Tuntas/Belum Tuntas berbasis KKM yang sudah ada di Riwayat
+       Nilai/Rekap Sekolah. Default terbuka karena ini KPI utama, tapi
+       tetap collapsible untuk diringkas kalau sudah dilihat. -->
+  <details class="card" style="margin-top:24px" open ontoggle="if(this.open) loadKetuntasanPredikatKelas()">
+    <summary style="cursor:pointer;font-weight:700;font-size:16px">📊 Ketuntasan Kelas (Predikat A–D) <span class="muted" style="font-weight:400;font-size:12px">— berdasarkan Total Nilai Murni sebelum Katrol</span></summary>
+    <div style="display:flex;justify-content:flex-end;margin:12px 0 4px">
+      <button class="ghost" onclick="loadKetuntasanPredikatKelas()" style="font-size:13px">🔄 Muat</button>
     </div>
+    <div id="ketuntasanPredikatBox"><p class="muted">Klik "Muat" untuk menampilkan.</p></div>
 
-  </div>
-
-  <!-- Ringkasan otomatis (kelas terbaik, jumlah kelas risiko, dst) — teks
-       dihasilkan server dari data yang sama seperti KPI di atas, bukan
-       dianalisis ulang. -->
-  <div class="card" style="margin-top:24px">
-    <h3>🧠 Insight Otomatis</h3>
-    <ul id="insightBox"></ul>
-  </div>
+    <details style="margin-top:14px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;color:#4338ca">ℹ️ Keterangan Predikat & Rentang Nilai</summary>
+      <div class="table-wrap" style="margin-top:10px">
+        <table style="font-size:12.5px">
+          <thead><tr><th>Rentang Nilai</th><th>Predikat</th><th>Status Ketuntasan</th><th style="text-align:left">Tindak Lanjut &amp; Intervensi Guru</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:center">86 – 100</td><td style="text-align:center"><b>A</b></td><td>Tuntas (Sangat Baik)</td><td class="left">Siswa melampaui target kompetensi. Diberikan materi pengayaan atau tantangan soal yang lebih tinggi (HOTS).</td></tr>
+            <tr><td style="text-align:center">71 – 85</td><td style="text-align:center"><b>B</b></td><td>Tuntas (Baik)</td><td class="left">Siswa mencapai target kompetensi bab dengan baik. Tidak perlu remedial dan bisa langsung lanjut ke materi berikutnya.</td></tr>
+            <tr><td style="text-align:center">56 – 70</td><td style="text-align:center"><b>C</b></td><td>Belum Tuntas (Cukup)</td><td class="left">Siswa belum mencapai batas minimal 71. Wajib remedial hanya pada bab/indikator materi tertentu yang nilainya lemah.</td></tr>
+            <tr><td style="text-align:center">0 – 55</td><td style="text-align:center"><b>D</b></td><td>Belum Tuntas (Kurang)</td><td class="left">Siswa tertinggal jauh di materi tersebut. Wajib remedial total dengan pendampingan intensif dari guru.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </details>
 
 </div>
 
@@ -784,9 +808,10 @@
       <hr style="margin:28px 0">
       <h3>📦 Rekap Jurnal Semester</h3>
       <p class="muted">Download rekap jurnal per semester pada tahun pelajaran yang sama.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button id="btnSemGanjil" onclick="exportSemester('ganjil')">⬇️ Download Semester Ganjil</button>
         <button id="btnSemGenap" onclick="exportSemester('genap')">⬇️ Download Semester Genap</button>
+        <p class="muted" id="exportSemesterInfo" style="font-size:12px;margin:0"></p>
         <div id="exportSkeleton" style="display:none;margin-top:12px;width:280px" class="skeleton"></div>
       </div>
 
@@ -1191,7 +1216,7 @@
         <h4 style="margin:0">📑 Riwayat Jurnal Pendampingan</h4>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="ghost" onclick="loadRiwayatGuruWali()">🔄 Refresh</button>
-          <button onclick="cetakLaporanGuruWali()">🖨️ Cetak Laporan</button>
+          <button onclick="cetakJurnalWaliUI_()">🖨️ Cetak Laporan</button>
         </div>
       </div>
       <!-- Filter bar -->
@@ -1229,10 +1254,11 @@
               <th>Catatan</th>
               <th>Tindak Lanjut</th>
               <th>Dokumentasi</th>
+              <th>Aksi</th>
             </tr>
           </thead>
           <tbody id="riwayatGuruWaliBody">
-            <tr><td colspan="9" class="muted">⏳ Memuat...</td></tr>
+            <tr><td colspan="10" class="muted">⏳ Memuat...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1277,12 +1303,16 @@
   </p>
 
   <!-- ================= GOOGLE DRIVE PRIBADI ================= -->
-  <div class="card setting-guru-only" id="driveConnectCard" style="display:none;border-left:6px solid #f59e0b;background:#fffbeb;margin-top:14px">
-    <h4 style="margin-top:0">🔐 Google Drive Pribadi Saya</h4>
-    <div id="driveConnectStatusOk" style="display:none;color:#16a34a;font-weight:600;font-size:13.5px">
+  <!-- Collapsible — hanya perlu diisi SEKALI (sekali terhubung, tidak
+       perlu disentuh lagi). loadDriveConnectStatus_() di scripts-setting.html
+       yang mengatur buka/tutup default: TERBUKA kalau belum terhubung
+       (perlu tindakan), TERTUTUP kalau sudah terhubung (tinggal info). -->
+  <details class="card setting-guru-only" id="driveConnectCard" style="display:none;border-left:6px solid #f59e0b;background:#fffbeb;margin-top:14px">
+    <summary style="cursor:pointer;font-weight:700;font-size:15px">🔐 Google Drive Pribadi Saya</summary>
+    <div id="driveConnectStatusOk" style="display:none;color:#16a34a;font-weight:600;font-size:13.5px;margin-top:12px">
       ✅ Data Anda sudah tersimpan di Google Drive pribadi Anda sendiri — tidak lagi membebani Drive SuperAdmin.
     </div>
-    <div id="driveConnectStatusNeeded">
+    <div id="driveConnectStatusNeeded" style="margin-top:12px">
       <p id="driveConnectRequiredNote" style="margin:0 0 10px;font-size:12.5px;font-weight:700;color:#b45309;display:none">
         ⚠️ Akun Anda sudah aktif — mohon segera hubungkan supaya bisa terus menyimpan data.
       </p>
@@ -1300,10 +1330,16 @@
       </div>
       <div id="driveConnectResult" style="margin-top:10px;font-size:13px"></div>
     </div>
-  </div>
+  </details>
 
   <!-- ================= FORM SETTING ================= -->
-  <div class="setting-grid">
+  <!-- Collapsible — diisi sekali di awal, jarang diubah lagi. loadSettingForm()
+       di scripts-setting.html yang mengatur buka/tutup default: TERBUKA kalau
+       setting belum pernah dikunci (masih perlu diisi/lengkapi), TERTUTUP
+       begitu sudah LOCKED (sudah tersimpan lengkap). -->
+  <details class="card" id="pengaturanUtamaCard" style="margin-bottom:18px" open>
+  <summary style="cursor:pointer;font-weight:700;font-size:16px">⚙️ Pengaturan Utama Sistem</summary>
+  <div class="setting-grid" style="margin-top:14px">
     <!-- KIRI -->
     <div class="setting-col">
       <label>Nama Sekolah</label>
@@ -1416,12 +1452,17 @@
   ✏️ Edit Setting
 </button>
   </div>
+  </details>
   <div class="setting-guru-only">
   <hr style="margin:32px 0">
 
   <!-- ================= DATA SISWA ================= -->
-  <h3>👨‍🎓 Data Siswa</h3>
-  <p class="muted" id="siswaInfoText">
+  <!-- Dibuat collapsible: cukup dibuka saat awal semester (upload roster
+       baru) atau saat perlu unduh template ulang — tidak perlu selalu
+       terbuka mengganggu tampilan Setting sehari-hari. -->
+  <details class="card" style="margin-bottom:18px">
+    <summary style="cursor:pointer;font-weight:700;font-size:16px">👨‍🎓 Data Siswa <span class="muted" style="font-weight:400;font-size:12px">(klik untuk buka — download template/upload roster kelas)</span></summary>
+  <p class="muted" id="siswaInfoText" style="margin-top:14px">
     🔒 Upload data siswa akan aktif setelah setting disimpan.
   </p>
   <div class="grid-2">
@@ -1469,6 +1510,7 @@
       💾 Simpan Data Siswa
     </button>
   </div>
+  </details>
 
   <div class="card" style="margin:24px 0;background:#f8fafc;border-left:6px solid #0ea5e9">
     <h4 style="margin-top:0">Riwayat &amp; Kenaikan Kelas</h4>
@@ -1486,9 +1528,12 @@
 <!-- Isi satu baris per jam mengajar (bisa berkali-kali untuk hari/kelas
      berbeda) — jadwal ini yang muncul di kartu "Jadwal Mengajar" pada
      Dashboard. Reset Jadwal menghapus SEMUA jadwal periode aktif
-     sekaligus, dipakai kalau mau mulai isi ulang dari kosong. -->
-<h3>📅 Input Jadwal Mengajar</h3>
-<p class="muted" style="font-size:12.5px;margin:0 0 12px">Isi Hari, Kelas, Mapel, dan jam mengajar Anda — bisa ditambah berkali-kali untuk hari/kelas berbeda. Jadwal ini yang muncul otomatis di kartu "📅 Jadwal Mengajar" pada Dashboard.</p>
+     sekaligus, dipakai kalau mau mulai isi ulang dari kosong.
+     Dibuat collapsible: cukup dibuka saat awal semester (isi jadwal baru)
+     atau saat mau ubah/lihat jadwal yang sudah tersimpan. -->
+<details class="card" style="margin-bottom:18px">
+<summary style="cursor:pointer;font-weight:700;font-size:16px">📅 Input Jadwal Mengajar <span class="muted" style="font-weight:400;font-size:12px">(klik untuk buka — isi/ubah jadwal per hari & kelas)</span></summary>
+<p class="muted" style="font-size:12.5px;margin:14px 0 12px">Isi Hari, Kelas, Mapel, dan jam mengajar Anda — bisa ditambah berkali-kali untuk hari/kelas berbeda. Jadwal ini yang muncul otomatis di kartu "📅 Jadwal Mengajar" pada Dashboard.</p>
 
 <div class="grid-2">
 
@@ -1538,7 +1583,38 @@
 
 <div id="jadwalList"></div>
 <div id="listJadwalSetting"></div>
+</details>
 </div>
+
+<!-- ===== KALENDER HARI TIDAK EFEKTIF BELAJAR (menu Setting) =====
+     Versi admin dari panel "📅 Kalender Hari Tidak Efektif Belajar" milik
+     SuperAdmin — server-nya sama (Kalender.js), sekarang dipersempit
+     otomatis ke kode_sekolah akun yang login, jadi guru sekolah lain
+     tidak saling bentrok/menghapus kalender satu sama lain. Dibuat
+     collapsible — cukup dibuka saat perlu menambah/lihat, bukan tiap hari. -->
+<details class="card" style="margin-top:16px" ontoggle="if(this.open) loadHariLiburPanelSetting_()">
+  <summary style="cursor:pointer;font-weight:700;font-size:16px">🗓️ Hari Tidak Efektif Belajar <span class="muted" style="font-weight:400;font-size:12px">(klik untuk buka)</span></summary>
+  <p class="muted" style="margin:14px 0 10px;font-size:12px">Tandai hari yang tidak efektif untuk mengajar (libur nasional, kegiatan sekolah, dll) — otomatis muncul sebagai "🎉 Tidak Efektif Belajar" di kartu Jadwal Mengajar semua guru di sekolah Anda. Bisa isi rentang tanggal sekaligus (mis. kegiatan sekolah 3 hari) — untuk 1 hari saja, isi Dari & Sampai dengan tanggal yang sama.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px;background:#f8fafc;border-radius:10px">
+    <div>
+      <label style="font-size:12px;color:#6b7280">Dari Tanggal</label>
+      <input type="date" id="hariLiburDariInputSetting">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#6b7280">Sampai Tanggal</label>
+      <input type="date" id="hariLiburSampaiInputSetting">
+    </div>
+    <div style="flex:1;min-width:200px">
+      <label style="font-size:12px;color:#6b7280">Keterangan</label>
+      <input type="text" id="hariLiburKeteranganInputSetting" placeholder="mis. Lomba HUT Sekolah">
+    </div>
+    <button onclick="addHariLiburManualUISetting_()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">➕ Tambah Hari Tidak Efektif Belajar</button>
+  </div>
+  <div style="margin-bottom:8px"><button class="ghost" onclick="loadHariLiburPanelSetting_()" style="font-size:13px">🔄 Muat Ulang</button></div>
+  <div id="hariLiburListBoxSetting"><div class="muted">Klik "Muat Ulang" untuk menampilkan daftar.</div></div>
+</details>
+<!-- ===== END KALENDER HARI TIDAK EFEKTIF BELAJAR (Setting) ===== -->
+
 </div><!-- end .setting-guru-only -->
 
 <div id="academicWizardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;align-items:center;justify-content:center">
@@ -1654,18 +1730,19 @@
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
 <!-- ===== KALENDER HARI LIBUR ====================================================
-     Semua tanggal libur diinput MANUAL oleh SuperAdmin (lihat Kalender.js
-     — sinkronisasi otomatis dari kalender publik Google sempat dicoba,
-     tapi dihapus karena akun Workspace deployment ini terus menolak izin
-     scope Calendar, kemungkinan dibatasi kebijakan admin domain sekolah).
-     Begitu tersimpan, kartu "📅 Jadwal Mengajar" di Dashboard guru
-     otomatis menampilkan "🎉 Libur" pada hari yang bertepatan, jadi guru
-     tidak perlu dikasih tahu manual lewat menu lain. -->
+     Semua tanggal tidak efektif belajar diinput MANUAL oleh SuperAdmin
+     (lihat Kalender.js — sinkronisasi otomatis dari kalender publik
+     Google sempat dicoba, tapi dihapus karena akun Workspace deployment
+     ini terus menolak izin scope Calendar, kemungkinan dibatasi
+     kebijakan admin domain sekolah). Begitu tersimpan, kartu "📅 Jadwal
+     Mengajar" di Dashboard guru otomatis menampilkan "🎉 Tidak Efektif
+     Belajar" pada hari yang bertepatan, jadi guru tidak perlu dikasih
+     tahu manual lewat menu lain. -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
     <div>
-      <h3 style="margin:0">📅 Kalender Hari Libur</h3>
-      <p class="muted" style="margin:4px 0 0;font-size:12px">Hari yang ditandai libur di sini otomatis muncul sebagai "🎉 Libur" di kartu Jadwal Mengajar semua guru — jadi guru langsung tahu tanpa perlu diberi tahu manual. Isi manual di bawah (termasuk hari libur nasional — tidak ada sinkronisasi otomatis).</p>
+      <h3 style="margin:0">📅 Kalender Hari Tidak Efektif Belajar</h3>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">Hari yang ditandai di sini otomatis muncul sebagai "🎉 Tidak Efektif Belajar" di kartu Jadwal Mengajar semua guru — jadi guru langsung tahu tanpa perlu diberi tahu manual. Isi manual di bawah (termasuk hari libur nasional — tidak ada sinkronisasi otomatis). Bisa isi rentang tanggal sekaligus (mis. kegiatan sekolah 3 hari) — untuk 1 hari saja, isi Dari & Sampai dengan tanggal yang sama.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="ghost" onclick="loadHariLiburPanel()" style="font-size:13px">🔄 Muat</button>
@@ -1673,14 +1750,18 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px;background:#f8fafc;border-radius:10px">
     <div>
-      <label style="font-size:12px;color:#6b7280">Tanggal</label>
-      <input type="date" id="hariLiburTanggalInput">
+      <label style="font-size:12px;color:#6b7280">Dari Tanggal</label>
+      <input type="date" id="hariLiburDariInput">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#6b7280">Sampai Tanggal</label>
+      <input type="date" id="hariLiburSampaiInput">
     </div>
     <div style="flex:1;min-width:200px">
       <label style="font-size:12px;color:#6b7280">Keterangan</label>
       <input type="text" id="hariLiburKeteranganInput" placeholder="mis. Libur Semester Genap">
     </div>
-    <button onclick="addHariLiburManualUI()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">➕ Tambah Libur Sekolah</button>
+    <button onclick="addHariLiburManualUI()" style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600">➕ Tambah Hari Tidak Efektif Belajar</button>
   </div>
   <div id="hariLiburResult" style="margin-bottom:10px;font-size:13px"></div>
   <div id="hariLiburListBox"><div class="muted">Klik "Muat" untuk menampilkan daftar.</div></div>
@@ -2861,6 +2942,33 @@
       <option value="F4">F4 / Folio (Landscape)</option>
     </select>
     <button onclick="prosesCetakJurnal_()" style="margin-top:18px;width:100%">👁️ Lihat Preview</button>
+  </div>
+</div>
+
+<!-- ===== MODAL: CETAK JURNAL GURU WALI ===== -->
+<div id="cetakJurnalWaliModal">
+  <div style="background:#fff;width:92%;max-width:440px;border-radius:18px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.4);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h3 style="margin:0">🖨️ Cetak Jurnal Guru Wali</h3>
+      <button onclick="tutupCetakJurnalWali_()" style="background:#f3f4f6;color:#374151;box-shadow:none;padding:6px 12px;font-size:13px">✕ Tutup</button>
+    </div>
+    <p class="muted" style="margin-bottom:14px;font-size:13px">Pilih rentang tanggal untuk membuat laporan jurnal pendampingan yang bisa dicetak/di-PDF-kan.</p>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1">
+        <label>Dari Tanggal</label>
+        <input type="date" id="cetakJurnalWaliDari">
+      </div>
+      <div style="flex:1">
+        <label>Sampai Tanggal</label>
+        <input type="date" id="cetakJurnalWaliSampai">
+      </div>
+    </div>
+    <label style="margin-top:12px">Ukuran Kertas</label>
+    <select id="cetakJurnalWaliKertas">
+      <option value="A4">A4 (Landscape)</option>
+      <option value="F4">F4 / Folio (Landscape)</option>
+    </select>
+    <button onclick="prosesCetakJurnalWali_()" style="margin-top:18px;width:100%">👁️ Lihat Preview</button>
   </div>
 </div>
 

@@ -165,11 +165,13 @@ function _fillBabSuggestions_() {
 function loadJadwalForModul_() {
   const grid = document.getElementById('modulJadwalGrid');
   if (!grid) return;
-  grid.innerHTML = '<p class="muted">⏳ Memuat jadwal...</p>';
+  grid.innerHTML = '<p class="muted" id="modulJadwalLoadingText"></p>';
+  const stopTimer = startElapsedNotice_(document.getElementById('modulJadwalLoadingText'), '⏳ Memuat jadwal...');
 
   google.script.run
-    .withSuccessHandler(function(list) { _renderJadwalCards_(list); })
+    .withSuccessHandler(function(list) { stopTimer(); _renderJadwalCards_(list); })
     .withFailureHandler(function(e) {
+      stopTimer();
       grid.innerHTML = '<p class="muted">Gagal memuat jadwal: ' + escHtml_(e.message) + '</p>';
     })
     .getJadwalWithId();
@@ -286,11 +288,13 @@ function jadwalCardClick_(el) {
 function reloadLinkedModuls_() {
   if (!_selectedJadwalId) return;
   const el = document.getElementById('modulLinkedList');
-  el.innerHTML = '<p class="muted">⏳ Memuat...</p>';
+  el.innerHTML = '<p class="muted" id="modulLinkedLoadingText"></p>';
+  const stopTimer = startElapsedNotice_(document.getElementById('modulLinkedLoadingText'), '⏳ Memuat...');
 
   google.script.run
-    .withSuccessHandler(_renderLinkedModuls_)
+    .withSuccessHandler(function(moduls){ stopTimer(); _renderLinkedModuls_(moduls); })
     .withFailureHandler(function(e) {
+      stopTimer();
       el.innerHTML = '<p class="muted">Gagal: ' + escHtml_(e.message) + '</p>';
     })
     .getModulByJadwal(_selectedJadwalId);
@@ -338,12 +342,15 @@ function _renderLinkedModuls_(moduls) {
 
 function removeModulRelasi_(relasiId) {
   if (!confirm('Lepas modul dari jadwal ini?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       showToast('Modul dilepas dari jadwal.', 'info');
       reloadLinkedModuls_();
     })
     .withFailureHandler(function(e) {
+      if (typeof endProgress === 'function') endProgress();
       showToast('Gagal: ' + e.message, 'error');
     })
     .removeModulFromJadwal(relasiId);
@@ -381,13 +388,16 @@ function closeAssignModulModal_() {
 
 function doAssignModul_(modulId) {
   if (!_selectedJadwalId) { showToast('Pilih jadwal terlebih dahulu', 'warning'); return; }
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       closeAssignModulModal_();
       showToast('Modul berhasil ditambahkan ke jadwal!', 'success');
       reloadLinkedModuls_();
     })
     .withFailureHandler(function(e) {
+      if (typeof endProgress === 'function') endProgress();
       showToast('Gagal: ' + e.message, 'error');
     })
     .assignModulToJadwal(modulId, _selectedJadwalId);
@@ -442,6 +452,7 @@ function submitModul_() {
   msg.textContent = '⏳ Menyimpan...';
   const btnSave = document.querySelector('#modulAjar .card button[onclick="submitModul_()"]');
   if (btnSave) btnSave.disabled = true;
+  if (typeof startProgress === 'function') startProgress();
 
   const data = {
     mapel:       mapel,
@@ -456,6 +467,7 @@ function submitModul_() {
 
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (btnSave) btnSave.disabled = false;
       msg.textContent = '✅ Modul berhasil disimpan!';
       _clearModulForm_();
@@ -464,6 +476,7 @@ function submitModul_() {
       setTimeout(function() { msg.textContent = ''; }, 3500);
     })
     .withFailureHandler(function(e) {
+      if (typeof endProgress === 'function') endProgress();
       if (btnSave) btnSave.disabled = false;
       msg.textContent = '❌ ' + e.message;
     })
@@ -494,21 +507,25 @@ function _clearModulForm_() {
 // ============ TABLE DAFTAR MODUL ============
 function loadAllModul_() {
   const tbody = document.getElementById('modulTableBody');
-  // Skeleton loading
+  // Skeleton loading + hitungan detik di bawahnya
   if (tbody) tbody.innerHTML =
     '<tr><td colspan="8" style="padding:10px 8px">' +
     '<div class="modul-skel" style="width:65%"></div>' +
     '<div class="modul-skel" style="width:45%"></div>' +
     '<div class="modul-skel" style="width:80%"></div>' +
+    '<p class="muted" id="modulTableLoadingText" style="font-size:11px;margin:6px 0 0"></p>' +
     '</td></tr>';
+  const stopTimer = startElapsedNotice_(document.getElementById('modulTableLoadingText'), '⏳ Memuat daftar modul...');
 
   google.script.run
     .withSuccessHandler(function(list) {
+      stopTimer();
       _modulData = list || [];
       _populateFilterMapel_(_modulData);
       renderModulTable_();
     })
     .withFailureHandler(function(e) {
+      stopTimer();
       if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;padding:16px">Gagal: ' + escHtml_(e.message) + '</td></tr>';
     })
     .getAllModul();
@@ -576,12 +593,15 @@ function renderModulTable_() {
 
 function hapusModul_(id) {
   if (!confirm('Hapus modul ini?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       showToast('Modul dihapus.', 'info');
       loadAllModul_();
     })
     .withFailureHandler(function(e) {
+      if (typeof endProgress === 'function') endProgress();
       showToast('Gagal: ' + e.message, 'error');
     })
     .deleteModul(id);
@@ -701,9 +721,11 @@ function submitEditModul_() {
   }
 
   msg.textContent = '⏳ Menyimpan...';
+  if (typeof startProgress === 'function') startProgress();
 
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       msg.textContent = '✅ Disimpan!';
       _editModulDirty = false;
       closeEditModulModal_();
@@ -711,6 +733,7 @@ function submitEditModul_() {
       showToast('Modul berhasil diperbarui!', 'success');
     })
     .withFailureHandler(function(e) {
+      if (typeof endProgress === 'function') endProgress();
       msg.textContent = '❌ ' + e.message;
     })
     .updateModul(Number(id), {

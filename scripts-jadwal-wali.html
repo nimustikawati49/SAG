@@ -29,9 +29,11 @@ function loadJadwalMengajar(){
   // dashboard penuh yang lebih lambat.
   var container = document.getElementById('jadwalGridContainer');
   if(!container) return;
-  container.innerHTML = '<p class="muted">⏳ Memuat ulang jadwal...</p>';
+  container.innerHTML = '<p class="muted" id="jadwalGridLoadingText"></p>';
+  var stopTimer = startElapsedNotice_(document.getElementById('jadwalGridLoadingText'), '⏳ Memuat ulang jadwal...');
   google.script.run
     .withSuccessHandler(function(obj){
+      stopTimer();
       if(!obj || obj._error) {
         container.innerHTML = '<p class="muted">📭 Belum ada jadwal untuk semester ini.</p>';
         return;
@@ -39,6 +41,7 @@ function loadJadwalMengajar(){
       _renderJadwalGrid_(obj, container);
     })
     .withFailureHandler(function(err){
+      stopTimer();
       console.error('[JADWAL] reload failed:', err);
       container.innerHTML = '<p class="muted" style="color:#ef4444">❌ Gagal muat ulang jadwal: '+(err&&err.message?err.message:'Refresh halaman')+'</p>';
     })
@@ -53,14 +56,17 @@ function loadJadwalDashboard_(){
   var container = document.getElementById('jadwalGridContainer');
   if(!container) return;
   // Only show loading if still showing placeholder
+  var stopTimer = function(){};
   if(container.innerHTML.indexOf('Memuat jadwal') !== -1){
-    container.innerHTML = '<p class="muted">⏳ Memuat jadwal...</p>';
+    container.innerHTML = '<p class="muted" id="jadwalDashLoadingText"></p>';
+    stopTimer = startElapsedNotice_(document.getElementById('jadwalDashLoadingText'), '⏳ Memuat jadwal...');
   }
 
   // Safety timeout: jika 15 detik belum ada response, tampilkan pesan & tombol reload
   var _jwTimer = setTimeout(function(){
     var c3 = document.getElementById('jadwalGridContainer');
     if(c3 && c3.innerHTML.indexOf('Memuat jadwal') !== -1){
+      stopTimer();
       c3.innerHTML =
         '<div style="text-align:center;padding:20px 10px">' +
           '<div style="font-size:28px;margin-bottom:8px">⏱️</div>' +
@@ -74,6 +80,7 @@ function loadJadwalDashboard_(){
   google.script.run
     .withSuccessHandler(function(obj){
       clearTimeout(_jwTimer);
+      stopTimer();
       var c2 = document.getElementById('jadwalGridContainer');
       if(!obj || obj._error) {
         console.warn('[JADWAL] getDashboardJadwal error:', obj && obj._error);
@@ -102,6 +109,7 @@ function loadJadwalDashboard_(){
     })
     .withFailureHandler(function(err){
       clearTimeout(_jwTimer);
+      stopTimer();
       console.error('[JADWAL] getDashboardJadwal failed:', err && err.message);
       var c2 = document.getElementById('jadwalGridContainer');
       if(c2) c2.innerHTML =
@@ -290,6 +298,7 @@ function saveInlineAdvanced(row){
   const btn = document.getElementById("btnSave_"+row);
 
   btn.classList.add("btn-saving");
+  if (typeof startProgress === 'function') startProgress();
 
   const data = {
     hari: document.getElementById("edit_hari_"+row).value,
@@ -301,6 +310,7 @@ function saveInlineAdvanced(row){
 
   google.script.run
     .withSuccessHandler(()=>{
+      if (typeof endProgress === 'function') endProgress();
 
       tr.classList.remove("jadwal-editing");
       tr.classList.add("save-success");
@@ -312,6 +322,7 @@ function saveInlineAdvanced(row){
 
     })
     .withFailureHandler(err=>{
+      if (typeof endProgress === 'function') endProgress();
       alert("⚠ " + err.message);
       btn.classList.remove("btn-saving");
     })
@@ -492,10 +503,17 @@ function hapusJadwal(rowIndex){
 
   if(!confirm('Yakin ingin menghapus jadwal ini?')) return;
 
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(()=>{
+      if (typeof endProgress === 'function') endProgress();
       loadListJadwal();
       loadJadwalMengajar(); // refresh dashboard
+    })
+    .withFailureHandler(err=>{
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menghapus jadwal'), 'error');
+      else alert('❌ Gagal menghapus jadwal: ' + err.message);
     })
     .deleteJadwalSemester(rowIndex);
 }

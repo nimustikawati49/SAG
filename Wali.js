@@ -187,12 +187,20 @@ function simpanJurnalGuruWali(data){
   const waktu    = wMulai + ' - ' + wSelesai;
 
   // ── Upload photos to Drive if provided ──
+  // Dibungkus try/catch terpisah dari sisa proses simpan (sama seperti
+  // simpanJurnal di Jurnal.js) — kalau DriveApp diblokir kebijakan domain
+  // Google Workspace (pernah terjadi di deployment ini), jurnal TETAP
+  // tersimpan (cuma butuh akses Sheets), fotoGagal dikirim balik ke
+  // client supaya guru diberi tahu jelas, bukan diam-diam kehilangan foto.
   let dokumentasi = data.dokumentasi || '-';
+  let fotoGagal = false;
   if(data.fotos && Array.isArray(data.fotos) && data.fotos.length > 0){
     try {
       const urls = _uploadFotoWali_(auth.email, id, data.fotos);
       if(urls.length > 0) dokumentasi = urls.join(',');
+      else fotoGagal = true;
     } catch(e){
+      fotoGagal = true;
       Logger.log('Foto upload warning: ' + e.message);
     }
   }
@@ -219,7 +227,7 @@ function simpanJurnalGuruWali(data){
   trySyncGuruSummaryAfterMutation_(auth.email, 'SIMPAN_JURNAL_WALI');
   invalidateCache_('JURNAL_GURU_WALI');
 
-  return { status: true, id };
+  return { status: true, id, fotoGagal };
 }
 
 /**
@@ -229,6 +237,106 @@ function simpanJurnalGuruWali(data){
  * Catatan, dan Tindak Lanjut tanpa perlu ketik ulang, tetap bisa diedit
  * sebelum simpan.
  */
+/**
+ * _resolveDokumentasiWali_(email, id, fotos)
+ * fotos: array campuran { data, type, name } (foto BARU, perlu diupload)
+ * dan/atau { existingUrl } (foto LAMA yang dipertahankan saat Edit, cukup
+ * dipakai lagi URL-nya tanpa upload ulang) — dipakai simpanJurnalGuruWali
+ * (selalu foto baru semua) maupun updateJurnalGuruWali (bisa campuran).
+ */
+function _resolveDokumentasiWali_(email, id, fotos){
+  const urls = [];
+  const newFotos = [];
+  const newFotoPositions = [];
+  (fotos || []).forEach(function(f, i){
+    if(f && f.existingUrl){
+      urls[i] = f.existingUrl;
+    } else if(f && f.data){
+      newFotoPositions.push(i);
+      newFotos.push(f);
+    }
+  });
+  let fotoGagal = false;
+  if(newFotos.length){
+    try {
+      const uploaded = _uploadFotoWali_(email, id, newFotos);
+      newFotoPositions.forEach(function(pos, k){ if(uploaded[k]) urls[pos] = uploaded[k]; });
+      if(uploaded.length < newFotos.length) fotoGagal = true;
+    } catch(e){
+      fotoGagal = true;
+      Logger.log('Foto upload warning (update): ' + e.message);
+    }
+  }
+  return { dokumentasi: urls.filter(Boolean).join(',') || '-', fotoGagal: fotoGagal };
+}
+
+/**
+ * updateJurnalGuruWali(data)
+ * Edit entri jurnal pendampingan yang sudah tersimpan. Pola sama seperti
+ * updateJurnal() di Jurnal.js: data.id menunjuk baris yang diedit, guru_wali/
+ * nip/tahun_pelajaran baris asli TIDAK berubah (tetap kepunyaan pemilik asli
+ * & periode aslinya), cuma field yang bisa diisi ulang di form yang ditimpa.
+ */
+function updateJurnalGuruWali(data){
+
+  assertLicenseActive();
+
+  const auth = getAuth();
+  const sh = ensureJurnalGuruWaliSheet_();
+  const numCols = sh.getLastColumn();
+  const rows = sh.getDataRange().getValues();
+
+  for(let i = 1; i < rows.length; i++){
+    if(String(rows[i][0]) !== String(data.id)) continue;
+
+    const owner = String(rows[i][9] || '').toLowerCase().trim();
+    if(auth.role !== 'superadmin' && owner !== auth.email){
+      throw new Error('AKSES_DITOLAK');
+    }
+
+    if(!data.tanggal)            throw new Error('Tanggal wajib diisi');
+    if(!data.hari)               throw new Error('Hari wajib diisi');
+    if(!data.waktu_mulai)        throw new Error('Waktu mulai wajib diisi');
+    if(!data.waktu_selesai)      throw new Error('Waktu selesai wajib diisi');
+    if(!data.fokus_pendampingan) throw new Error('Fokus pendampingan wajib dipilih');
+    if(!data.topik_pendampingan) throw new Error('Topik pendampingan wajib diisi');
+
+    const tipe = data.tipe === 'kelompok' ? 'kelompok' : 'individu';
+    const siswaList = Array.isArray(data.siswa) ? data.siswa.filter(function(s){ return s && s.nis; }) : [];
+    if(!siswaList.length) throw new Error('Pilih minimal satu siswa binaan yang didampingi');
+
+    const wMulai   = String(data.waktu_mulai).replace(':','.');
+    const wSelesai = String(data.waktu_selesai).replace(':','.');
+    const waktu    = wMulai + ' - ' + wSelesai;
+
+    const resolvedFoto = _resolveDokumentasiWali_(owner, String(data.id), data.fotos || []);
+
+    const newRow = rows[i].slice(0, numCols);
+    while(newRow.length < numCols) newRow.push('');
+    newRow[1]  = new Date(data.tanggal + 'T00:00:00');
+    newRow[2]  = String(data.hari).toUpperCase();
+    newRow[3]  = waktu;
+    newRow[4]  = data.fokus_pendampingan;
+    newRow[5]  = data.topik_pendampingan;
+    newRow[6]  = data.catatan       || '-';
+    newRow[7]  = data.tindak_lanjut || '-';
+    newRow[8]  = resolvedFoto.dokumentasi;
+    newRow[12] = tipe;
+    newRow[13] = siswaList.map(function(s){ return s.nis; }).join(',');
+    newRow[14] = siswaList.map(function(s){ return s.nama; }).join(', ');
+
+    sh.getRange(i + 1, 1, 1, numCols).setValues([newRow]);
+
+    logAudit('UPDATE_JURNAL_WALI', auth.email, String(data.id));
+    trySyncGuruSummaryAfterMutation_(auth.email, 'UPDATE_JURNAL_WALI');
+    invalidateCache_('JURNAL_GURU_WALI');
+
+    return { status: true, id: data.id, fotoGagal: resolvedFoto.fotoGagal };
+  }
+
+  throw new Error('Jurnal tidak ditemukan');
+}
+
 function getJurnalGuruWaliTerakhir(){
   const auth = getAuth();
   if (!auth.email) return null;
@@ -251,7 +359,83 @@ function getJurnalGuruWaliTerakhir(){
 }
 
 /**
+ * _uploadFotoWaliViaRestApi_(email, id, f)
+ * FALLBACK saat DriveApp (service bawaan) gagal dengan "Access denied" —
+ * upload lewat Drive API v3 langsung via UrlFetchApp + OAuth token, jalur
+ * kode yang BERBEDA dari DriveApp (kadang lolos pembatasan yang spesifik
+ * memblokir service DriveApp tapi tidak panggilan REST API murni,
+ * tergantung kebijakan domain Google Workspace — ini sudah terbukti jalan
+ * untuk foto Jurnal Mengajar via _uploadFotoViaRestApi_ di Jurnal.js,
+ * fungsi ini versi Guru Wali-nya, folder root WALI_DOKUMENTASI supaya
+ * tetap terpisah dari JURNAL_DOKUMENTASI). Numpang _restFindOrCreateFolder_
+ * yang sudah ada (generic, dipakai bareng dengan Jurnal.js).
+ */
+function _uploadFotoWaliViaRestApi_(email, id, f) {
+  const token = ScriptApp.getOAuthToken();
+  const setting = getSetting();
+  const tahun = setting.tahun_pelajaran || 'Tanpa_Tahun';
+  const safeEmail = email.replace(/[@.]/g, '_');
+
+  let folderId = _restFindOrCreateFolder_(token, 'WALI_DOKUMENTASI', null);
+  folderId = _restFindOrCreateFolder_(token, safeEmail, folderId);
+  folderId = _restFindOrCreateFolder_(token, tahun, folderId);
+
+  const base64 = f.data.split(',')[1];
+  const mimeType = f.type || 'image/jpeg';
+  const fileName = id + '_' + (f.name || 'foto');
+
+  const boundary = 'gw_' + id + '_' + Math.random().toString(36).slice(2);
+  const metadata = { name: fileName, parents: [folderId] };
+  const body =
+    '--' + boundary + '\r\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) + '\r\n' +
+    '--' + boundary + '\r\n' +
+    'Content-Type: ' + mimeType + '\r\n' +
+    'Content-Transfer-Encoding: base64\r\n\r\n' +
+    base64 + '\r\n' +
+    '--' + boundary + '--';
+
+  const uploadRes = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    {
+      method: 'post',
+      contentType: 'multipart/related; boundary=' + boundary,
+      headers: { Authorization: 'Bearer ' + token },
+      payload: body,
+      muteHttpExceptions: true
+    }
+  );
+  const uploadJson = JSON.parse(uploadRes.getContentText() || '{}');
+  if (!uploadJson.id) throw new Error('Upload REST API gagal: ' + uploadRes.getContentText());
+
+  try {
+    UrlFetchApp.fetch(
+      'https://www.googleapis.com/drive/v3/files/' + uploadJson.id + '/permissions',
+      {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + token },
+        payload: JSON.stringify({ role: 'reader', type: 'anyone' }),
+        muteHttpExceptions: true
+      }
+    );
+  } catch (eShare) { /* file tetap terupload walau share publiknya gagal */ }
+
+  return 'https://drive.google.com/uc?id=' + uploadJson.id;
+}
+
+/**
  * Upload 1–2 compressed photos to Drive, return public view URLs.
+ * Coba DriveApp dulu (jalur normal) — kalau itu melempar error APA PUN
+ * (mis. "Access denied" karena kebijakan domain Google Workspace),
+ * langsung coba lagi SATU KALI lewat _uploadFotoWaliViaRestApi_ untuk
+ * foto itu sebelum benar-benar menyerah, sama seperti
+ * _uploadJurnalFotoList_ di Jurnal.js untuk foto Jurnal Mengajar (yang
+ * sudah terbukti jalan). Kalau KEDUA jalur gagal untuk satu foto, error
+ * dilempar ke atas — dipakai simpanJurnalGuruWali/updateJurnalGuruWali
+ * yang membungkusnya sendiri dengan try/catch (fotoGagal=true) supaya
+ * jurnal tetap tersimpan walau upload foto akhirnya tetap gagal.
  * @param {string} email
  * @param {string} id  – jurnal ID (used as filename prefix)
  * @param {Array}  fotos – [{data:'data:image/jpeg;base64,...', type, name}]
@@ -261,21 +445,34 @@ function _uploadFotoWali_(email, id, fotos){
   const tahun   = setting.tahun_pelajaran || 'Tanpa_Tahun';
 
   const safeEmail = email.replace(/[@.]/g,'_');
-  const tahunFolder = getUserNestedFolder_(email, 'wali_dokumentasi_folder', 'WALI_DOKUMENTASI', [safeEmail, tahun]);
+  let folder = null;
+  try { folder = getUserNestedFolder_(email, 'wali_dokumentasi_folder', 'WALI_DOKUMENTASI', [safeEmail, tahun]); }
+  catch (eFolder) { folder = null; }
 
   const urls = [];
   fotos.slice(0, 2).forEach(function(f, idx){
     const base64str = String(f.data || '').split(',').pop();
     if(!base64str) return;
-    const bytes = Utilities.base64Decode(base64str);
-    const blob  = Utilities.newBlob(
-      bytes,
-      f.type || 'image/jpeg',
-      id + '_foto' + (idx + 1) + '.jpg'
-    );
-    const file = tahunFolder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    urls.push('https://drive.google.com/uc?id=' + file.getId());
+    const fileName = id + '_foto' + (idx + 1) + '.jpg';
+
+    if (folder) {
+      try {
+        const bytes = Utilities.base64Decode(base64str);
+        const blob  = Utilities.newBlob(bytes, f.type || 'image/jpeg', fileName);
+        const file  = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        urls.push('https://drive.google.com/uc?id=' + file.getId());
+        return;
+      } catch (eDriveApp) {
+        try { logError_('uploadFotoWali/DriveApp_gagal', eDriveApp); } catch (e2) {}
+        // lanjut ke fallback REST API di bawah, jangan return dulu
+      }
+    }
+
+    // Fallback REST API — kalau ini JUGA gagal, error-nya dilempar ke
+    // atas (dibiarkan, tidak ditangkap di sini) supaya pemanggil tahu
+    // upload foto ini benar-benar gagal total.
+    urls.push(_uploadFotoWaliViaRestApi_(email, id, f));
   });
   return urls;
 }
@@ -290,6 +487,14 @@ function getRiwayatJurnalGuruWali(){
   const data  = getSheetValuesCached_('JURNAL_GURU_WALI', sh);
   const email = auth.email;
   const tz    = Session.getScriptTimeZone();
+
+  // Total siswa binaan AKTIF milik guru ini saat ini — dipakai client
+  // (_gwFormatSiswa_) untuk mendeteksi "semua siswa binaan dicentang"
+  // (tampil ringkas "N siswa (Semua)") vs kelompok sebagian saja (tampil
+  // daftar nama). Numpang getSiswaBinaan() yang sudah ada, pageSize=1
+  // karena cuma butuh .total, bukan datanya.
+  let totalSiswaBinaan = 0;
+  try { totalSiswaBinaan = (getSiswaBinaan(1, 1) || {}).total || 0; } catch (e) { /* fail-soft */ }
 
   let result = [];
 
@@ -318,7 +523,8 @@ function getRiwayatJurnalGuruWali(){
       dokumentasi       : String(data[i][8]  || '-'),
       tipe              : String(data[i][12] || 'individu'),
       nis_siswa         : String(data[i][13] || ''),
-      nama_siswa        : String(data[i][14] || '')
+      nama_siswa        : String(data[i][14] || ''),
+      total_siswa_binaan: totalSiswaBinaan
     });
   }
 
@@ -333,6 +539,77 @@ function getRiwayatJurnalGuruWali(){
   });
 
   return result;
+}
+
+/**
+ * getJurnalGuruWaliUntukCetak(tglMulai, tglSampai)
+ * Sumber data untuk fitur Cetak Jurnal Guru Wali (preview + cetak/PDF) —
+ * dipisah dari getRiwayatJurnalGuruWali() (yang dipakai tabel Riwayat di
+ * layar) supaya rentang tanggal cetak bisa dipilih bebas, bukan cuma
+ * mengikuti filter Bulan/Fokus yang sedang aktif di layar. Pola & bentuk
+ * hasil (foto sebagai array ID Drive, bukan URL) sengaja disamakan dengan
+ * getJurnalUntukCetak() di Jurnal.js supaya template cetaknya bisa dibuat
+ * konsisten.
+ */
+function getJurnalGuruWaliUntukCetak(tglMulai, tglSampai){
+  const auth    = getAuth();
+  const fDari   = tglMulai  ? new Date(tglMulai  + 'T00:00:00') : null;
+  const fSampai = tglSampai ? new Date(tglSampai + 'T23:59:59') : null;
+
+  const setting     = getSetting();
+  const activeTahun = setting.tahun_pelajaran || '';
+
+  const sh   = ensureJurnalGuruWaliSheet_();
+  const data = getSheetValuesCached_('JURNAL_GURU_WALI', sh);
+  const tz   = Session.getScriptTimeZone();
+
+  let totalSiswaBinaan = 0;
+  try { totalSiswaBinaan = (getSiswaBinaan(1, 1) || {}).total || 0; } catch (e) { /* fail-soft */ }
+
+  const matchIdx = [];
+  for(let i = 1; i < data.length; i++){
+    if(String(data[i][9] || '').toLowerCase().trim() !== auth.email) continue;
+    const rowTahun = String(data[i][11] || '').trim();
+    if(activeTahun && rowTahun && rowTahun !== activeTahun) continue;
+    const tgl = data[i][1] ? new Date(data[i][1]) : null;
+    if(!tgl) continue;
+    if(fDari   && tgl < fDari)   continue;
+    if(fSampai && tgl > fSampai) continue;
+    matchIdx.push(i);
+  }
+
+  matchIdx.sort((a, b) => {
+    const tglA = new Date(data[a][1]).getTime();
+    const tglB = new Date(data[b][1]).getTime();
+    if(tglA !== tglB) return tglA - tglB;
+    return String(data[a][3] || '').localeCompare(String(data[b][3] || ''));
+  });
+
+  return matchIdx.map(function(i){
+    const row     = data[i];
+    const tgl     = row[1] ? new Date(row[1]) : null;
+    const hariStr = String(row[2] || '');
+    const tglFmt  = tgl ? Utilities.formatDate(tgl, tz, 'dd MMMM yyyy') : '-';
+    const dokumentasi = String(row[8] || '-');
+    const fotoIds = (dokumentasi && dokumentasi !== '-')
+      ? dokumentasi.split(',').map(function(u){
+          const m = String(u).trim().match(/[?&]id=([\w-]+)/);
+          return m ? m[1] : '';
+        }).filter(Boolean)
+      : [];
+    return {
+      tanggal           : hariStr ? hariStr + ', ' + tglFmt : tglFmt,
+      waktu             : String(row[3]  || '-'),
+      fokus_pendampingan: String(row[4]  || '-'),
+      topik_pendampingan: String(row[5]  || '-'),
+      catatan           : String(row[6]  || '-'),
+      tindak_lanjut     : String(row[7]  || '-'),
+      tipe              : String(row[12] || 'individu'),
+      nama_siswa        : String(row[14] || ''),
+      total_siswa_binaan: totalSiswaBinaan,
+      foto              : fotoIds
+    };
+  });
 }
 
 function hapusJurnalGuruWali(id){

@@ -629,6 +629,13 @@ function loadSettingForm(){
       applyLockUI(false);
     }
 
+    // Pengaturan Utama Sistem: tertutup otomatis begitu sudah LOCKED
+    // (sudah tersimpan lengkap, jarang perlu dibuka lagi) — tetap terbuka
+    // selama belum dikunci (masih tahap diisi/dilengkapi pertama kali,
+    // atau sedang mode Edit Setting).
+    var pengaturanCard = document.getElementById('pengaturanUtamaCard');
+    if(pengaturanCard) pengaturanCard.open = (d.lock_status !== 'LOCKED');
+
     // ===============================
     // UPDATE HEADER META SPANS
     // ===============================
@@ -652,6 +659,10 @@ function loadDriveConnectStatus_(){
       if(!card || !info || !info.applicable) { if(card) card.style.display = 'none'; return; }
 
       card.style.display = 'block';
+      // Sekali terhubung tidak perlu disentuh lagi — tertutup otomatis.
+      // Belum terhubung (apalagi kalau required) tetap terbuka supaya
+      // langkahnya langsung terlihat tanpa perlu klik dulu.
+      card.open = !info.connected;
       var saEmailEl = document.getElementById('driveConnectSaEmail');
       if(saEmailEl) saEmailEl.textContent = info.shareWithEmail || '-';
 
@@ -790,6 +801,8 @@ function editSettingUI(){
   google.script.run
     .withSuccessHandler(()=>{
       applyLockUI(false);
+      var pengaturanCard = document.getElementById('pengaturanUtamaCard');
+      if(pengaturanCard) pengaturanCard.open = true;
       alert('Setting berhasil dibuka');
     })
     .withFailureHandler(err=>{
@@ -1469,4 +1482,93 @@ function loadRiwayatNilai_(){
 /* ===================================================
    FULL POLISH MOBILE UX – JS
    =================================================== */
+
+/* ===== KALENDER HARI TIDAK EFEKTIF BELAJAR (menu Setting, admin) =====
+   Versi admin dari panel yang sama di SuperAdmin (Kalender.js) — server-nya
+   sudah otomatis mempersempit ke kode_sekolah akun yang login (lihat
+   catatan scoping di Kalender.js), jadi cukup panggil endpoint yang sama
+   dengan ID elemen versi Setting ini. ===== */
+function loadHariLiburPanelSetting_() {
+  var el = document.getElementById('hariLiburListBoxSetting');
+  if (!el) return;
+  el.innerHTML = '<p class="muted" id="hariLiburSettingLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:60px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('hariLiburSettingLoadingText'), '⏳ Memuat daftar...');
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      stopTimer();
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="alert-banner info">Belum ada hari tidak efektif belajar tersimpan. Tambah manual lewat form di atas.</div>';
+        return;
+      }
+      var todayISO = new Date().toISOString().slice(0, 10);
+      var html = '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Sumber</th><th>Aksi</th></tr></thead><tbody>';
+      rows.forEach(function(r) {
+        var isPast = r.tanggal < todayISO;
+        var sumberBadge = r.sumber === 'nasional'
+          ? '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600">🇮🇩 Nasional</span>'
+          : '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600">🏫 Sekolah</span>';
+        html += '<tr style="' + (isPast ? 'opacity:.5' : '') + '">' +
+          '<td style="font-size:12px;white-space:nowrap">' + _escSetting_(r.tanggal) + '</td>' +
+          '<td style="font-size:13px">' + _escSetting_(r.keterangan) + '</td>' +
+          '<td>' + sumberBadge + '</td>' +
+          '<td><button class="ghost" onclick="deleteHariLiburUISetting_(\'' + _escSetting_(r.tanggal) + '\')" style="font-size:12px;color:#dc2626">🗑️</button></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      stopTimer();
+      el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
+    })
+    .getHariLiburList();
+}
+
+function addHariLiburManualUISetting_() {
+  var dariInput   = document.getElementById('hariLiburDariInputSetting');
+  var sampaiInput = document.getElementById('hariLiburSampaiInputSetting');
+  var ketInput    = document.getElementById('hariLiburKeteranganInputSetting');
+  var dari   = dariInput   ? dariInput.value   : '';
+  var sampai = sampaiInput ? sampaiInput.value : '';
+  var ket    = ketInput    ? ketInput.value.trim() : '';
+  if (!dari)   { alert('Pilih Dari Tanggal terlebih dahulu'); return; }
+  if (!sampai) { alert('Pilih Sampai Tanggal terlebih dahulu (isi sama dengan Dari Tanggal kalau cuma 1 hari)'); return; }
+  if (!ket)    { alert('Isi keterangan terlebih dahulu'); return; }
+
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (typeof endProgress === 'function') endProgress();
+      var jumlah = res && res.jumlah || 1;
+      if (typeof showToast === 'function') showToast('✅ ' + jumlah + ' hari tidak efektif belajar disimpan', 'success');
+      if (dariInput)   dariInput.value   = '';
+      if (sampaiInput) sampaiInput.value = '';
+      if (ketInput)    ketInput.value    = '';
+      loadHariLiburPanelSetting_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      else alert('❌ ' + (err.message || 'Gagal'));
+    })
+    .addHariLiburRangeManual(dari, sampai, ket);
+}
+
+function deleteHariLiburUISetting_(tanggal) {
+  if (!confirm('Hapus hari tidak efektif belajar tanggal ' + tanggal + '?')) return;
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('🗑️ Hari tidak efektif belajar dihapus', 'success');
+      loadHariLiburPanelSetting_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
+      else alert('❌ ' + (err.message || 'Gagal'));
+    })
+    .deleteHariLibur(tanggal);
+}
 </script>

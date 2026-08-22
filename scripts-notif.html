@@ -11,14 +11,18 @@ var _notifList      = [];
 function loadNotifGuru() {
   var listEl = document.getElementById('notifGuruList');
   if (!listEl) return;
-  listEl.innerHTML = '<div class="skeleton" style="height:80px;border-radius:12px;margin-bottom:8px"></div>'.repeat(3);
+  listEl.innerHTML = '<p class="muted" id="notifGuruLoadingText" style="font-size:12px;margin-bottom:6px"></p>' +
+    '<div class="skeleton" style="height:80px;border-radius:12px;margin-bottom:8px"></div>'.repeat(3);
+  var stopTimer = startElapsedNotice_(document.getElementById('notifGuruLoadingText'), '⏳ Memuat notifikasi...');
 
   google.script.run
     .withSuccessHandler(function(items) {
+      stopTimer();
       _notifList = items || [];
       _renderNotifGuru_(items);
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       if (listEl) listEl.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
     })
     .getNotifList();
@@ -70,12 +74,15 @@ function readNotif(notifId) {
 }
 
 function readAllNotif() {
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       loadNotifGuru();
       _updateNotifBadge_();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .markAllNotifRead();
@@ -125,15 +132,18 @@ function submitBroadcast() {
 
   var btn = document.getElementById('broadSubmitBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Mengirim...'; }
+  if (typeof startProgress === 'function') startProgress();
 
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       closeBroadcastModal();
       if (typeof showToast === 'function') showToast('✅ Broadcast terkirim ke semua guru', 'success');
       if (btn) { btn.disabled = false; btn.textContent = '📢 Kirim'; }
       loadSANotifHistory();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
       if (btn) { btn.disabled = false; btn.textContent = '📢 Kirim'; }
     })
@@ -144,10 +154,13 @@ function submitBroadcast() {
 function loadSANotifHistory() {
   var el = document.getElementById('saNotifHistory');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:60px;border-radius:10px;margin-bottom:6px"></div>'.repeat(3);
+  el.innerHTML = '<p class="muted" id="saNotifHistoryLoadingText" style="font-size:12px;margin-bottom:6px"></p>' +
+    '<div class="skeleton" style="height:60px;border-radius:10px;margin-bottom:6px"></div>'.repeat(3);
+  var stopTimer = startElapsedNotice_(document.getElementById('saNotifHistoryLoadingText'), '⏳ Memuat riwayat notifikasi...');
 
   google.script.run
     .withSuccessHandler(function(items) {
+      stopTimer();
       if (!items || items.length === 0) {
         el.innerHTML = '<div class="alert-banner info">📭 Belum ada notifikasi yang dikirim.</div>';
         return;
@@ -167,6 +180,7 @@ function loadSANotifHistory() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
     })
     .getAllNotifForSA();
@@ -174,12 +188,15 @@ function loadSANotifHistory() {
 
 function deleteNotifSA(notifId) {
   if (!confirm('Hapus notifikasi ini?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('✅ Notif dihapus', 'success');
       loadSANotifHistory();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .deleteNotif(notifId);

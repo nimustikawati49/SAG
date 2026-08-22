@@ -326,13 +326,16 @@ function loadRekapAbsensiSekolah() {
 
   var section = document.getElementById('kepsekAbsensiSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:200px;border-radius:14px;margin-top:8px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekAbsensiLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:200px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekAbsensiLoadingText'), '⏳ Memuat rekap absensi...');
 
   google.script.run
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ ' + (err && err.message || 'Gagal memuat rekap absensi') + '</div>';
     })
     .withSuccessHandler(function(rows) {
+      stopTimer();
       _renderAbsensiSekolah_(rows, section);
     })
     .getRekapAbsensiSekolah(dari, sampai);
@@ -382,13 +385,16 @@ var _kepsekChartAbsen  = null;
 function loadKepsekCharts() {
   var section = document.getElementById('kepsekChartsSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:260px;border-radius:14px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekChartsLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:260px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekChartsLoadingText'), '⏳ Memuat chart...');
 
   google.script.run
     .withSuccessHandler(function(d) {
+      stopTimer();
       _renderKepsekCharts_(d, section);
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ Gagal memuat chart: ' + _esc(err.message || '') + '</div>';
     })
     .getJurnalChartData();
@@ -397,9 +403,11 @@ function loadKepsekCharts() {
 function loadKelasFavoritSekolah() {
   var section = document.getElementById('kepsekKelasFavoritSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:140px;border-radius:14px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekKelasFavoritLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:140px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekKelasFavoritLoadingText'), '⏳ Memuat kelas favorit...');
   google.script.run
     .withSuccessHandler(function(data) {
+      stopTimer();
       var rows = (data && data.kelasFavorit) || [];
       if (!rows.length) {
         section.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada data kelas favorit.</div>';
@@ -421,6 +429,7 @@ function loadKelasFavoritSekolah() {
       section.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal memuat kelas favorit') + '</div>';
     })
     .getRekapSekolah();
@@ -429,9 +438,11 @@ function loadKelasFavoritSekolah() {
 function loadKetuntasanSekolah() {
   var section = document.getElementById('kepsekKetuntasanSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekKetuntasanLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:180px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekKetuntasanLoadingText'), '⏳ Memuat ketuntasan...');
   google.script.run
     .withSuccessHandler(function(data) {
+      stopTimer();
       var rows = (data && data.kelasKetuntasan) || [];
       if (!rows.length) {
         section.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada data ketuntasan kelas.</div>';
@@ -457,6 +468,7 @@ function loadKetuntasanSekolah() {
       section.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal memuat ketuntasan') + '</div>';
     })
     .getRekapSekolah();
@@ -566,15 +578,18 @@ function _renderKepsekCharts_(d, section) {
 function loadEarlyWarning() {
   var section = document.getElementById('kepsekEarlyWarningSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:120px;border-radius:14px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekEwLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:120px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekEwLoadingText'), '⏳ Memuat early warning...');
 
   var threshold = parseInt((document.getElementById('ewThreshold') || {}).value || '75', 10);
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       _renderEarlyWarning_(rows, section, threshold);
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal') + '</div>';
     })
     .getEarlyWarningSiswa(threshold);
@@ -636,13 +651,16 @@ function _ewControls_(threshold) {
 function loadRaportAbsensi() {
   var section = document.getElementById('kepsekRaportSection');
   if (!section) return;
-  section.innerHTML = '<div class="skeleton" style="height:200px;border-radius:14px"></div>';
+  section.innerHTML = '<p class="muted" id="kepsekRaportLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:200px;border-radius:14px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('kepsekRaportLoadingText'), '⏳ Memuat raport absensi...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       _renderRaportAbsensi_(rows, section);
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       section.innerHTML = '<div class="alert-banner error">❌ ' + _esc(err.message || 'Gagal') + '</div>';
     })
     .getRaportAbsensiSiswa();

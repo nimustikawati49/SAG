@@ -66,10 +66,12 @@ function _badgeStatusSA_(status, extra) {
 function loadCentralRegistryOverview() {
   var el = document.getElementById('centralRegistryOverview');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:72px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:72px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="centralRegistryLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:72px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:72px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('centralRegistryLoadingText'), '⏳ Memuat registry hub...');
 
   google.script.run
     .withSuccessHandler(function(data) {
+      stopTimer();
       if (!el) return;
       var counts = (data && data.counts) || {};
       var rel = (data && data.latestRelease) || null;
@@ -96,6 +98,7 @@ function loadCentralRegistryOverview() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat registry hub') + '</div>';
     })
     .getCentralRegistryOverview();
@@ -148,14 +151,16 @@ function loadResourceMapEntries() {
   var el = document.getElementById('resourceMapList');
   var info = document.getElementById('resourceMapInfo');
   if (el) el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px;margin-bottom:6px"></div>'.repeat(2);
-  if (info) info.textContent = '⏳ Memuat resource map...';
+  var stopTimer = startElapsedNotice_(info, '⏳ Memuat resource map...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       _renderResourceMapEntries_(rows || []);
       if (info) info.textContent = 'Total resource map: ' + ((rows && rows.length) || 0);
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       if (el) el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal') + '</div>';
       if (info) info.textContent = '❌ Gagal memuat resource map';
     })
@@ -268,13 +273,16 @@ function submitResourceMap() {
 
 function deleteResourceMapUI(id) {
   if (!confirm('Hapus resource map ini?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('✅ Resource map dihapus', 'success');
       loadResourceMapEntries();
       loadCentralRegistryOverview();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .deleteResourceMapEntry(id);
@@ -283,10 +291,12 @@ function deleteResourceMapUI(id) {
 function loadCentralSummarySync() {
   var el = document.getElementById('centralSummarySyncBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:80px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="centralSummarySyncLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:80px;border-radius:10px;margin-bottom:8px"></div><div class="skeleton" style="height:80px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('centralSummarySyncLoadingText'), '⏳ Memuat summary sync...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       if (!rows || rows.length === 0) {
         el.innerHTML = '<div class="alert-banner info">Belum ada summary sync guru.</div>';
         return;
@@ -310,6 +320,7 @@ function loadCentralSummarySync() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat summary sync') + '</div>';
     })
     .getCentralSummarySyncRows();
@@ -323,10 +334,12 @@ function loadUpdatePipeline() {
 function loadAppReleases() {
   var el = document.getElementById('appReleaseBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="appReleaseLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('appReleaseLoadingText'), '⏳ Memuat release...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       window._appReleaseRows = rows || [];
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="alert-banner info">Belum ada release tercatat.</div>';
@@ -351,6 +364,7 @@ function loadAppReleases() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat release') + '</div>';
     })
     .getAppReleases();
@@ -431,10 +445,12 @@ function submitAppRelease() {
 function loadUpdateLogRows() {
   var el = document.getElementById('updateLogBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="updateLogLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('updateLogLoadingText'), '⏳ Memuat update log...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="alert-banner info">Belum ada histori update/approval.</div>';
         return;
@@ -458,6 +474,7 @@ function loadUpdateLogRows() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat update log') + '</div>';
     })
     .getUpdateLogRows('');
@@ -640,10 +657,12 @@ function loadDriveStorageInfo(){
 function loadCentralDataSizeReport(){
   var el = document.getElementById('dataSizeReportBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:80px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="dataSizeReportLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:80px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('dataSizeReportLoadingText'), '⏳ Memuat laporan ukuran data...');
 
   google.script.run
     .withSuccessHandler(function(rows){
+      stopTimer();
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="alert-banner info">Belum ada sheet dengan data.</div>';
         return;
@@ -664,6 +683,7 @@ function loadCentralDataSizeReport(){
       el.innerHTML = html;
     })
     .withFailureHandler(function(err){
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat laporan') + '</div>';
     })
     .getCentralDataSizeReport();
@@ -671,8 +691,10 @@ function loadCentralDataSizeReport(){
 
 function cleanupUnusedLegacySheetsUI(){
   if (!confirm('Hapus sheet yang tidak dipakai lagi?\n\nYang akan dihapus hanya sheet central yang BUKAN bagian aktif aplikasi dan kosong/header-only, plus duplikat nama jadwal yang kosong. Sheet yang masih berisi data akan dilewati.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(res){
+      if (typeof endProgress === 'function') endProgress();
       var deleted = (res && res.deleted) || [];
       var skipped = (res && res.skipped) || [];
       if(typeof showToast === 'function'){
@@ -682,6 +704,7 @@ function cleanupUnusedLegacySheetsUI(){
       loadCentralRegistryOverview();
     })
     .withFailureHandler(function(err){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal cleanup sheet'), 'error', 7000);
     })
     .cleanupUnusedLegacySheets();
@@ -738,27 +761,48 @@ function cleanupUnusedLegacySheetsAllGuruUI(){
 // CALL BACKEND SUPERADMIN //
 function setUserRole(email,role){
   if(!confirm(`Ubah role ${email} menjadi ${role}?`)) return;
-  google.script.run.withSuccessHandler(()=>{
-    loadTrialActivationPanel();
-  }).updateUser(email,{role});
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(()=>{
+      if (typeof endProgress === 'function') endProgress();
+      loadTrialActivationPanel();
+    })
+    .withFailureHandler((err)=>{
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal ubah role'), 'error');
+      else alert('❌ Gagal ubah role: ' + err.message);
+    })
+    .updateUser(email,{role});
 }
 
 function deleteUserUI(email){
   if(!confirm(`⚠️ Hapus user ${email}?\nTindakan ini permanen.`)) return;
-  google.script.run.withSuccessHandler(()=>{
-    loadTrialActivationPanel();
-  }).deleteUser(email);
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(()=>{
+      if (typeof endProgress === 'function') endProgress();
+      loadTrialActivationPanel();
+    })
+    .withFailureHandler((err)=>{
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal hapus user'), 'error');
+      else alert('❌ Gagal hapus user: ' + err.message);
+    })
+    .deleteUser(email);
 }
 
 function deleteInactiveUsersUI(){
   if(!confirm('⚠️ Hapus SEMUA user berstatus Tidak Aktif?\nTindakan ini permanen dan tidak bisa dibatalkan. Akun SuperAdmin dan akun Anda sendiri tidak akan ikut terhapus.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(res){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast === 'function') showToast('✅ ' + res.deleted + ' user tidak aktif dihapus', 'success');
       else alert(res.deleted + ' user tidak aktif dihapus');
       loadTrialActivationPanel();
     })
     .withFailureHandler(function(err){
+      if (typeof endProgress === 'function') endProgress();
       alert('❌ Gagal hapus user tidak aktif: ' + err.message);
     })
     .deleteInactiveUsers();
@@ -925,8 +969,10 @@ function loadArsipFolderConfig(){
 function saveArsipFolderConfig(){
   var input  = (document.getElementById('arsipFolderInput') || {}).value || '';
   var warnMb = (document.getElementById('arsipWarnMbInput') || {}).value || '';
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(res){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast==='function'){
         if(res.folderId) showToast('✅ Folder arsip disimpan: ' + _escSA(res.folderName),'success');
         else showToast('✅ Threshold warning diperbarui','success');
@@ -934,6 +980,7 @@ function saveArsipFolderConfig(){
       loadArsipFolderConfig();
     })
     .withFailureHandler(function(err){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
     })
     .setArsipFolderConfig(input.trim(), warnMb ? Number(warnMb) : null);
@@ -941,14 +988,17 @@ function saveArsipFolderConfig(){
 
 function resetArsipFolderConfig(){
   if(!confirm('Reset ke folder default JURNAL_ARSIP?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(){
+      if (typeof endProgress === 'function') endProgress();
       var inp = document.getElementById('arsipFolderInput');
       if(inp) inp.value = '';
       if(typeof showToast==='function') showToast('✅ Folder arsip direset ke default','success');
       loadArsipFolderConfig();
     })
     .withFailureHandler(function(err){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
     })
     .setArsipFolderConfig('', null);
@@ -981,12 +1031,15 @@ function _doForwardArsip_(){
 }
 function _confirmDeleteArsip_(fileId, nama){
   if(!confirm('Hapus file arsip "' + nama + '" dari Drive?\n(File akan dipindah ke Trash, bisa dipulihkan dalam 30 hari)')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast==='function') showToast('🗑️ File dipindah ke Trash Drive','success');
       loadArsipDriveUsage();
     })
     .withFailureHandler(function(err){
+      if (typeof endProgress === 'function') endProgress();
       if(typeof showToast==='function') showToast('❌ ' + (err.message||'Gagal'),'error');
     })
     .deleteArsipFromDrive(fileId);
@@ -1128,11 +1181,14 @@ function sendLicenseEmailUI(email){
 
   // 🔐 Jika backend sudah ada fungsi
   if(google.script.run.sendLicenseEmail){
+    if (typeof startProgress === 'function') startProgress();
     google.script.run
       .withSuccessHandler(()=>{
+        if (typeof endProgress === 'function') endProgress();
         alert('📧 Email berhasil dikirim');
       })
       .withFailureHandler(err=>{
+        if (typeof endProgress === 'function') endProgress();
         alert('❌ Gagal kirim email:\n' + err.message);
       })
       .sendLicenseEmail(email);
@@ -1171,10 +1227,12 @@ function loadTrialActivationPanel() {
   var el = document.getElementById('trialActivationList');
   var badge = document.getElementById('trialActivationCount');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="trialActivationLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:70px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('trialActivationLoadingText'), '⏳ Memuat daftar guru...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       var trialCount = (rows || []).filter(function(r) { return r.status === 'trial'; }).length;
       if (badge) badge.textContent = trialCount;
 
@@ -1195,7 +1253,12 @@ function loadTrialActivationPanel() {
         // ada tombol Aktifkan/Nonaktifkan/ganti role/Hapus yang berisiko
         // menonaktifkan atau menghapus akun yang sedang dipakai login —
         // cuma badge status + Drive (berguna kalau SuperAdmin juga
-        // mengajar) + Riwayat (aman, read-only).
+        // mengajar) + Riwayat (aman, read-only). Kode/Nama Sekolah TETAP
+        // bisa diisi (sama seperti guru/kepsek lain) — supaya SuperAdmin
+        // juga "terdata" di satu sekolah, jadi Rekap Sekolah/Rekap Guru
+        // Wali miliknya sendiri bisa terisi (lihat _kepsekActiveGuruEmails_
+        // di Kepsek.js yang mempersempit ke kode_sekolah akun yang login,
+        // termasuk untuk SuperAdmin).
         if (r.isSelfSA) {
           var saStatusHtml = '<span style="background:#ede9fe;color:#5b21b6;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600">👑 SuperAdmin (Lifetime)</span>';
           var saDriveHtml = '<span class="muted" style="font-size:11px">–</span>';
@@ -1204,10 +1267,18 @@ function loadTrialActivationPanel() {
           } else if (r.drive_self_owned === false) {
             saDriveHtml = '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600" title="Database SuperAdmin masih di Drive sendiri (default), belum pindah lewat fitur connect">⚠️ Drive SA</span>';
           }
+          var saKodeSekolahHtml =
+            '<div style="display:flex;gap:4px;align-items:center">' +
+              '<input type="text" list="kodeSekolahDatalist" value="' + _escSA(r.kode_sekolah || '') + '" ' +
+                'placeholder="Belum diisi" id="kodeSekolah_' + _escSA(r.email).replace(/[^a-z0-9]/gi,'_') + '" ' +
+                'style="width:120px;font-size:12px;padding:4px 6px">' +
+              '<button class="ghost" style="padding:4px 8px;font-size:11px" ' +
+                'onclick="saveKodeSekolahUI(\'' + _escSA(r.email) + '\')" title="Simpan sekolah — supaya Rekap Sekolah/Rekap Guru Wali Anda sendiri ikut terisi">💾</button>' +
+            '</div>';
           html += '<tr>' +
             '<td style="font-size:13px"><b>' + _escSA(r.email) + '</b></td>' +
             '<td style="font-size:12px">superadmin</td>' +
-            '<td class="muted" style="font-size:12px">–</td>' +
+            '<td>' + saKodeSekolahHtml + '</td>' +
             '<td style="font-size:12px">' + _escSA(r.dibuat) + '</td>' +
             '<td>' + saStatusHtml + '</td>' +
             '<td>' + saDriveHtml + '</td>' +
@@ -1277,6 +1348,7 @@ function loadTrialActivationPanel() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar guru') + '</div>';
     })
     .getGuruActivationList();
@@ -1295,12 +1367,15 @@ function saveKodeSekolahUI(email) {
   if (!input) return;
   var kode = input.value.trim();
 
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('✅ Sekolah untuk ' + email + ' tersimpan', 'success');
       loadTrialActivationPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menyimpan'), 'error');
     })
     .updateUserSekolah(email, kode);
@@ -1364,12 +1439,15 @@ function _renderKodeSekolahDatalist_(rows) {
 
 function approveTrialAccountUI(email) {
   if (!confirm('Aktifkan penuh akun ' + email + '?\nData yang sudah dibuat guru ini (jurnal/siswa/nilai/dll) TIDAK akan dihapus atau dipindah — hanya status akunnya yang berubah jadi aktif permanen.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('✅ Akun ' + email + ' berhasil diaktifkan penuh', 'success');
       loadTrialActivationPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .approveTrialAccount(email);
@@ -1377,12 +1455,15 @@ function approveTrialAccountUI(email) {
 
 function deactivateGuruUI(email) {
   if (!confirm('Nonaktifkan akun ' + email + '?\nGuru ini tidak akan bisa mengakses aplikasi sampai diaktifkan kembali. Data yang sudah dibuat TIDAK dihapus.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('⛔ Akun ' + email + ' dinonaktifkan', 'warning');
       loadTrialActivationPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .updateUser(email, { status: 'inactive' });
@@ -1390,12 +1471,15 @@ function deactivateGuruUI(email) {
 
 function activateGuruLifetimeUI(email) {
   if (!confirm('Aktifkan akun ' + email + ' jadi permanen (lifetime)?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('♾️ Akun ' + email + ' diaktifkan permanen', 'success');
       loadTrialActivationPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .updateUser(email, { status: 'active' });
@@ -1409,10 +1493,12 @@ function activateGuruLifetimeUI(email) {
 function loadMigratedOldSpreadsheetsPanel() {
   var el = document.getElementById('migratedOldSpreadsheetsList');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:60px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="migratedOldSpreadsheetsLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:60px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('migratedOldSpreadsheetsLoadingText'), '⏳ Memuat daftar spreadsheet lama...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="alert-banner info">✅ Kosong — normal. Migrasi yang berhasil terverifikasi sudah otomatis dibersihkan sendiri (masuk Trash Drive SuperAdmin), tidak butuh tindakan apa pun di sini.</div>';
         return;
@@ -1433,6 +1519,7 @@ function loadMigratedOldSpreadsheetsPanel() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
     })
     .getMigratedOldSpreadsheets();
@@ -1440,12 +1527,15 @@ function loadMigratedOldSpreadsheetsPanel() {
 
 function trashOldMigratedSpreadsheetUI(resourceMapId, emailGuru) {
   if (!confirm('Pindahkan spreadsheet lama milik ' + emailGuru + ' ke Trash?\n\nPastikan sudah dicek datanya benar-benar aman di spreadsheet baru guru tsb. Masih bisa dipulihkan dari Trash Drive SuperAdmin kalau ternyata keliru.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('🗑️ Spreadsheet lama ' + emailGuru + ' dipindah ke Trash', 'success');
       loadMigratedOldSpreadsheetsPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .trashOldMigratedSpreadsheet(resourceMapId);
@@ -1459,10 +1549,12 @@ function trashOldMigratedSpreadsheetUI(resourceMapId, emailGuru) {
 function loadMasterRosterCleanupPanel() {
   var el = document.getElementById('masterRosterCleanupBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:50px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="masterRosterCleanupLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:50px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('masterRosterCleanupLoadingText'), '⏳ Memuat status roster...');
 
   google.script.run
     .withSuccessHandler(function(status) {
+      stopTimer();
       if (!status) { el.innerHTML = '<div class="alert-banner error">Gagal memuat status.</div>'; return; }
 
       var rosterRows = status.roster.map(function(r) {
@@ -1481,6 +1573,7 @@ function loadMasterRosterCleanupPanel() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat status') + '</div>';
     })
     .getCentralMasterRosterCleanupStatus();
@@ -1488,8 +1581,10 @@ function loadMasterRosterCleanupPanel() {
 
 function clearRedundantCentralMasterRosterUI() {
   if (!confirm('Bersihkan MasterSiswa/RiwayatKelas/MasterTahunPelajaran di CENTRAL sekarang?\n\nSemua baris datanya akan dihapus (header tetap ada). Pastikan sudah yakin tidak ada guru yang masih bergantung padanya.')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function(res) {
+      if (typeof endProgress === 'function') endProgress();
       var msg = res && res.cleared && res.cleared.length
         ? '🧹 Dibersihkan: ' + res.cleared.join(', ')
         : '🧹 Tidak ada yang perlu dibersihkan (sudah kosong).';
@@ -1497,6 +1592,7 @@ function clearRedundantCentralMasterRosterUI() {
       loadMasterRosterCleanupPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .clearRedundantCentralMasterRoster();
@@ -1504,18 +1600,20 @@ function clearRedundantCentralMasterRosterUI() {
 
 /**
  * loadHariLiburPanel()
- * Panel "📅 Kalender Hari Libur" — lihat komentar di layout.html dan
- * Kalender.js (getHariLiburList).
+ * Panel "📅 Kalender Hari Tidak Efektif Belajar" — lihat komentar di
+ * layout.html dan Kalender.js (getHariLiburList).
  */
 function loadHariLiburPanel() {
   var el = document.getElementById('hariLiburListBox');
   if (!el) return;
-  el.innerHTML = '<div class="skeleton" style="height:60px;border-radius:10px"></div>';
+  el.innerHTML = '<p class="muted" id="hariLiburLoadingText" style="font-size:12px;margin-bottom:6px"></p><div class="skeleton" style="height:60px;border-radius:10px"></div>';
+  var stopTimer = startElapsedNotice_(document.getElementById('hariLiburLoadingText'), '⏳ Memuat daftar...');
 
   google.script.run
     .withSuccessHandler(function(rows) {
+      stopTimer();
       if (!rows || !rows.length) {
-        el.innerHTML = '<div class="alert-banner info">Belum ada hari libur tersimpan. Tambah manual lewat form di atas.</div>';
+        el.innerHTML = '<div class="alert-banner info">Belum ada hari tidak efektif belajar tersimpan. Tambah manual lewat form di atas.</div>';
         return;
       }
       var todayISO = new Date().toISOString().slice(0, 10);
@@ -1536,40 +1634,52 @@ function loadHariLiburPanel() {
       el.innerHTML = html;
     })
     .withFailureHandler(function(err) {
+      stopTimer();
       el.innerHTML = '<div class="alert-banner error">❌ ' + (err.message || 'Gagal memuat daftar') + '</div>';
     })
     .getHariLiburList();
 }
 
 function addHariLiburManualUI() {
-  var tglInput = document.getElementById('hariLiburTanggalInput');
-  var ketInput = document.getElementById('hariLiburKeteranganInput');
-  var tgl = tglInput ? tglInput.value : '';
-  var ket = ketInput ? ketInput.value.trim() : '';
-  if (!tgl) { alert('Pilih tanggal terlebih dahulu'); return; }
-  if (!ket) { alert('Isi keterangan terlebih dahulu'); return; }
+  var dariInput   = document.getElementById('hariLiburDariInput');
+  var sampaiInput = document.getElementById('hariLiburSampaiInput');
+  var ketInput    = document.getElementById('hariLiburKeteranganInput');
+  var dari   = dariInput   ? dariInput.value   : '';
+  var sampai = sampaiInput ? sampaiInput.value : '';
+  var ket    = ketInput    ? ketInput.value.trim() : '';
+  if (!dari)   { alert('Pilih Dari Tanggal terlebih dahulu'); return; }
+  if (!sampai) { alert('Pilih Sampai Tanggal terlebih dahulu (isi sama dengan Dari Tanggal kalau cuma 1 hari)'); return; }
+  if (!ket)    { alert('Isi keterangan terlebih dahulu'); return; }
 
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
-    .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('✅ Hari libur disimpan', 'success');
-      if (tglInput) tglInput.value = '';
-      if (ketInput) ketInput.value = '';
+    .withSuccessHandler(function(res) {
+      if (typeof endProgress === 'function') endProgress();
+      var jumlah = res && res.jumlah || 1;
+      if (typeof showToast === 'function') showToast('✅ ' + jumlah + ' hari tidak efektif belajar disimpan', 'success');
+      if (dariInput)   dariInput.value   = '';
+      if (sampaiInput) sampaiInput.value = '';
+      if (ketInput)    ketInput.value    = '';
       loadHariLiburPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
-    .addHariLiburManual(tgl, ket);
+    .addHariLiburRangeManual(dari, sampai, ket);
 }
 
 function deleteHariLiburUI(tanggal) {
-  if (!confirm('Hapus hari libur tanggal ' + tanggal + '?')) return;
+  if (!confirm('Hapus hari tidak efektif belajar tanggal ' + tanggal + '?')) return;
+  if (typeof startProgress === 'function') startProgress();
   google.script.run
     .withSuccessHandler(function() {
-      if (typeof showToast === 'function') showToast('🗑️ Hari libur dihapus', 'success');
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('🗑️ Hari tidak efektif belajar dihapus', 'success');
       loadHariLiburPanel();
     })
     .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal'), 'error');
     })
     .deleteHariLibur(tanggal);
