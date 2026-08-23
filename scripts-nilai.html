@@ -446,7 +446,22 @@ function _renderMonitoringNilaiTable_(rows, semester) {
       : '<td style="text-align:center">' + fmt(val) + '</td>';
   };
 
-  let html = '<div class="table-wrap"><table><thead><tr>' +
+  // Ringkasan di atas tabel: berapa siswa yang belum punya nilai per
+  // komponen (relatif — cuma dihitung utk komponen yang SUDAH diisi
+  // sebagian besar teman sekelasnya, sama seperti logika ⚠️ di tiap sel).
+  let summaryHtml = '';
+  const missingList = checkCols
+    .filter(k => hasAny[k])
+    .map(k => ({ label: colLabel[k], jumlah: rows.filter(r => isEmpty_(r[k])).length }))
+    .filter(m => m.jumlah > 0);
+  if (missingList.length) {
+    summaryHtml = '<div style="background:#fef3c7;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;line-height:1.7">' +
+      '<b>⚠️ Ringkasan kelengkapan nilai:</b> ' +
+      missingList.map(m => esc(m.label) + ' <b>' + m.jumlah + ' siswa</b> belum').join(', ') +
+      '.</div>';
+  }
+
+  let html = summaryHtml + '<div class="table-wrap"><table><thead><tr>' +
     '<th>No</th><th>NIS</th><th class="left">Nama Siswa</th>' +
     '<th>Tugas Mandiri</th><th>Tugas Kelompok</th>' +
     '<th>UH1</th><th>UH2</th><th>UH3</th>' +
