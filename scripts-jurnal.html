@@ -508,18 +508,27 @@ function salinJurnalDariKelasLain_(){
   if(typeof showToast === 'function') showToast('📋 Disalin dari ' + d.kelas + ' — boleh diedit sebelum simpan', 'success', 3000);
 }
 /* ================= RIWAYAT ================= */
+let _riwayatFilterKelasLoading_ = false;
 function loadRiwayatFilterKelas(){
   const sel = document.getElementById('riwayatFilterKelas');
-  if(!sel || sel.options.length > 1) return;
-  google.script.run.withSuccessHandler(d=>{
-    d.forEach(k=> sel.innerHTML += '<option>' + k + '</option>');
-    // ✅ Restore persisted kelas after dropdown populated
-    const restoreVal = sel.getAttribute('data-restore');
-    if(restoreVal){
-      sel.value = restoreVal;
-      sel.removeAttribute('data-restore');
-    }
-  }).getKelas();
+  if(!sel || _riwayatFilterKelasLoading_) return;
+  // Tandai "sedang memuat" sebelum panggilan async mulai, dan selalu
+  // GANTI isi dropdown (bukan +=) di respons — supaya tab ini dibuka
+  // dua kali cepat berturut-turut tidak menghasilkan opsi dobel.
+  _riwayatFilterKelasLoading_ = true;
+  google.script.run
+    .withSuccessHandler(d=>{
+      _riwayatFilterKelasLoading_ = false;
+      sel.innerHTML = '<option value="">-- Semua --</option>' + (d || []).map(k => '<option>' + k + '</option>').join('');
+      // ✅ Restore persisted kelas after dropdown populated
+      const restoreVal = sel.getAttribute('data-restore');
+      if(restoreVal){
+        sel.value = restoreVal;
+        sel.removeAttribute('data-restore');
+      }
+    })
+    .withFailureHandler(()=>{ _riwayatFilterKelasLoading_ = false; })
+    .getKelas();
 }
 
 function resetRiwayatFilter(){
@@ -1292,6 +1301,7 @@ function _batasBulanTahunAjaran_(tahunPelajaran){
   return { min: m[1] + '-07', max: m[2] + '-06' };
 }
 
+let _laporanKelasLoading_ = false;
 function initLaporanAbsensiKelas(){
   const sel = document.getElementById('laporanKelas');
   const inp = document.getElementById('laporanBulan');
@@ -1302,10 +1312,21 @@ function initLaporanAbsensiKelas(){
     inp.max = batas.max;
   }
 
-  if(!sel || sel.options.length > 1) return;
-  google.script.run.withSuccessHandler(d=>{
-    d.forEach(k=> sel.innerHTML += `<option>${k}</option>`);
-  }).getKelas();
+  // Tandai "sedang memuat" SEBELUM panggilan async dimulai (bukan cuma
+  // cek jumlah <option> setelahnya) — supaya kalau tab ini dibuka dua
+  // kali cepat berturut-turut sebelum respons pertama datang, panggilan
+  // kedua tidak ikut jalan. Hasilnya juga selalu GANTI isi dropdown
+  // (bukan tambah/+=) supaya tidak mungkin dobel walau bagaimanapun.
+  if(sel && !_laporanKelasLoading_){
+    _laporanKelasLoading_ = true;
+    google.script.run
+      .withSuccessHandler(d=>{
+        _laporanKelasLoading_ = false;
+        sel.innerHTML = '<option value="">-- Pilih --</option>' + (d || []).map(k => `<option>${k}</option>`).join('');
+      })
+      .withFailureHandler(()=>{ _laporanKelasLoading_ = false; })
+      .getKelas();
+  }
 
   // Default bulan = bulan sekarang, tapi tetap di dalam rentang tahun ajaran aktif
   if(inp && !inp.value){
