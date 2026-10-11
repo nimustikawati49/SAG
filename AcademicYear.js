@@ -740,9 +740,10 @@ function continueGuruMengajarToPeriod(payload) {
     }
 
     const now = new Date();
-    sourceCombos.forEach(function(c) {
-      sh.appendRow(['GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(), auth.email, toTahun, toSemester, c.kelas, c.mapel, now]);
+    const gmRows = sourceCombos.map(function(c) {
+      return ['GM-' + Utilities.getUuid().slice(0, 8).toUpperCase(), auth.email, toTahun, toSemester, c.kelas, c.mapel, now];
     });
+    sh.getRange(sh.getLastRow() + 1, 1, gmRows.length, 7).setValues(gmRows);
     copiedGM = sourceCombos.length;
   }
 

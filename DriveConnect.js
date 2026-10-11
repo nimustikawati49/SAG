@@ -562,6 +562,7 @@ function trashOldMigratedSpreadsheet(resourceMapId) {
 
     sh.getRange(i + 1, idx.status + 1).setValue('trashed_by_sa');
     sh.getRange(i + 1, idx.updated_at + 1).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
+    if (typeof _resourceMapRowsCache_ !== 'undefined') _resourceMapRowsCache_ = null;
     logAudit('TRASH_OLD_MIGRATED_SPREADSHEET', emailGuru, resourceId);
     return { success: true };
   }

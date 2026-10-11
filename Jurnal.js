@@ -617,14 +617,12 @@ function simpanJurnal(data){
   ]);
 
   if(data.absensi && data.absensi.length){
-    data.absensi.forEach(a=>{
-      absSheet.appendRow([
-        jurnalId,
-        data.kelas,
-        a.nis,
-        a.status
-      ]);
-    });
+    // Satu appendRow() per siswa dulunya bikin satu kelas 30+ siswa =
+    // 30+ panggilan Sheets API terpisah (paling lambat di seluruh proses
+    // simpan jurnal) — sekarang ditulis SEKALIGUS lewat satu setValues().
+    const absRows = data.absensi.map(a => [jurnalId, data.kelas, a.nis, a.status]);
+    const absStartRow = absSheet.getLastRow() + 1;
+    absSheet.getRange(absStartRow, 1, absRows.length, 4).setValues(absRows);
   }
 
   try {
@@ -784,14 +782,9 @@ function updateJurnal(data){
       }
     }
 
-    data.absensi.forEach(a => {
-      shAbs.appendRow([
-        data.jurnalId,
-        data.kelas,
-        a.nis,
-        a.status
-      ]);
-    });
+    const absRows = data.absensi.map(a => [data.jurnalId, data.kelas, a.nis, a.status]);
+    const absStartRow = shAbs.getLastRow() + 1;
+    shAbs.getRange(absStartRow, 1, absRows.length, 4).setValues(absRows);
   }
 
   return { status:true, fotoGagal: fotoGagal };

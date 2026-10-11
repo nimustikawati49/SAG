@@ -345,10 +345,18 @@ function continueJadwalSemesterToPeriod_(email, fromTahun, fromSemester, toTahun
   const sh = ensureJadwalSheet_();
   const tIdx = ensureJadwalSchemaAcademic_();
   const now = new Date();
-  source.forEach(function(j){
-    sh.appendRow([targetEmail, toSemester, j.hari, j.kelas, j.mapel, j.jam_mulai, j.jam_selesai, now]);
-    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(toTahun);
+  // Dulu appendRow() + setValue() TERPISAH per baris (2 panggilan Sheets
+  // API per entri jadwal) — sekarang satu setValues() untuk semua baris
+  // sekaligus, termasuk kolom tahun_pelajaran-nya.
+  const numCols = tIdx + 1;
+  const rows = source.map(function(j){
+    const row = [targetEmail, toSemester, j.hari, j.kelas, j.mapel, j.jam_mulai, j.jam_selesai, now];
+    while (row.length < numCols) row.push('');
+    row[tIdx] = toTahun;
+    return row;
   });
+  const startRow = sh.getLastRow() + 1;
+  sh.getRange(startRow, 1, rows.length, numCols).setValues(rows);
   return source.length;
 }
 
@@ -583,19 +591,23 @@ function saveBulkJadwalSemester(list){
     }
   }
 
-  list.forEach(item=>{
-    sh.appendRow([
-      email,
-      semesterAktif,
-      item.hari,
-      item.kelas,
-      item.mapel || '',
-      normalizeJam_(item.jam_mulai),
-      normalizeJam_(item.jam_selesai),
-      new Date()
-    ]);
-    sh.getRange(sh.getLastRow(), tIdx + 1).setValue(tahunAktif);
-  });
+  // Dulu appendRow() + setValue() terpisah per baris — sekarang satu
+  // setValues() untuk seluruh jadwal sekaligus (bisa 20-40 baris untuk
+  // jadwal satu minggu penuh).
+  {
+    const numColsBulk = tIdx + 1;
+    const bulkRows = list.map(item => {
+      const row = [
+        email, semesterAktif, item.hari, item.kelas, item.mapel || '',
+        normalizeJam_(item.jam_mulai), normalizeJam_(item.jam_selesai), new Date()
+      ];
+      while (row.length < numColsBulk) row.push('');
+      row[tIdx] = tahunAktif;
+      return row;
+    });
+    const bulkStartRow = sh.getLastRow() + 1;
+    sh.getRange(bulkStartRow, 1, bulkRows.length, numColsBulk).setValues(bulkRows);
+  }
 
   logAudit('ADD_BULK_JADWAL', email, 'Total: ' + list.length);
   invalidateCache_('JADWAL_SEMESTER');

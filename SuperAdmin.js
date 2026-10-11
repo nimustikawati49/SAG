@@ -158,13 +158,13 @@ function backupSemesterToSheet(){
   }
 
   const backupTime = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm:ss');
-  filtered.forEach(r => {
+  // Satu semester bisa 60-100+ jurnal — dulu appendRow() satu-satu per
+  // baris, sekarang satu setValues() untuk semuanya sekaligus.
+  const archiveRows = filtered.map(r => {
     const tgl = r[1] ? Utilities.formatDate(new Date(r[1]), tz, 'yyyy-MM-dd') : '-';
-    archiveSh.appendRow([
-      backupTime, email, tahun, semester,
-      tgl, r[2]||'-', r[5]||'-', r[11]||0
-    ]);
+    return [backupTime, email, tahun, semester, tgl, r[2]||'-', r[5]||'-', r[11]||0];
   });
+  archiveSh.getRange(archiveSh.getLastRow() + 1, 1, archiveRows.length, 8).setValues(archiveRows);
 
   logAudit('BACKUP_SEMESTER', email, semester + ' ' + tahun + ' (' + filtered.length + ' jurnal)');
   return { status: true, backed: filtered.length, semester, tahun };
@@ -1414,6 +1414,12 @@ function getResourceMapEntries(deploymentId) {
  */
 function _upsertResourceMapEntry_(obj) {
   obj = obj || {};
+  // _getResourceMapEntryForUser_ (Code.js) memoize baris RESOURCE_MAP per
+  // eksekusi — begitu ada tulis di sini, cache itu WAJIB dikosongkan supaya
+  // pembacaan berikutnya DALAM eksekusi yang sama (mis. getSpreadsheet_()
+  // baca ulang setelah auto-provisioning) melihat baris yang baru ditulis,
+  // bukan data basi dari sebelum tulis ini.
+  if (typeof _resourceMapRowsCache_ !== 'undefined') _resourceMapRowsCache_ = null;
   var sh = _ensureResourceMapSheet_();
   var rows = sh.getDataRange().getValues();
   var idx = _getHeaderIndexMap_(sh);
@@ -1512,6 +1518,7 @@ function deleteResourceMapEntry(id) {
   for (var i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][idx.id] || '').trim() !== String(id || '').trim()) continue;
     sh.deleteRow(i + 1);
+    if (typeof _resourceMapRowsCache_ !== 'undefined') _resourceMapRowsCache_ = null;
     logAudit('DELETE_RESOURCE_MAP', getLoginEmail(), String(id || ''));
     return { success: true };
   }

@@ -50,12 +50,23 @@ const DEFAULT_APP_STORAGE_MODE  = 'per_guru';
 // =========================================================
 const SPREADSHEET_ID = '1fsdShDdm7ULvaiWE0QOTRfspi7U64HrL5ZPUX0l_As4';
 
+// Memoized per EKSEKUSI (bukan CacheService — variabel ini kosong lagi di
+// eksekusi berikutnya, jadi tidak ada risiko data basi lintas request).
+// getCentralSpreadsheet_()/getStorageMode_()/sheet() dipanggil puluhan kali
+// dalam satu request yang sama (tiap simpan/baca data) — sebelum ini tiap
+// panggilan buka ulang spreadsheet & baca ulang Script Properties, padahal
+// hasilnya PASTI sama sepanjang satu eksekusi yang sama.
+let _centralSpreadsheetCache_ = null;
 function getCentralSpreadsheet_() {
+  if (_centralSpreadsheetCache_) return _centralSpreadsheetCache_;
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || SPREADSHEET_ID;
-  return SpreadsheetApp.openById(id);
+  _centralSpreadsheetCache_ = SpreadsheetApp.openById(id);
+  return _centralSpreadsheetCache_;
 }
 
+let _storageModeCache_ = null;
 function getStorageMode_() {
+  if (_storageModeCache_) return _storageModeCache_;
   const props = PropertiesService.getScriptProperties();
   let raw = props.getProperty(APP_STORAGE_MODE_PROPERTY);
   if (!raw) {
@@ -66,7 +77,8 @@ function getStorageMode_() {
     try { props.setProperty(APP_STORAGE_MODE_PROPERTY, raw); } catch (e) {}
   }
   const mode = String(raw).toLowerCase().trim();
-  return mode === 'per_guru' ? 'per_guru' : 'central';
+  _storageModeCache_ = mode === 'per_guru' ? 'per_guru' : 'central';
+  return _storageModeCache_;
 }
 
 function _isCentralOnlySheet_(name) {
@@ -111,14 +123,22 @@ function _ensureOperationalSheetFromCentral_(targetSpreadsheet, name) {
   return localSheet;
 }
 
+// RESOURCE_MAP dibaca berkali-kali per request dgn (email, resourceType)
+// BEDA-beda (data_spreadsheet, dokumentasi_folder, arsip_folder, dst) —
+// isi sheet-nya sendiri sama, jadi baris mentahnya cukup dibaca sekali
+// per eksekusi lalu difilter di memori tiap panggilan.
+let _resourceMapRowsCache_ = null;
 function _getResourceMapEntryForUser_(email, resourceType) {
   try {
     const targetEmail = String(email || '').toLowerCase().trim();
     if (!targetEmail) return null;
-    const sh = _getCentralSheetByName_('RESOURCE_MAP');
-    if (!sh || sh.getLastRow() < 2) return null;
+    if (_resourceMapRowsCache_ === null) {
+      const shRm = _getCentralSheetByName_('RESOURCE_MAP');
+      _resourceMapRowsCache_ = (shRm && shRm.getLastRow() >= 2) ? shRm.getDataRange().getValues() : [];
+    }
+    const rows = _resourceMapRowsCache_;
+    if (!rows.length) return null;
 
-    const rows = sh.getDataRange().getValues();
     const header = rows[0].map(h => String(h || '').toLowerCase().trim());
     const idx = {};
     header.forEach((h, i) => idx[h] = i);
@@ -236,6 +256,12 @@ function getUserNestedFolder_(email, resourceType, fallbackRootName, segments) {
   return folder;
 }
 
+// email -> Spreadsheet object, memoized per EKSEKUSI. sheet(name) memanggil
+// getSpreadsheet_() sekali per nama sheet yang diakses (JURNAL, ABSENSI,
+// SISWA, SETTING, dst) — di mode per_guru, tanpa cache ini tiap panggilan
+// baca ulang RESOURCE_MAP dan buka ulang spreadsheet yang PASTI sama untuk
+// user yang sama sepanjang satu request.
+let _userSpreadsheetCache_ = {};
 function getSpreadsheet_(options) {
   const opts = options || {};
   if (opts.forceCentral) return getCentralSpreadsheet_();
@@ -252,6 +278,8 @@ function getSpreadsheet_(options) {
   }
   if (!targetEmail) return getCentralSpreadsheet_();
 
+  if (_userSpreadsheetCache_[targetEmail]) return _userSpreadsheetCache_[targetEmail];
+
   const userSpreadsheetId = resolveSpreadsheetIdForUser_(targetEmail);
   if (!userSpreadsheetId) {
     try {
@@ -265,7 +293,9 @@ function getSpreadsheet_(options) {
   if (!refreshedSpreadsheetId) return getCentralSpreadsheet_();
 
   try {
-    return SpreadsheetApp.openById(refreshedSpreadsheetId);
+    const ss = SpreadsheetApp.openById(refreshedSpreadsheetId);
+    _userSpreadsheetCache_[targetEmail] = ss;
+    return ss;
   } catch (e) {
     return getCentralSpreadsheet_();
   }
