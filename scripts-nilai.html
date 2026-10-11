@@ -1691,6 +1691,7 @@ function doCetakNilai(mode = 'print') {
     const namaGuru    = settingGuru?.nama_guru    || '___________________';
     const nip         = settingGuru?.nip_guru || settingGuru?.nip || '-';
     const namaSekolah = settingGuru?.nama_sekolah || '';
+    const kopUrl      = settingGuru?.kop_url || '';
     const tanggal     = new Date().toLocaleDateString('id-ID', { year:'numeric', month:'long', day:'numeric' });
 
     if (!rows.length) {
@@ -1699,10 +1700,17 @@ function doCetakNilai(mode = 'print') {
       return;
     }
 
+    // Kop (letterhead gambar, diunggah SuperAdmin per sekolah) dipakai kalau
+    // ada — sudah berisi nama sekolah/logo/alamat jadi tidak perlu baris
+    // nama sekolah teks lagi; fallback ke teks polos kalau belum ada kop.
+    const headerHtml = kopUrl
+      ? '<img class="kop-img" src="' + kopUrl + '" alt="Kop Sekolah">'
+      : (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '');
+
     const tbl = buildNilaiTableHtml_(kelas, rows, { komponen, kkm, katrolTarget });
     const pagesHtml =
       '<div class="page">' +
-        (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '') +
+        headerHtml +
         '<h1>DAFTAR NILAI ' + komponenLabel + ' (KATROL)</h1>' +
         '<table class="info">' +
           '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
@@ -1742,6 +1750,7 @@ function doCetakNilai(mode = 'print') {
       '  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}' +
       'h1{display:none}' +
       '.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}' +
+      '.kop-img{display:block;width:100%;max-height:120px;object-fit:contain;margin-bottom:8px}' +
       '.info{width:100%;border:1px solid #333;border-collapse:collapse}' +
       '.info-title{text-align:center;font-size:14px;font-weight:700;font-variant:small-caps;' +
       '  background:#e8e8f4;border-bottom:1px solid #333;padding:6px;text-transform:uppercase' +

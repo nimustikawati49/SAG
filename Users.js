@@ -34,6 +34,26 @@ function _ensureUsersKodeSekolahColumn_() {
   return sh;
 }
 
+/**
+ * _getKodeSekolahForEmail_(email)
+ * Kolom kode_sekolah di USERS selalu index 4 (lihat pola yang sama di
+ * _kepsekActiveGuruEmails_ Kepsek.js) — dipakai getSetting() (Setting.js)
+ * untuk resolusi otomatis kop cetak sekolah milik akun yang login.
+ */
+function _getKodeSekolahForEmail_(email) {
+  var sh = _ensureUsersKodeSekolahColumn_() || _getCentralSheetByName_('USERS');
+  if (!sh) return '';
+  var target = String(email || '').toLowerCase().trim();
+  if (!target) return '';
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0] || '').toLowerCase().trim() === target) {
+      return String(data[i][4] || '').trim();
+    }
+  }
+  return '';
+}
+
 function _computeTrialInfo_(dibuatDate) {
   var created = dibuatDate ? new Date(dibuatDate) : new Date();
   var elapsedDays = Math.floor((Date.now() - created.getTime()) / 86400000);

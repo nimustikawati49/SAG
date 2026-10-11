@@ -1729,6 +1729,59 @@
 </div>
 <!-- ===== END AKTIVASI AKUN GURU ===== -->
 
+<!-- ===== KOP CETAK PER SEKOLAH ===== -->
+<div class="card" style="margin-top:16px">
+  <h3 style="margin:0 0 6px">🖼️ Kop Cetak Nilai</h3>
+  <p class="muted" style="margin:0 0 12px;font-size:12px">
+    Satu gambar kop (letterhead, desain yang sudah jadi — bukan disusun dari teks) per sekolah —
+    dipakai otomatis saat guru dengan "Kode/Nama Sekolah" yang sama mencetak Daftar Nilai.
+    Isi dulu kolom "Kode/Nama Sekolah" di tabel Aktivasi Akun Guru di atas kalau sekolahnya
+    belum muncul di pilihan bawah. Mengunggah ulang untuk sekolah yang sama akan
+    <b>mengganti</b> kop lama, bukan menambah baris baru.
+  </p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Kode/Nama Sekolah</label>
+      <input type="text" id="kopSekolahInput" list="kodeSekolahDatalist" placeholder="mis. SMP Negeri 6 Mengwi"
+             style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;min-width:240px">
+    </div>
+    <label class="ghost" style="font-size:13px;padding:8px 14px;border-radius:8px;cursor:pointer;display:inline-block">
+      📤 Unggah/Ganti Kop
+      <input type="file" id="kopUploadInput" accept="image/*" style="display:none">
+    </label>
+  </div>
+  <div id="kopSekolahListBox"><div class="muted" style="font-size:12px">⏳ Memuat daftar kop...</div></div>
+</div>
+<!-- ===== END KOP CETAK ===== -->
+
+<!-- ===== KELOLA SISWA PER KELAS (lintas guru) ===== -->
+<div class="card" style="margin-top:16px">
+  <h3 style="margin:0 0 6px">🧑‍🎓 Kelola Siswa per Kelas</h3>
+  <p class="muted" style="margin:0 0 12px;font-size:12px">
+    Tambah atau keluarkan siswa dari daftar kelas seorang guru — untuk siswa yang pindah
+    masuk/keluar di tengah semester. Ini mengedit data SISWA <b>milik guru yang dipilih
+    secara langsung</b> (SAG belum punya roster gabungan antar-guru) — kalau beberapa guru
+    mengajar kelas yang "sama" dengan mapel berbeda, ulangi untuk tiap guru yang perlu diperbarui.
+  </p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Guru</label>
+      <select id="ksGuruSelect" onchange="SA_onGuruSelectedForKelolaSiswa_()" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;min-width:240px">
+        <option value="">⏳ Memuat daftar guru...</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Kelas</label>
+      <input type="text" id="ksKelasInput" list="ksKelasDatalist" placeholder="mis. 7A"
+             style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;width:140px">
+      <datalist id="ksKelasDatalist"></datalist>
+    </div>
+    <button class="ghost" onclick="SA_loadKelolaSiswa_()" style="font-size:13px">🔎 Tampilkan</button>
+  </div>
+  <div id="ksBox"><div class="muted" style="font-size:12px">Pilih guru dan kelas, lalu klik Tampilkan.</div></div>
+</div>
+<!-- ===== END KELOLA SISWA ===== -->
+
 <!-- ===== KALENDER HARI LIBUR ====================================================
      Semua tanggal tidak efektif belajar diinput MANUAL oleh SuperAdmin
      (lihat Kalender.js — sinkronisasi otomatis dari kalender publik

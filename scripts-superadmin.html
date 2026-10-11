@@ -40,6 +40,8 @@ function loadDashboardSuperAdmin(){
       setTimeout(loadSuperAdminEmailUI, 1100);
       setTimeout(loadDriveStorageInfo, 1300);
       setTimeout(loadTrialActivationPanel, 1600);
+      setTimeout(SA_loadKopSekolahList_, 1650);
+      setTimeout(SA_loadGuruDropdownForKelolaSiswa_, 1700);
       setTimeout(loadHariLiburPanel, 1750);
       setTimeout(loadSANotifHistory, 1900);
     setTimeout(loadArsipFolderConfig, 2400);
@@ -1379,6 +1381,219 @@ function saveKodeSekolahUI(email) {
       if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menyimpan'), 'error');
     })
     .updateUserSekolah(email, kode);
+}
+
+/* ===================================================================
+   KOP CETAK PER SEKOLAH
+   =================================================================== */
+function SA_loadKopSekolahList_() {
+  var box = document.getElementById('kopSekolahListBox');
+  if (!box) return;
+  box.innerHTML = '<div class="muted" style="font-size:12px">⏳ Memuat daftar kop...</div>';
+  google.script.run
+    .withSuccessHandler(function(rows) { SA_renderKopSekolahList_(rows || []); })
+    .withFailureHandler(function(err) {
+      box.innerHTML = '<div class="alert-banner error">❌ ' + _escSA(err.message || 'Gagal memuat daftar kop') + '</div>';
+    })
+    .getKopSekolahList();
+}
+
+function SA_renderKopSekolahList_(rows) {
+  var box = document.getElementById('kopSekolahListBox');
+  if (!box) return;
+  if (!rows.length) {
+    box.innerHTML = '<div class="muted" style="font-size:12px">Belum ada kop diunggah untuk sekolah manapun.</div>';
+    return;
+  }
+  var html = '<div class="table-wrap"><table><thead><tr><th class="left">Sekolah</th><th>Kop</th><th>Diperbarui</th><th>Aksi</th></tr></thead><tbody>';
+  rows.forEach(function(r) {
+    html += '<tr>' +
+      '<td class="left"><b>' + _escSA(r.kode_sekolah) + '</b></td>' +
+      '<td style="text-align:center"><img src="' + _escSA(r.image_url) + '" style="max-height:40px;max-width:140px;object-fit:contain"></td>' +
+      '<td style="font-size:12px;text-align:center">' + _escSA(r.updated_at) + '<br><span class="muted">' + _escSA(r.updated_by) + '</span></td>' +
+      '<td style="text-align:center"><button class="ghost" style="font-size:12px;color:#dc2626" onclick="SA_deleteKopSekolah_(\'' + _escSA(r.kode_sekolah).replace(/'/g, "\\'") + '\')">🗑️ Hapus</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  box.innerHTML = html;
+}
+
+function SA_deleteKopSekolah_(kodeSekolah) {
+  if (!confirm('Hapus kop cetak untuk "' + kodeSekolah + '"? Guru sekolah ini akan kembali melihat header teks biasa saat Cetak Nilai.')) return;
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('✅ Kop dihapus', 'success');
+      SA_loadKopSekolahList_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menghapus'), 'error');
+    })
+    .deleteKopSekolah(kodeSekolah);
+}
+
+(function bindKopUploadInput_() {
+  document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('kopUploadInput');
+    if (!input) return;
+    input.addEventListener('change', function(e) {
+      var kode = (document.getElementById('kopSekolahInput') || {}).value || '';
+      kode = kode.trim();
+      if (!kode) { if (typeof showToast === 'function') showToast('Isi Kode/Nama Sekolah dulu.', 'error'); input.value = ''; return; }
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        if (typeof startProgress === 'function') startProgress();
+        google.script.run
+          .withSuccessHandler(function() {
+            if (typeof endProgress === 'function') endProgress();
+            if (typeof showToast === 'function') showToast('✅ Kop diunggah untuk ' + kode, 'success');
+            input.value = '';
+            SA_loadKopSekolahList_();
+          })
+          .withFailureHandler(function(err) {
+            if (typeof endProgress === 'function') endProgress();
+            if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal mengunggah'), 'error');
+            input.value = '';
+          })
+          .uploadKopSekolah(kode, { data: reader.result, type: file.type, name: file.name });
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+})();
+
+/* ===================================================================
+   KELOLA SISWA PER KELAS (lintas guru)
+   =================================================================== */
+function SA_loadGuruDropdownForKelolaSiswa_() {
+  var sel = document.getElementById('ksGuruSelect');
+  if (!sel) return;
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var guruRows = (rows || []).filter(function(r) { return r.role === 'admin' || r.role === 'guru' || r.role === 'kepsek'; });
+      if (!guruRows.length) { sel.innerHTML = '<option value="">Belum ada akun guru</option>'; return; }
+      sel.innerHTML = '<option value="">-- Pilih Guru --</option>' + guruRows.map(function(r) {
+        return '<option value="' + _escSA(r.email) + '">' + _escSA(r.email) + (r.kode_sekolah ? ' (' + _escSA(r.kode_sekolah) + ')' : '') + '</option>';
+      }).join('');
+    })
+    .withFailureHandler(function() { sel.innerHTML = '<option value="">Gagal memuat daftar guru</option>'; })
+    .getGuruActivationList();
+}
+
+function SA_onGuruSelectedForKelolaSiswa_() {
+  var email = (document.getElementById('ksGuruSelect') || {}).value || '';
+  var dl = document.getElementById('ksKelasDatalist');
+  if (!dl) return;
+  dl.innerHTML = '';
+  if (!email) return;
+  google.script.run
+    .withSuccessHandler(function(kelasList) {
+      dl.innerHTML = (kelasList || []).map(function(k) { return '<option value="' + _escSA(k) + '">'; }).join('');
+    })
+    .withFailureHandler(function() {})
+    .superadminGetKelasListUntukGuru(email);
+}
+
+function SA_loadKelolaSiswa_() {
+  var email = (document.getElementById('ksGuruSelect') || {}).value || '';
+  var kelas = (document.getElementById('ksKelasInput') || {}).value || '';
+  var box = document.getElementById('ksBox');
+  if (!box) return;
+  if (!email || !kelas.trim()) { if (typeof showToast === 'function') showToast('Pilih guru dan isi kelas dulu.', 'error'); return; }
+
+  box.innerHTML = '<div class="muted" style="font-size:12px">⏳ Memuat siswa...</div>';
+  google.script.run
+    .withSuccessHandler(function(rows) { SA_renderKelolaSiswa_(email, kelas.trim(), rows || []); })
+    .withFailureHandler(function(err) {
+      box.innerHTML = '<div class="alert-banner error">❌ ' + _escSA(err.message || 'Gagal memuat siswa') + '</div>';
+    })
+    .superadminGetSiswaUntukKelola(email, kelas.trim());
+}
+
+function SA_renderKelolaSiswa_(email, kelas, rows) {
+  var box = document.getElementById('ksBox');
+  if (!box) return;
+
+  var tableHtml = '';
+  if (!rows.length) {
+    tableHtml = '<div class="muted" style="font-size:12px;margin-bottom:10px">Belum ada siswa di kelas ini untuk guru tersebut.</div>';
+  } else {
+    tableHtml = '<div class="table-wrap" style="margin-bottom:14px"><table><thead><tr>' +
+      '<th>No</th><th>NIS</th><th class="left">Nama</th><th>JK</th><th>Aksi</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(function(r) {
+      tableHtml += '<tr>' +
+        '<td style="text-align:center">' + _escSA(String(r.no_absen)) + '</td>' +
+        '<td style="text-align:center">' + _escSA(String(r.nis)) + '</td>' +
+        '<td class="left">' + _escSA(r.nama) + '</td>' +
+        '<td style="text-align:center">' + _escSA(r.jk) + '</td>' +
+        '<td style="text-align:center"><button class="ghost" style="font-size:12px;color:#dc2626" ' +
+          'onclick="SA_hapusSiswaKelola_(\'' + _escSA(email).replace(/'/g, "\\'") + '\', \'' + _escSA(kelas).replace(/'/g, "\\'") + '\', ' + r.rowNumber + ', \'' + _escSA(r.nama).replace(/'/g, "\\'") + '\')">🚪 Keluarkan</button></td>' +
+        '</tr>';
+    });
+    tableHtml += '</tbody></table></div>';
+  }
+
+  var formHtml = '<div class="sp-add-siswa" style="border-top:1px solid #e5e7eb;padding-top:12px">' +
+    '<div style="font-weight:600;font-size:13px;margin-bottom:8px">➕ Tambah Siswa ke ' + _escSA(kelas) + '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+      '<div><label style="font-size:11px;display:block;margin-bottom:3px">No Absen</label>' +
+        '<input id="ksNewNoAbsen" type="text" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid #d1d5db;font-size:13px"></div>' +
+      '<div><label style="font-size:11px;display:block;margin-bottom:3px">NIS</label>' +
+        '<input id="ksNewNis" type="text" style="width:110px;padding:6px 8px;border-radius:6px;border:1px solid #d1d5db;font-size:13px"></div>' +
+      '<div><label style="font-size:11px;display:block;margin-bottom:3px">Nama Lengkap</label>' +
+        '<input id="ksNewNama" type="text" style="width:220px;padding:6px 8px;border-radius:6px;border:1px solid #d1d5db;font-size:13px"></div>' +
+      '<div><label style="font-size:11px;display:block;margin-bottom:3px">JK</label>' +
+        '<select id="ksNewJk" style="padding:6px 8px;border-radius:6px;border:1px solid #d1d5db;font-size:13px">' +
+          '<option value="">-</option><option value="L">L</option><option value="P">P</option></select></div>' +
+      '<button onclick="SA_tambahSiswaKelola_(\'' + _escSA(email).replace(/'/g, "\\'") + '\', \'' + _escSA(kelas).replace(/'/g, "\\'") + '\')" style="font-size:13px">💾 Tambah</button>' +
+    '</div></div>';
+
+  box.innerHTML = tableHtml + formHtml;
+}
+
+function SA_tambahSiswaKelola_(email, kelas) {
+  var nama = (document.getElementById('ksNewNama') || {}).value || '';
+  if (!nama.trim()) { if (typeof showToast === 'function') showToast('Nama siswa wajib diisi.', 'error'); return; }
+  var data = {
+    no_absen: (document.getElementById('ksNewNoAbsen') || {}).value || '',
+    nis: (document.getElementById('ksNewNis') || {}).value || '',
+    nama: nama,
+    jk: (document.getElementById('ksNewJk') || {}).value || ''
+  };
+
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('✅ ' + nama + ' ditambahkan ke ' + kelas, 'success');
+      SA_loadKelolaSiswa_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal menambah siswa'), 'error');
+    })
+    .superadminTambahSiswaKeKelas(email, kelas, data);
+}
+
+function SA_hapusSiswaKelola_(email, kelas, rowNumber, nama) {
+  if (!confirm('Keluarkan "' + nama + '" dari kelas ' + kelas + '? Data nilai yang sudah tersimpan untuk siswa ini TIDAK ikut terhapus.')) return;
+  if (typeof startProgress === 'function') startProgress();
+  google.script.run
+    .withSuccessHandler(function() {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('✅ ' + nama + ' dikeluarkan dari ' + kelas, 'success');
+      SA_loadKelolaSiswa_();
+    })
+    .withFailureHandler(function(err) {
+      if (typeof endProgress === 'function') endProgress();
+      if (typeof showToast === 'function') showToast('❌ ' + (err.message || 'Gagal mengeluarkan siswa'), 'error');
+    })
+    .superadminHapusSiswaDariKelas(email, kelas, rowNumber, nama);
 }
 
 /**

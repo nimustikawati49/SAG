@@ -128,8 +128,20 @@ function getSetting(){
       const mapelRaw   = String(values[i][idx.mapel] || '');
       const mapelList  = mapelRaw ? mapelRaw.split(',').map(function(m){ return m.trim(); }).filter(Boolean) : [];
 
+      // kop_url: kop cetak (letterhead) sekolah milik akun ini, dicari dari
+      // kode_sekolah akun ini via KOP_SEKOLAH (central, SuperAdmin.js) —
+      // kosong kalau belum di-assign kode_sekolah atau belum ada kop
+      // diunggah untuk kode_sekolah itu. Dipakai scripts-nilai.html saat
+      // Cetak Nilai supaya kop muncul otomatis tanpa guru pilih manual.
+      let kopUrl = '';
+      try {
+        const kodeSekolah = typeof _getKodeSekolahForEmail_ === 'function' ? _getKodeSekolahForEmail_(email) : '';
+        kopUrl = (kodeSekolah && typeof _getKopUrlForKodeSekolah_ === 'function') ? _getKopUrlForKodeSekolah_(kodeSekolah) : '';
+      } catch (kopErr) { /* fail-soft — kop cuma nice-to-have, jangan ganggu getSetting() */ }
+
       return {
         sekolah : values[i][idx.sekolah] || '',
+        nama_sekolah : values[i][idx.sekolah] || '',
         tahun_pelajaran : (idx.tahun_pelajaran_aktif > -1 ? values[i][idx.tahun_pelajaran_aktif] : '') || values[i][idx.tahun] || '',
         semester : (idx.semester_aktif > -1 ? values[i][idx.semester_aktif] : '') || values[i][idx.semester] || '',
         nama_guru : values[i][idx.guru] || '',
@@ -137,6 +149,7 @@ function getSetting(){
         mata_pelajaran : mapelRaw,
         mapel_list : mapelList,
         app_logo_url : values[i][idx.logo] || '',
+        kop_url : kopUrl,
         lock_status : lockStatus,
         tahun_pelajaran_aktif : idx.tahun_pelajaran_aktif > -1 ? values[i][idx.tahun_pelajaran_aktif] : (values[i][idx.tahun] || ''),
         semester_aktif : idx.semester_aktif > -1 ? values[i][idx.semester_aktif] : (values[i][idx.semester] || '')

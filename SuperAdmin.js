@@ -1746,3 +1746,265 @@ function _getArsipRootFolder_() {
   const it = DriveApp.getFoldersByName('JURNAL_ARSIP');
   return it.hasNext() ? it.next() : DriveApp.createFolder('JURNAL_ARSIP');
 }
+
+// =====================================================================
+// KOP CETAK PER SEKOLAH (kode_sekolah)
+// Satu gambar kop (letterhead) per kode_sekolah, diunggah SuperAdmin,
+// dipakai otomatis saat guru dengan kode_sekolah yang sama Cetak Nilai
+// (lihat getSetting() di Setting.js yang menyisipkan kop_url, dan
+// buildAndPrint di scripts-nilai.html yang menampilkannya). Satu sekolah
+// satu kop aktif (bukan multi-varian seperti SIPENA) — unggah ulang
+// langsung mengganti gambar lama, baris lama tidak diduplikasi.
+// =====================================================================
+var KOP_SEKOLAH_SHEET  = 'KOP_SEKOLAH';
+var KOP_SEKOLAH_HEADERS = ['kode_sekolah', 'image_url', 'updated_by', 'updated_at'];
+
+function _ensureKopSekolahSheet_() {
+  return _ensureRegistrySheet_(KOP_SEKOLAH_SHEET, KOP_SEKOLAH_HEADERS);
+}
+
+/**
+ * _getKopUrlForKodeSekolah_(kodeSekolah)
+ * Baca-saja, TANPA gerbang role — dipanggil getSetting() (Setting.js)
+ * supaya SETIAP guru (bukan cuma SuperAdmin) otomatis dapat kop
+ * sekolahnya sendiri saat Cetak Nilai, tanpa harus pilih manual.
+ */
+function _getKopUrlForKodeSekolah_(kodeSekolah) {
+  const kode = String(kodeSekolah || '').trim();
+  if (!kode) return '';
+  const sh = _ensureKopSekolahSheet_();
+  const idx = _getHeaderIndexMap_(sh);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idx.kode_sekolah] || '').trim() === kode) {
+      return String(data[i][idx.image_url] || '').trim();
+    }
+  }
+  return '';
+}
+
+function getKopSekolahList() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const sh = _ensureKopSekolahSheet_();
+  const idx = _getHeaderIndexMap_(sh);
+  const data = sh.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][idx.kode_sekolah]) continue;
+    out.push({
+      kode_sekolah: String(data[i][idx.kode_sekolah] || ''),
+      image_url   : String(data[i][idx.image_url] || ''),
+      updated_by  : String(data[i][idx.updated_by] || ''),
+      updated_at  : data[i][idx.updated_at]
+        ? Utilities.formatDate(new Date(data[i][idx.updated_at]), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
+        : ''
+    });
+  }
+  out.sort(function(a, b) { return a.kode_sekolah.localeCompare(b.kode_sekolah); });
+  return out;
+}
+
+function uploadKopSekolah(kodeSekolah, payload) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const auth = getAuth();
+  const kode = String(kodeSekolah || '').trim();
+  if (!kode) throw new Error('Kode/Nama Sekolah wajib diisi.');
+  if (!payload || !payload.data) throw new Error('File gambar tidak valid.');
+
+  const kodeSafe = kode.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) || 'SEKOLAH';
+  const folder = getUserNestedFolder_(auth.email, 'logo_folder', 'LOGO_JURNAL', ['Kop_Sekolah', kodeSafe]);
+
+  const base64 = payload.data.split(',')[1];
+  const blob = Utilities.newBlob(Utilities.base64Decode(base64), payload.type, payload.name);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const stableUrl = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w800';
+
+  const sh = _ensureKopSekolahSheet_();
+  const idx = _getHeaderIndexMap_(sh);
+  const data = sh.getDataRange().getValues();
+  let foundRow = -1;
+  let oldUrl = '';
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idx.kode_sekolah] || '').trim() === kode) {
+      foundRow = i + 1;
+      oldUrl = String(data[i][idx.image_url] || '');
+      break;
+    }
+  }
+
+  if (foundRow > -1) {
+    sh.getRange(foundRow, idx.image_url + 1).setValue(stableUrl);
+    sh.getRange(foundRow, idx.updated_by + 1).setValue(auth.email);
+    sh.getRange(foundRow, idx.updated_at + 1).setValue(new Date());
+  } else {
+    sh.appendRow([kode, stableUrl, auth.email, new Date()]);
+  }
+
+  // Hapus file kop lama (kalau ada) supaya Drive SuperAdmin tidak numpuk.
+  if (oldUrl) {
+    try {
+      const match = oldUrl.match(/[-\w]{25,}/);
+      if (match) DriveApp.getFileById(match[0]).setTrashed(true);
+    } catch (e) { /* file lama mungkin sudah dihapus manual, abaikan */ }
+  }
+
+  logAudit('UPLOAD_KOP_SEKOLAH', kode, stableUrl);
+  return { kode_sekolah: kode, image_url: stableUrl };
+}
+
+function deleteKopSekolah(kodeSekolah) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const kode = String(kodeSekolah || '').trim();
+  const sh = _ensureKopSekolahSheet_();
+  const idx = _getHeaderIndexMap_(sh);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idx.kode_sekolah] || '').trim() === kode) {
+      const url = String(data[i][idx.image_url] || '');
+      sh.deleteRow(i + 1);
+      try {
+        const match = url.match(/[-\w]{25,}/);
+        if (match) DriveApp.getFileById(match[0]).setTrashed(true);
+      } catch (e) { /* non-critical */ }
+      logAudit('DELETE_KOP_SEKOLAH', kode, '');
+      return { ok: true };
+    }
+  }
+  throw new Error('Kop untuk sekolah ini tidak ditemukan.');
+}
+
+// =====================================================================
+// KELOLA SISWA LINTAS-GURU (SuperAdmin)
+// SAG TIDAK punya roster siswa terpusat per sekolah (beda dari sistem
+// lain yang mungkin dipakai) — tiap guru punya sheet SISWA sendiri di
+// spreadsheet pribadinya. Jadi ini mengedit SISWA milik SATU guru yang
+// dipilih SECARA LANGSUNG (lewat getSpreadsheet_({email}) yang sama
+// dipakai Kepsek.js untuk Rekap Sekolah lintas-guru) — BUKAN roster
+// gabungan yang otomatis tersinkron ke guru lain. Kalau beberapa guru
+// mengajar kelas yang "sama" dengan mapel berbeda, masing-masing harus
+// diperbarui terpisah.
+// Kolom SISWA tetap (lihat Jurnal.js, SEMUA pembaca pakai indeks, bukan
+// header): 0=Kelas, 1=no_absen, 2=NIS, 3=nama_lengkap, 4=jk,
+// 5=owner_email, 6=tahun_pelajaran.
+// =====================================================================
+
+function superadminGetKelasListUntukGuru(guruEmail) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const email = String(guruEmail || '').toLowerCase().trim();
+  if (!email) return [];
+  const ss = getSpreadsheet_({ email: email });
+  const sh = ss.getSheetByName('SISWA');
+  if (!sh) return [];
+
+  const period = getUserAcademicPeriod(email);
+  const data = sh.getDataRange().getValues();
+  const set = {};
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (!_siswaRowMatchesPeriode_(r, period.tahun_pelajaran)) continue;
+    const k = String(r[0] || '').trim();
+    if (k && k.toUpperCase() !== 'ALUMNI') set[k] = true;
+  }
+  return Object.keys(set).sort();
+}
+
+function superadminGetSiswaUntukKelola(guruEmail, kelas) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const email = String(guruEmail || '').toLowerCase().trim();
+  const kls   = String(kelas || '').trim();
+  if (!email || !kls) throw new Error('Pilih guru dan kelas.');
+
+  const ss = getSpreadsheet_({ email: email });
+  const sh = ss.getSheetByName('SISWA');
+  if (!sh) return [];
+
+  const period = getUserAcademicPeriod(email);
+  const data = sh.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[0] || '').trim() !== kls) continue;
+    if (!_siswaRowMatchesPeriode_(r, period.tahun_pelajaran)) continue;
+    out.push({
+      rowNumber: i + 1,
+      no_absen : r[1] || '',
+      nis      : r[2] || '',
+      nama     : r[3] || '',
+      jk       : r[4] || ''
+    });
+  }
+  out.sort(function(a, b) { return Number(a.no_absen) - Number(b.no_absen); });
+  return out;
+}
+
+function superadminTambahSiswaKeKelas(guruEmail, kelas, data) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const email = String(guruEmail || '').toLowerCase().trim();
+  const kls   = String(kelas || '').trim();
+  if (!email || !kls) throw new Error('Pilih guru dan kelas.');
+  const nama = String(data && data.nama || '').trim();
+  if (!nama) throw new Error('Nama siswa wajib diisi.');
+
+  const ss = getSpreadsheet_({ email: email });
+  let sh = ss.getSheetByName('SISWA');
+  if (!sh) {
+    sh = ss.insertSheet('SISWA');
+    sh.appendRow(['Kelas', 'no_absen', 'NIS', 'nama_lengkap', 'jk', 'owner_email', 'tahun_pelajaran']);
+  }
+
+  const period = getUserAcademicPeriod(email);
+  sh.appendRow([
+    kls,
+    data.no_absen || '',
+    data.nis || '',
+    nama,
+    data.jk || '',
+    email,
+    period.tahun_pelajaran || ''
+  ]);
+
+  _invalidateSiswaCacheForGuru_(email);
+  logAudit('SUPERADMIN_TAMBAH_SISWA', email, kls + ' | ' + nama);
+  return { ok: true };
+}
+
+function superadminHapusSiswaDariKelas(guruEmail, kelas, rowNumber, namaKonfirmasi) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const email = String(guruEmail || '').toLowerCase().trim();
+  const kls   = String(kelas || '').trim();
+  const row   = Number(rowNumber);
+  if (!email || !kls || !row) throw new Error('Data tidak lengkap.');
+
+  const ss = getSpreadsheet_({ email: email });
+  const sh = ss.getSheetByName('SISWA');
+  if (!sh) throw new Error('Guru ini belum punya data siswa.');
+
+  const rowVals = sh.getRange(row, 1, 1, 7).getValues()[0];
+  if (String(rowVals[0] || '').trim() !== kls) {
+    throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
+  }
+  const namaBaris = String(rowVals[3] || '');
+  if (namaKonfirmasi && namaBaris.trim() !== String(namaKonfirmasi).trim()) {
+    throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
+  }
+
+  sh.deleteRow(row);
+  _invalidateSiswaCacheForGuru_(email);
+  logAudit('SUPERADMIN_HAPUS_SISWA', email, kls + ' | ' + namaBaris);
+  return { ok: true };
+}
+
+/**
+ * _invalidateSiswaCacheForGuru_(email)
+ * invalidateCache_() bawaan (Code.js) selalu pakai email SESI SAAT INI —
+ * tidak cocok dipakai di sini karena yang mengeksekusi SuperAdmin, bukan
+ * guru targetnya. Hapus langsung cache SISWA milik guru target supaya dia
+ * tidak melihat data basi (cache TTL 120s di getSheetCached) sampai TTL
+ * itu habis sendiri.
+ */
+function _invalidateSiswaCacheForGuru_(email) {
+  try {
+    CacheService.getScriptCache().remove('SHEET_SISWA_' + String(email || '').toLowerCase().trim());
+  } catch (e) { /* non-critical */ }
+}
