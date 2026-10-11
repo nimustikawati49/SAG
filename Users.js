@@ -54,6 +54,22 @@ function _getKodeSekolahForEmail_(email) {
   return '';
 }
 
+/**
+ * _efektifKodeSekolahUntuk_(email, fallbackNamaSekolah)
+ * kode_sekolah (USERS, dikelola SuperAdmin) kalau sudah diisi; kalau
+ * belum, fallback ke Nama Sekolah yang guru isi sendiri di Pengaturan
+ * Utama (field 'sekolah' di SETTING) — supaya guru yang belum
+ * dikelompokkan SuperAdmin ke sekolah manapun tetap bisa pakai Kop Cetak
+ * sendiri. fallbackNamaSekolah diterima sebagai PARAMETER (bukan baca
+ * ulang getSetting()) supaya aman dipanggil DARI DALAM getSetting()
+ * sendiri tanpa rekursi tak berhingga.
+ */
+function _efektifKodeSekolahUntuk_(email, fallbackNamaSekolah) {
+  var kode = typeof _getKodeSekolahForEmail_ === 'function' ? _getKodeSekolahForEmail_(email) : '';
+  if (kode) return kode;
+  return String(fallbackNamaSekolah || '').trim();
+}
+
 function _computeTrialInfo_(dibuatDate) {
   var created = dibuatDate ? new Date(dibuatDate) : new Date();
   var elapsedDays = Math.floor((Date.now() - created.getTime()) / 86400000);

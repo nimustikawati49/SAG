@@ -135,7 +135,9 @@ function getSetting(){
       // Cetak Nilai supaya kop muncul otomatis tanpa guru pilih manual.
       let kopUrl = '';
       try {
-        const kodeSekolah = typeof _getKodeSekolahForEmail_ === 'function' ? _getKodeSekolahForEmail_(email) : '';
+        const kodeSekolah = typeof _efektifKodeSekolahUntuk_ === 'function'
+          ? _efektifKodeSekolahUntuk_(email, values[i][idx.sekolah])
+          : '';
         kopUrl = (kodeSekolah && typeof _getKopUrlForKodeSekolah_ === 'function') ? _getKopUrlForKodeSekolah_(kodeSekolah) : '';
       } catch (kopErr) { /* fail-soft — kop cuma nice-to-have, jangan ganggu getSetting() */ }
 
@@ -291,4 +293,46 @@ function uploadLogoSekolah(payload){
   logAudit('UPLOAD_LOGO', email, fileId);
 
   return stableUrl;
+}
+
+/**
+ * guruGetKopSekolahSaya()
+ * Info kop sekolah milik akun yang login SENDIRI (beda dari versi
+ * SuperAdmin di SuperAdmin.js yang bisa pilih sekolah mana saja) —
+ * dipakai kartu "Kop Sekolah Saya" di tab Setting.
+ */
+function guruGetKopSekolahSaya() {
+  const auth = getAuth();
+  if (auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek') throw new Error('AKSES_DITOLAK');
+  const setting = getSetting();
+  const kode = typeof _efektifKodeSekolahUntuk_ === 'function'
+    ? _efektifKodeSekolahUntuk_(auth.email, setting.sekolah) : '';
+  return {
+    kode_sekolah: kode,
+    image_url: (kode && typeof _getKopUrlForKodeSekolah_ === 'function') ? _getKopUrlForKodeSekolah_(kode) : ''
+  };
+}
+
+/**
+ * guruUploadKopSekolahSaya(payload)
+ * Unggah/ganti kop untuk sekolah akun yang login sendiri — kode_sekolah
+ * di-resolve OTOMATIS lewat _efektifKodeSekolahUntuk_ (bukan dipilih
+ * manual seperti versi SuperAdmin), supaya guru tidak perlu tahu persis
+ * apa isi kolom kode_sekolah-nya. Logika unggahnya sendiri DIPAKAI
+ * BERSAMA dengan versi SuperAdmin lewat _uploadKopSekolahCore_
+ * (SuperAdmin.js) — satu kop per sekolah tetap berlaku di sini juga,
+ * jadi kalau SuperAdmin sudah unggahkan satu, guru yang unggah ulang
+ * akan MENGGANTI kop itu, bukan membuat sekolah "versi guru" terpisah.
+ */
+function guruUploadKopSekolahSaya(payload) {
+  const auth = getAuth();
+  if (auth.role !== 'admin' && auth.role !== 'superadmin' && auth.role !== 'kepsek') throw new Error('AKSES_DITOLAK');
+  const setting = getSetting();
+  const kode = typeof _efektifKodeSekolahUntuk_ === 'function'
+    ? _efektifKodeSekolahUntuk_(auth.email, setting.sekolah) : '';
+  if (!kode) {
+    throw new Error('Nama Sekolah belum diisi — lengkapi dulu "Nama Sekolah" di Pengaturan Utama Sistem (atas), atau minta SuperAdmin mengisi Kode/Nama Sekolah akun Anda.');
+  }
+  if (typeof _uploadKopSekolahCore_ !== 'function') throw new Error('Fitur Kop Cetak belum tersedia.');
+  return _uploadKopSekolahCore_(kode, payload, auth.email);
 }

@@ -374,7 +374,7 @@ function guruHapusSiswaDariKelas(kelas, rowNumber, namaKonfirmasi) {
  * Cocokkan lewat NIS (utama) atau nama (fallback kalau NIS kosong).
  */
 function _siswaAktifSet_(kelas, ownerEmail) {
-  const result = { nisSet: new Set(), namaSet: new Set() };
+  const result = { nisSet: new Set(), namaSet: new Set(), jkByNis: {}, jkByNama: {} };
   const sh = sheet('SISWA');
   if (!sh) return result;
   const email = String(ownerEmail || '').toLowerCase().trim();
@@ -388,8 +388,9 @@ function _siswaAktifSet_(kelas, ownerEmail) {
     if (!_siswaRowMatchesPeriode_(r, tahunAktif)) continue;
     const nis = String(r[2] || '').trim();
     const nama = String(r[3] || '').trim().toLowerCase();
-    if (nis) result.nisSet.add(nis);
-    if (nama) result.namaSet.add(nama);
+    const jk = String(r[4] || '').trim();
+    if (nis) { result.nisSet.add(nis); if (jk) result.jkByNis[nis] = jk; }
+    if (nama) { result.namaSet.add(nama); if (jk) result.jkByNama[nama] = jk; }
   }
   return result;
 }
@@ -413,6 +414,17 @@ function _samaPeriodeAktif_(tahun, semester) {
 function _saringSiswaAktif_(hasil, kelas, ownerEmail, tahun, semester) {
   if (!_samaPeriodeAktif_(tahun, semester)) return hasil;
   const aktif = _siswaAktifSet_(kelas, ownerEmail);
+
+  // Tempel JK (L/P) ke tiap baris sekalian — NILAI_SISWA sendiri tidak
+  // simpan JK, cuma ada di roster SISWA. Dilakukan di sini (bukan baca
+  // ulang sheet SISWA di tempat lain) supaya satu kali baca saja dipakai
+  // utk filter aktif DAN pelabelan JK.
+  hasil.forEach(r => {
+    const nis = String(r.nis || '').trim();
+    const nama = String(r.nama_siswa || '').trim().toLowerCase();
+    r.jk = (nis && aktif.jkByNis[nis]) || (nama && aktif.jkByNama[nama]) || '';
+  });
+
   if (!aktif.nisSet.size && !aktif.namaSet.size) return hasil; // roster kosong/gagal baca — jangan sembunyikan semua
   return hasil.filter(r => {
     const nis  = String(r.nis || r[1] || '').trim();

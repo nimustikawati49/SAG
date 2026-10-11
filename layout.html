@@ -968,6 +968,7 @@
           </select>
         </div>
         <button id="btnMonMuatNilai" onclick="muatMonitoringNilai()" disabled>🔎 Tampilkan</button>
+        <button class="ghost" onclick="bukaCetakNilaiDariRiwayat_()" title="Cetak PTS/SAS/ASAT (Katrol) untuk kelas yang sedang dipilih">🖨️ Cetak Nilai</button>
       </div>
       <div id="monNilaiFilterStatus" class="muted" style="font-size:12px;margin-top:6px"></div>
     </div>
@@ -1453,6 +1454,24 @@
 </button>
   </div>
   </details>
+
+  <!-- Kop Sekolah Saya (self-service — sekolah diambil otomatis dari
+       Nama Sekolah di atas / Kode Sekolah dari SuperAdmin) -->
+  <details class="card setting-guru-only" id="kopSekolahSayaCard" style="margin-top:14px" ontoggle="if(this.open) guruMuatKopSekolahSaya_()">
+    <summary style="cursor:pointer;font-weight:700;font-size:15px">🖼️ Kop Sekolah Saya</summary>
+    <p class="muted" style="font-size:12px;margin:8px 0 12px">
+      Kop (letterhead, desain yang sudah jadi — bukan disusun dari teks) dipakai otomatis saat Cetak Nilai.
+      Sekolahnya diambil dari "Nama Sekolah" di Pengaturan Utama di atas (atau Kode Sekolah dari SuperAdmin
+      kalau sudah diisi). Mengunggah ulang akan <b>mengganti</b> kop lama untuk sekolah yang sama —
+      kalau SuperAdmin sudah pernah unggahkan kop sekolah ini, unggahan Anda akan menggantinya.
+    </p>
+    <div id="kopSekolahSayaBox"><div class="muted" style="font-size:12px">⏳ Memuat...</div></div>
+    <label class="ghost" style="font-size:13px;padding:8px 14px;border-radius:8px;cursor:pointer;display:inline-block;margin-top:10px">
+      📤 Unggah/Ganti Kop
+      <input type="file" id="kopSekolahSayaUploadInput" accept="image/*" style="display:none">
+    </label>
+  </details>
+
   <div class="setting-guru-only">
   <hr style="margin:32px 0">
 
@@ -2721,6 +2740,14 @@
           <input type="radio" name="cetakKomponen" value="asat" onchange="setCetakReady_(false)"> ASAT (Katrol)</label>
       </div>
       <p class="muted" style="font-size:11px;margin-top:4px">Pilih satu — cetak/export cuma menampilkan kolom nilai ini (sudah diskalakan Katrol per kelas), tidak tergantung semester aktif.</p>
+    </div>
+
+    <!-- Judul Cetak -->
+    <div style="margin-bottom:16px">
+      <label style="font-weight:600;display:block;margin-bottom:6px" for="cetakJudulInput">Judul Daftar Nilai:</label>
+      <input type="text" id="cetakJudulInput" placeholder="mis. DAFTAR NILAI SUMATIF AKHIR SEMESTER GANJIL TAHUN PELAJARAN 2025/2026"
+             style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px" oninput="setCetakReady_(false)">
+      <p class="muted" style="font-size:11px;margin-top:4px">Kosongkan untuk judul otomatis ("DAFTAR NILAI PTS/SAS/ASAT").</p>
     </div>
 
     <!-- Ukuran Kertas -->

@@ -1571,4 +1571,65 @@ function deleteHariLiburUISetting_(tanggal) {
     })
     .deleteHariLibur(tanggal);
 }
+
+/* ===================================================================
+   KOP SEKOLAH SAYA (self-service)
+   =================================================================== */
+function guruMuatKopSekolahSaya_() {
+  var box = document.getElementById('kopSekolahSayaBox');
+  if (!box) return;
+  box.innerHTML = '<div class="muted" style="font-size:12px">⏳ Memuat...</div>';
+  google.script.run
+    .withSuccessHandler(function(res) { guruRenderKopSekolahSaya_(res || {}); })
+    .withFailureHandler(function(err) {
+      box.innerHTML = '<div class="alert-banner error">❌ ' + (err && err.message ? err.message : 'Gagal memuat') + '</div>';
+    })
+    .guruGetKopSekolahSaya();
+}
+
+function guruRenderKopSekolahSaya_(res) {
+  var box = document.getElementById('kopSekolahSayaBox');
+  if (!box) return;
+  if (!res.kode_sekolah) {
+    box.innerHTML = '<div class="alert-banner info">ℹ️ Isi dulu "Nama Sekolah" di Pengaturan Utama Sistem di atas (lalu Simpan), supaya kop bisa dikaitkan ke sekolah Anda.</div>';
+    return;
+  }
+  var html = '<div style="font-size:12.5px;margin-bottom:8px"><b>Sekolah:</b> ' + res.kode_sekolah + '</div>';
+  if (res.image_url) {
+    html += '<img src="' + res.image_url + '" style="max-width:100%;max-height:100px;object-fit:contain;border:1px solid #e5e7eb;border-radius:8px;padding:6px">';
+  } else {
+    html += '<div class="muted" style="font-size:12px">Belum ada kop diunggah untuk sekolah ini.</div>';
+  }
+  box.innerHTML = html;
+}
+
+(function bindKopSekolahSayaUploadInput_() {
+  document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('kopSekolahSayaUploadInput');
+    if (!input) return;
+    input.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        if (typeof startProgress === 'function') startProgress();
+        google.script.run
+          .withSuccessHandler(function() {
+            if (typeof endProgress === 'function') endProgress();
+            if (typeof showToast === 'function') showToast('✅ Kop diunggah', 'success');
+            input.value = '';
+            guruMuatKopSekolahSaya_();
+          })
+          .withFailureHandler(function(err) {
+            if (typeof endProgress === 'function') endProgress();
+            var msg = err && err.message ? err.message : 'Gagal mengunggah';
+            if (typeof showToast === 'function') showToast('❌ ' + msg, 'error'); else alert('❌ ' + msg);
+            input.value = '';
+          })
+          .guruUploadKopSekolahSaya({ data: reader.result, type: file.type, name: file.name });
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+})();
 </script>

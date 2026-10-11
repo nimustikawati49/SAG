@@ -1799,6 +1799,7 @@ function downloadTemplateNilai() {
 
 function openCetakNilai() {
   if (!nilaiState.rows.length) { alert('Data belum dimuat'); return; }
+  _cetakOverride = null; // dibuka dari Input Nilai seperti biasa — bukan dari Riwayat Nilai
   const modal = document.getElementById('modalCetakNilai');
   if (modal) modal.style.display = 'flex';
   setCetakReady_(false);
@@ -1809,6 +1810,7 @@ function openCetakNilai() {
 function closeCetakNilai() {
   const modal = document.getElementById('modalCetakNilai');
   if (modal) modal.style.display = 'none';
+  _cetakOverride = null;
 }
 
 function setCetakReady_(ready) {
@@ -1845,9 +1847,18 @@ function bindCetakModalGuard_() {
   });
 }
 
-/** Load daftar kelas yang punya nilai (untuk dropdown di modal) */
-function loadKelasUntukCetak_() {
-  const { mapel, tahun, semester, kelas } = nilaiState;
+/**
+ * Load daftar kelas yang punya nilai (untuk dropdown di modal).
+ * @param {string} [preferKelas] – kelas yang harus terpilih setelah
+ *   daftar dimuat; default nilaiState.kelas (dipanggil dari Input Nilai).
+ *   bukaCetakNilaiDariRiwayat_() pakai param ini supaya kelas yang
+ *   sedang dilihat di Riwayat Nilai langsung terpilih, tanpa perlu
+ *   nilaiState.kelas (yang mungkin masih isi kelas Input Nilai lain).
+ */
+function loadKelasUntukCetak_(preferKelas) {
+  const ctx = _cetakOverride || nilaiState;
+  const { mapel, tahun, semester, kelas } = ctx;
+  const target = preferKelas || kelas;
   const sel = document.getElementById('cetakKelasSelect');
   if (!sel) return;
 
@@ -1855,17 +1866,66 @@ function loadKelasUntukCetak_() {
 
   google.script.run
     .withSuccessHandler(list => {
-      // Ensure current class is always in list
-      if (!list.includes(kelas)) list.unshift(kelas);
+      // Ensure target class is always in list
+      if (target && !list.includes(target)) list.unshift(target);
       sel.innerHTML = list.map(k =>
-        `<option value="${k}" ${k === kelas ? 'selected' : ''}>${k}${k === kelas ? ' (dimuat)' : ''}</option>`
+        `<option value="${k}" ${k === target ? 'selected' : ''}>${k}${k === target ? ' (dimuat)' : ''}</option>`
       ).join('');
     })
     .withFailureHandler(() => {
-      // Fallback: show only current class
-      sel.innerHTML = `<option value="${kelas}" selected>${kelas}</option>`;
+      // Fallback: show only target class
+      sel.innerHTML = target ? `<option value="${target}" selected>${target}</option>` : '<option value="">-- Pilih Kelas --</option>';
     })
     .getKelasYangAdaNilai(mapel, tahun, semester);
+}
+
+/**
+ * bukaCetakNilaiDariRiwayat_()
+ * Buka modal Cetak Nilai LANGSUNG dari Riwayat Nilai, pakai kelas/mapel/
+ * tahun/semester yang sedang ditampilkan di sana — guru tidak perlu
+ * pindah ke Input Nilai dulu cuma untuk mencetak PTS/SAS/ASAT (Katrol).
+ * nilaiState.kelas sengaja diisi sentinel yang TIDAK PERNAH cocok dengan
+ * nama kelas asli, supaya doCetakNilai()/exportNilaiExcelUI() SELALU
+ * fetch data fresh lewat getNilaiSiswa() (bukan reuse nilaiState.rows
+ * dari sesi Input Nilai sebelumnya yang mungkin kelas/mapel-nya beda).
+ */
+// Context TERPISAH dari nilaiState (Input Nilai) saat Cetak Nilai dibuka
+// dari Riwayat Nilai — JANGAN pernah menimpa nilaiState.kelas/mapel/dst
+// di sini: itu akan merusak state Input Nilai (mis. kalau guru balik ke
+// tab Input Nilai tanpa Muat Data Siswa ulang, klik Simpan Nilai bisa
+// menulis ke kelas yang SALAH). null kalau modal dibuka dari Input Nilai
+// seperti biasa (lewat openCetakNilai(), bukan jalur ini).
+let _cetakOverride = null;
+
+/**
+ * bukaCetakNilaiDariRiwayat_()
+ * Buka modal Cetak Nilai LANGSUNG dari Riwayat Nilai, pakai kelas/mapel/
+ * tahun/semester yang sedang ditampilkan di sana — guru tidak perlu
+ * pindah ke Input Nilai dulu cuma untuk mencetak PTS/SAS/ASAT (Katrol).
+ */
+function bukaCetakNilaiDariRiwayat_() {
+  const kelas = (document.getElementById('monNilaiKelasSelect') || {}).value || '';
+  const mapel = (document.getElementById('monNilaiMapelSelect') || {}).value || '';
+  const tahun = (document.getElementById('monNilaiTahunInput') || {}).value || '';
+  const sem   = (document.getElementById('monNilaiSemesterSelect') || {}).value || '';
+  if (!kelas || !mapel || !tahun || !sem) {
+    alert('Pilih Tahun Pelajaran, Semester, Kelas, dan Mapel dulu (lalu klik Tampilkan) sebelum Cetak Nilai.');
+    return;
+  }
+
+  const bukaModal_ = (setting) => {
+    _cetakOverride = { kelas, mapel, tahun, semester: sem, setting: setting || { nilai_min_target: 60, nilai_max_target: 95, kkm: 70 } };
+    const modal = document.getElementById('modalCetakNilai');
+    if (modal) modal.style.display = 'flex';
+    setCetakReady_(false);
+    bindCetakModalGuard_();
+    loadKelasUntukCetak_(kelas);
+  };
+
+  google.script.run
+    .withSuccessHandler(s => bukaModal_(s))
+    .withFailureHandler(() => bukaModal_(null))
+    .getSettingNilai(kelas, mapel, tahun, sem);
 }
 
 /**
@@ -1925,12 +1985,13 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
     return n < kkm ? `<span class="note-low">${n.toFixed(0)} • Rendah</span>` : n.toFixed(0);
   };
 
-  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>${def.label}</th><th>Ket</th>`;
+  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>L/P</th><th>${def.label}</th><th>Ket</th>`;
 
   const bodyRows = rows.map((r, i) => {
     const finalVal = r.nilai_akhir;
     const lulus    = finalVal !== null && !isNaN(Number(finalVal)) && Number(finalVal) >= kkm;
     const tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>` +
+      `<td>${r.jk || '-'}</td>` +
       `<td>${noteHtml(nilaiKatrol[i])}</td>` +
       `<td>${lulus ? 'T' : 'BT'}</td>`;
     return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
@@ -1968,13 +2029,22 @@ function doCetakNilai(mode = 'print') {
   const defaultBtnLabel = isPreview ? '👁️ Preview' : '🖨️ Print / Simpan PDF';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
 
-  const { mapel, tahun, semester, setting } = nilaiState;
+  // Dibuka dari Riwayat Nilai (_cetakOverride terisi) -> pakai context
+  // itu, BUKAN nilaiState (Input Nilai) — supaya tidak ikut-ikutan
+  // mapel/tahun/semester dari kelas lain yang kebetulan terakhir dimuat
+  // di Input Nilai.
+  const ctx = _cetakOverride || nilaiState;
+  const { mapel, tahun, semester, setting } = ctx;
   const kkm     = Number(setting.kkm || 70);
   // Target rentang Katrol komponen dicetak — pakai target Katrol yang
   // sama dengan Nilai Total (Pengaturan Nilai Katrol & KKM), supaya
   // konsisten dengan satu-satunya target yang guru atur di Input Nilai.
   const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
   const komponenLabel = (CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts).label;
+  // Judul bisa diketik manual (mis. "DAFTAR NILAI SUMATIF AKHIR SEMESTER
+  // GANJIL TAHUN PELAJARAN 2025/2026") — kosongkan untuk judul otomatis.
+  const judulCustom = (document.getElementById('cetakJudulInput')?.value || '').trim();
+  const judulTampil = judulCustom || ('DAFTAR NILAI ' + komponenLabel);
 
   const buildAndPrint = (settingGuru, rows) => {
     const namaGuru    = settingGuru?.nama_guru    || '___________________';
@@ -1989,8 +2059,8 @@ function doCetakNilai(mode = 'print') {
       return;
     }
 
-    // Kop (letterhead gambar, diunggah SuperAdmin per sekolah) dipakai kalau
-    // ada — sudah berisi nama sekolah/logo/alamat jadi tidak perlu baris
+    // Kop (letterhead gambar, diunggah sendiri/SuperAdmin per sekolah) dipakai
+    // kalau ada — sudah berisi nama sekolah/logo/alamat jadi tidak perlu baris
     // nama sekolah teks lagi; fallback ke teks polos kalau belum ada kop.
     const headerHtml = kopUrl
       ? '<img class="kop-img" src="' + kopUrl + '" alt="Kop Sekolah">'
@@ -2000,20 +2070,11 @@ function doCetakNilai(mode = 'print') {
     const pagesHtml =
       '<div class="page">' +
         headerHtml +
-        '<h1>DAFTAR NILAI ' + komponenLabel + '</h1>' +
-        '<table class="info">' +
-          '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
-          '<tr>' +
-            '<td class="info-left">' +
-              '<b>Mata Pelajaran</b> : ' + mapel + '<br>' +
-              '<b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kelas + '<br>' +
-              '<b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kkm +
-            '</td>' +
-            '<td class="info-right">' +
-              '<b>Tahun Pelajaran</b> : ' + tahun + '<br>' +
-              '<b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + semester +
-            '</td>' +
-          '</tr>' +
+        '<p class="judul-cetak">' + judulTampil + '</p>' +
+        '<table class="info-simple">' +
+          '<tr><td class="info-label">SEKOLAH</td><td>:</td><td>' + (namaSekolah || '-') + '</td></tr>' +
+          '<tr><td class="info-label">MATA PELAJARAN</td><td>:</td><td>' + mapel + '</td></tr>' +
+          '<tr><td class="info-label">KELAS</td><td>:</td><td>' + kelas + '</td></tr>' +
         '</table>' +
         '<table class="nilai">' + tbl + '</table>' +
         '<div class="ttd">' +
@@ -2040,12 +2101,11 @@ function doCetakNilai(mode = 'print') {
       'h1{display:none}' +
       '.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}' +
       '.kop-img{display:block;width:100%;max-height:120px;object-fit:contain;margin-bottom:8px}' +
-      '.info{width:100%;border:1px solid #333;border-collapse:collapse}' +
-      '.info-title{text-align:center;font-size:14px;font-weight:700;font-variant:small-caps;' +
-      '  background:#e8e8f4;border-bottom:1px solid #333;padding:6px;text-transform:uppercase' +
-      '  ;letter-spacing:1px}' +
-      '.info-left{width:50%;padding:5px 10px;vertical-align:top;border-right:1px solid #333}' +
-      '.info-right{width:50%;padding:5px 10px;vertical-align:top}' +
+      '.judul-cetak{text-align:center;font-size:14px;font-weight:700;text-transform:uppercase;' +
+      '  letter-spacing:.5px;padding-bottom:6px;margin-bottom:10px;border-bottom:2px solid #000}' +
+      '.info-simple{margin-bottom:12px;font-size:12px}' +
+      '.info-simple td{padding:1px 4px;vertical-align:top}' +
+      '.info-simple .info-label{font-weight:700;white-space:nowrap;padding-right:4px}' +
       '.nilai{width:100%;table-layout:auto;border-collapse:collapse;margin-top:10px;font-size:11px}' +
       '.nilai th,.nilai td{border:1px solid #555;padding:3px 5px;text-align:center;word-break:break-word}' +
       '.nilai th{background:#dde0f0;font-weight:700}' +
@@ -2103,7 +2163,7 @@ function doCetakNilai(mode = 'print') {
       .getSetting();
   };
 
-  if (kelas === nilaiState.kelas) {
+  if (!_cetakOverride && kelas === nilaiState.kelas) {
     rowsReady(nilaiState.rows);
   } else {
     google.script.run
@@ -2132,29 +2192,33 @@ function exportNilaiExcelUI() {
   const btn = document.getElementById('btnDoExcel');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
 
-  const { mapel, tahun, semester, setting } = nilaiState;
+  const ctx = _cetakOverride || nilaiState;
+  const { mapel, tahun, semester, setting } = ctx;
   const kkm     = Number(setting.kkm || 70);
   // Target rentang Katrol komponen — sama dengan yang dipakai di
   // doCetakNilai(), bersumber dari Pengaturan Nilai Katrol & KKM.
   const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
+  const judulCustom = (document.getElementById('cetakJudulInput')?.value || '').trim();
+  const judulTampil = judulCustom || ('DAFTAR NILAI ' + def.label);
 
-  const buildAndExport = (rows) => {
+  const buildAndExport = (rows, settingGuru) => {
     const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
       ? Math.round(Number(v)) : '-';
     const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
+    const namaSekolah = settingGuru?.nama_sekolah || '-';
 
     const wb = XLSX.utils.book_new();
     const meta = [
-      [`Daftar Nilai ${mapel}`], [],
-      ['Kelas', kelas], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm], []
+      [judulTampil], [],
+      ['Sekolah', namaSekolah], ['Mata Pelajaran', mapel], ['Kelas', kelas], []
     ];
-    const colHdr = ['No', 'NIS', 'Nama Siswa', def.label, 'Keterangan'];
+    const colHdr = ['No', 'NIS', 'Nama Siswa', 'L/P', def.label, 'Keterangan'];
 
     const dataRows = rows.map((r, i) => {
       const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
         ? Number(r.nilai_akhir) : null;
       return [
-        i + 1, r.nis || '', r.nama_siswa || '',
+        i + 1, r.nis || '', r.nama_siswa || '', r.jk || '-',
         fmt(nilaiKatrol[i]),
         (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
       ];
@@ -2170,11 +2234,18 @@ function exportNilaiExcelUI() {
     closeCetakNilai();
   };
 
-  if (kelas === nilaiState.kelas) {
-    buildAndExport(nilaiState.rows);
+  const rowsReady = rows => {
+    google.script.run
+      .withSuccessHandler(settingGuru => buildAndExport(rows, settingGuru))
+      .withFailureHandler(() => buildAndExport(rows, {}))
+      .getSetting();
+  };
+
+  if (!_cetakOverride && kelas === nilaiState.kelas) {
+    rowsReady(nilaiState.rows);
   } else {
     google.script.run
-      .withSuccessHandler(rows => buildAndExport(rows || []))
+      .withSuccessHandler(rows => rowsReady(rows || []))
       .withFailureHandler(() => {
         if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
         alert('Gagal ambil data nilai kelas ' + kelas);

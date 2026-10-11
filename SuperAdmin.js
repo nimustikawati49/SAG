@@ -1806,7 +1806,19 @@ function getKopSekolahList() {
 
 function uploadKopSekolah(kodeSekolah, payload) {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
-  const auth = getAuth();
+  return _uploadKopSekolahCore_(kodeSekolah, payload, getAuth().email);
+}
+
+/**
+ * _uploadKopSekolahCore_(kodeSekolah, payload, actorEmail)
+ * Logika inti unggah kop — DIPISAH dari uploadKopSekolah() (gerbang
+ * isSuperAdmin()) supaya bisa dipakai ulang oleh guru biasa lewat
+ * guruUploadKopSekolahSaya() (Setting.js), yang gerbangnya beda (role
+ * admin/guru sendiri, bukan cuma SuperAdmin) dan kode_sekolah-nya
+ * di-resolve OTOMATIS dari akun yang login, bukan dipilih manual.
+ */
+function _uploadKopSekolahCore_(kodeSekolah, payload, actorEmail) {
+  const auth = { email: String(actorEmail || '').toLowerCase().trim() };
   const kode = String(kodeSekolah || '').trim();
   if (!kode) throw new Error('Kode/Nama Sekolah wajib diisi.');
   if (!payload || !payload.data) throw new Error('File gambar tidak valid.');
