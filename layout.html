@@ -597,7 +597,7 @@
        Nilai/Rekap Sekolah. Default terbuka karena ini KPI utama, tapi
        tetap collapsible untuk diringkas kalau sudah dilihat. -->
   <details class="card" style="margin-top:24px" open ontoggle="if(this.open) loadKetuntasanPredikatKelas()">
-    <summary style="cursor:pointer;font-weight:700;font-size:16px">📊 Ketuntasan Kelas (Predikat A–D) <span class="muted" style="font-weight:400;font-size:12px">— berdasarkan Total Nilai Murni sebelum Katrol</span></summary>
+    <summary style="cursor:pointer;font-weight:700;font-size:16px">📊 Ketuntasan Kelas (Predikat A–D) <span class="muted" style="font-weight:400;font-size:12px">— berdasarkan Nilai Akhir (setelah Katrol/Remedial) kalau sudah ada, fallback ke Nilai Murni kalau belum</span></summary>
     <div style="display:flex;justify-content:flex-end;margin:12px 0 4px">
       <button class="ghost" onclick="loadKetuntasanPredikatKelas()" style="font-size:13px">🔄 Muat</button>
     </div>

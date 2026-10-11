@@ -51,8 +51,9 @@ function _dashKpiStopSkeleton_(){
 }
 
 /* ===== KPI KETUNTASAN KELAS (Predikat A-D) =====
-   Total Nilai Murni (nilai_asli, sebelum Katrol) tiap siswa per
-   kelas+mapel dikelompokkan ke rubrik predikat tetap (server:
+   Nilai Akhir (setelah Katrol/Remedial) tiap siswa per kelas+mapel kalau
+   sudah dihitung, fallback ke Nilai Murni (nilai_asli) kalau belum —
+   dikelompokkan ke rubrik predikat tetap (server:
    getKetuntasanPredikatKelas() di api_nilai.js) — terpisah dari status
    Tuntas/Belum Tuntas berbasis KKM yang sudah ada di fitur lain. ===== */
 var _ketuntasanPredikatData = [];

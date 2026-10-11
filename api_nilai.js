@@ -499,10 +499,12 @@ function getSettingNilai(kelas, mapel, tahun, semester) {
 /**
  * PREDIKAT_BANDS_NILAI_
  * Rubrik predikat A-D tetap (bukan berdasarkan KKM per mapel) — dipakai
- * KPI "Ketuntasan Kelas" di Dashboard untuk mengelompokkan Total Nilai
- * MURNI (nilai_asli, sebelum Katrol) tiap siswa ke kategori pencapaian +
- * saran tindak lanjut baku, terpisah dari status Tuntas/Belum Tuntas
- * berbasis KKM yang sudah ada di fitur lain (Riwayat Nilai/Rekap Sekolah).
+ * KPI "Ketuntasan Kelas" di Dashboard untuk mengelompokkan nilai EFEKTIF
+ * (Nilai Akhir setelah Katrol/Remedial kalau sudah dihitung, fallback ke
+ * Nilai Murni/nilai_asli kalau guru belum sempat Hitung Ulang) tiap siswa
+ * ke kategori pencapaian + saran tindak lanjut baku, terpisah dari status
+ * Tuntas/Belum Tuntas berbasis KKM yang sudah ada di fitur lain (Riwayat
+ * Nilai/Rekap Sekolah).
  * Rentang & teks sesuai KKTP Fase D (SMP kelas 7-9) — selaras dengan
  * KKTP_BANDS_D_ di Kepsek.js dan legend di layout.html.
  */
@@ -517,7 +519,7 @@ const PREDIKAT_BANDS_NILAI_ = [
     tindak: 'Remedial di seluruh bagian (pemahaman rumus dasar dan pembuatan grafik).' }
 ];
 
-function _predikatDariNilaiMurni_(n) {
+function _predikatDariNilaiEfektif_(n) {
   for (let i = 0; i < PREDIKAT_BANDS_NILAI_.length; i++) {
     const b = PREDIKAT_BANDS_NILAI_[i];
     if (n >= b.min && n <= b.max) return b;
@@ -527,11 +529,12 @@ function _predikatDariNilaiMurni_(n) {
 
 /**
  * getKetuntasanPredikatKelas()
- * KPI "Ketuntasan Kelas" untuk Dashboard — kelompokkan Total Nilai MURNI
- * (nilai_asli, sebelum Katrol) tiap siswa per (kelas, mapel) periode
- * aktif guru ke predikat A/B/D (lihat PREDIKAT_BANDS_NILAI_), plus daftar
- * nama siswa berpredikat C/D (perlu tindak lanjut) diurutkan dari nilai
- * terendah supaya yang paling butuh perhatian tampil duluan.
+ * KPI "Ketuntasan Kelas" untuk Dashboard — kelompokkan nilai EFEKTIF tiap
+ * siswa (Nilai Akhir setelah Katrol/Remedial kalau sudah ada, fallback ke
+ * Nilai Murni kalau belum) per (kelas, mapel) periode aktif guru ke
+ * predikat A/B/C/D (lihat PREDIKAT_BANDS_NILAI_), plus daftar nama siswa
+ * berpredikat C/D (perlu tindak lanjut) diurutkan dari nilai terendah
+ * supaya yang paling butuh perhatian tampil duluan.
  */
 function getKetuntasanPredikatKelas() {
   const auth    = getAuth();
@@ -569,9 +572,14 @@ function getKetuntasanPredikatKelas() {
     const nilaiAkhir = (nilaiAkhirRaw !== '' && nilaiAkhirRaw !== null && nilaiAkhirRaw !== undefined && !isNaN(Number(nilaiAkhirRaw)))
       ? Number(nilaiAkhirRaw) : null;
 
+    // efektif: Nilai Akhir (setelah Katrol/Remedial) kalau sudah dihitung,
+    // fallback ke Nilai Murni kalau guru belum sempat Hitung Ulang —
+    // inilah nilai yang DIPAKAI untuk predikat A-D, bukan selalu murni.
+    const efektif = nilaiAkhir !== null ? nilaiAkhir : nilai;
+
     const key = kelas + '||' + mapel;
     if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
-    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir });
+    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir, efektif });
   }
 
   const avg_ = (vals) => vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : null;
@@ -582,10 +590,10 @@ function getKetuntasanPredikatKelas() {
     const counts = { A: 0, B: 0, C: 0, D: 0 };
     const perluTindakLanjut = [];
     g.siswa.forEach((s) => {
-      const band = _predikatDariNilaiMurni_(s.nilai);
+      const band = _predikatDariNilaiEfektif_(s.efektif);
       counts[band.kode]++;
       if (band.kode === 'C' || band.kode === 'D') {
-        perluTindakLanjut.push({ nama: s.nama, nilai: s.nilai, predikat: band.kode });
+        perluTindakLanjut.push({ nama: s.nama, nilai: s.efektif, predikat: band.kode });
       }
     });
     perluTindakLanjut.sort((a, b) => a.nilai - b.nilai);
