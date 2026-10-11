@@ -110,7 +110,11 @@ function _renderKetuntasanPredikatKelas_(){
   // Tertinggi (Murni) saja. Detail per-siswa & daftar remedial (+salin WA)
   // dipindah seluruhnya ke Riwayat Nilai — klik "Lihat Detail" di sini
   // langsung membuka Riwayat Nilai dengan kelas itu sudah terisi & dimuat.
-  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">';
+  // Kolom grid proporsional terhadap jumlah kartu — maksimal 5 kolom
+  // (mis. 10 kelas -> 5 kolom x 2 baris), kurang dari 5 kelas langsung
+  // sejumlah itu supaya kartu tidak melar terlalu lebar di satu baris.
+  var kolom = Math.min(rows.length, 5);
+  var html = '<div style="display:grid;grid-template-columns:repeat(' + kolom + ',1fr);gap:12px">';
   rows.forEach(function(g){
     var pctColor = g.persenTuntas >= 80 ? '#166534' : (g.persenTuntas >= 60 ? '#854d0e' : '#991b1b');
     var pctBg    = g.persenTuntas >= 80 ? '#dcfce7' : (g.persenTuntas >= 60 ? '#fef9c3' : '#fee2e2');

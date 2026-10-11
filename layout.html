@@ -2420,6 +2420,17 @@
     <div id="nilaiFilterStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
   </div>
 
+  <!-- Kelola Siswa Kelas Ini (self-service — tanpa perlu minta SuperAdmin) -->
+  <details class="card" style="margin-bottom:16px">
+    <summary style="cursor:pointer;font-weight:700;font-size:15px">🧑‍🎓 Kelola Siswa Kelas Ini</summary>
+    <p class="muted" style="font-size:12px;margin:8px 0 12px">
+      Tambah siswa pindahan baru, atau keluarkan siswa yang sudah tidak aktif — untuk kelas yang dipilih
+      di filter "Kelas" di atas. Data nilai siswa yang sudah tersimpan tidak ikut terhapus kalau dikeluarkan.
+    </p>
+    <button class="ghost" onclick="guruMuatKelolaSiswa_()" style="font-size:13px;margin-bottom:10px">🔎 Tampilkan Daftar Siswa</button>
+    <div id="guruKelolaSiswaBox"><div class="muted" style="font-size:12px">Pilih kelas di filter atas, lalu klik tombol di atas.</div></div>
+  </details>
+
   <!-- Konten utama (tampil setelah muat) -->
   <div id="nilaiMainSection" style="display:none">
 

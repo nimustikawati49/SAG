@@ -288,6 +288,81 @@ function getDataSiswaUntukNilai(kelas) {
     .sort((a, b) => Number(a.no_absen) - Number(b.no_absen));
 }
 
+// =====================================================================
+// KELOLA SISWA (guru sendiri) — versi self-service dari
+// superadminGetSiswaUntukKelola/TambahSiswaKeKelas/HapusSiswaDariKelas
+// (SuperAdmin.js), supaya guru TIDAK PERLU minta SuperAdmin tiap ada
+// siswa pindah masuk/keluar di tengah semester. Selalu beroperasi di
+// SISWA milik akun yang login sendiri (authAdmin_()) — tidak bisa
+// menyentuh data guru lain, beda dengan versi SuperAdmin yang eksplisit
+// pilih guru target. Kolom SISWA tetap (lihat Jurnal.js): 0=Kelas,
+// 1=no_absen, 2=NIS, 3=nama_lengkap, 4=jk, 5=owner_email,
+// 6=tahun_pelajaran.
+// =====================================================================
+
+function guruGetSiswaUntukKelola(kelas) {
+  const auth = authAdmin_();
+  const kls = String(kelas || '').trim();
+  if (!kls) throw new Error('Pilih kelas.');
+  const sh = sheet('SISWA');
+  if (!sh) return [];
+
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+  const data = sh.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[0] || '').trim() !== kls) continue;
+    if (String(r[5] || '').toLowerCase().trim() !== auth.email) continue;
+    if (!_siswaRowMatchesPeriode_(r, tahunAktif)) continue;
+    out.push({ rowNumber: i + 1, no_absen: r[1] || '', nis: r[2] || '', nama: r[3] || '', jk: r[4] || '' });
+  }
+  out.sort((a, b) => Number(a.no_absen) - Number(b.no_absen));
+  return out;
+}
+
+function guruTambahSiswaKeKelas(kelas, data) {
+  const auth = authAdmin_();
+  const kls = String(kelas || '').trim();
+  if (!kls) throw new Error('Pilih kelas.');
+  const nama = String(data && data.nama || '').trim();
+  if (!nama) throw new Error('Nama siswa wajib diisi.');
+
+  let sh = sheet('SISWA');
+  if (!sh) {
+    sh = getSpreadsheet_().insertSheet('SISWA');
+    sh.appendRow(['Kelas', 'no_absen', 'NIS', 'nama_lengkap', 'jk', 'owner_email', 'tahun_pelajaran']);
+  }
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+  sh.appendRow([kls, data.no_absen || '', data.nis || '', nama, data.jk || '', auth.email, tahunAktif]);
+  invalidateCache_('SISWA');
+  logAudit('TAMBAH_SISWA', kls, nama);
+  return { ok: true };
+}
+
+function guruHapusSiswaDariKelas(kelas, rowNumber, namaKonfirmasi) {
+  const auth = authAdmin_();
+  const kls = String(kelas || '').trim();
+  const row = Number(rowNumber);
+  if (!kls || !row) throw new Error('Data tidak lengkap.');
+  const sh = sheet('SISWA');
+  if (!sh) throw new Error('Belum ada data siswa.');
+
+  const rowVals = sh.getRange(row, 1, 1, 7).getValues()[0];
+  if (String(rowVals[0] || '').trim() !== kls || String(rowVals[5] || '').toLowerCase().trim() !== auth.email) {
+    throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
+  }
+  const nama = String(rowVals[3] || '');
+  if (namaKonfirmasi && nama.trim() !== String(namaKonfirmasi).trim()) {
+    throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
+  }
+
+  sh.deleteRow(row);
+  invalidateCache_('SISWA');
+  logAudit('HAPUS_SISWA', kls, nama);
+  return { ok: true };
+}
+
 /**
  * Ambil nilai tersimpan untuk kombinasi kelas/mapel/tahun/semester.
  * @returns {Array} array of row objects
