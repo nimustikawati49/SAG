@@ -536,18 +536,35 @@ function _predikatDariNilaiEfektif_(n) {
  * berpredikat C/D (perlu tindak lanjut) diurutkan dari nilai terendah
  * supaya yang paling butuh perhatian tampil duluan.
  */
+// Label komponen dipakai utk rincian "komponen rendah" per siswa C/D —
+// sama pengelompokan dgn KOMPONEN_LABEL di getSiswaPotensiBelumAdaNilai()
+// (Tugas Mandiri = rata tgs1-3, Tugas Kelompok = rata tgsk1-3) supaya
+// konsisten istilah di seluruh Dashboard.
+function _komponenLabelKetuntasan_(isGenap) {
+  return { uh1: 'UH1', uh2: 'UH2', uh3: 'UH3', tgsM: 'Tugas Mandiri', tgsK: 'Tugas Kelompok', pts: 'PTS', uas: isGenap ? 'ASAT' : 'SAS' };
+}
+
 function getKetuntasanPredikatKelas() {
   const auth    = getAuth();
   const setting = getSetting();
   const tahun   = setting.tahun_pelajaran || '';
   const semester= setting.semester || '';
   if (!tahun || !semester) return [];
+  const isGenap = String(semester).toLowerCase().indexOf('genap') > -1;
+  const KOMPONEN_LABEL = _komponenLabelKetuntasan_(isGenap);
+  const compKeys = Object.keys(KOMPONEN_LABEL);
 
   const sh = sheetNilai_();
   const rows = sh.getDataRange().getValues();
   if (rows.length < 2) return [];
   const h = rows[0];
   const idx = (n) => h.indexOf(n);
+
+  const num_ = (v) => (v !== '' && v !== null && v !== undefined && !isNaN(Number(v))) ? Number(v) : null;
+  const avgRaw_ = (vals) => {
+    const nums = vals.filter(v => v !== null);
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+  };
 
   const groups = {};
   for (let i = 1; i < rows.length; i++) {
@@ -577,9 +594,20 @@ function getKetuntasanPredikatKelas() {
     // inilah nilai yang DIPAKAI untuk predikat A-D, bukan selalu murni.
     const efektif = nilaiAkhir !== null ? nilaiAkhir : nilai;
 
+    // Nilai per komponen (dari skala 0-100 mentah, bukan hasil rumus
+    // Katrol) — dipakai utk bandingkan siswa C/D vs rata-rata kelas per
+    // komponen, supaya guru tahu PERSISNYA bagian mana yang lemah.
+    const komponen = {
+      uh1: num_(r[idx('uh1')]), uh2: num_(r[idx('uh2')]), uh3: num_(r[idx('uh3')]),
+      tgsM: avgRaw_([num_(r[idx('tgs1')]), num_(r[idx('tgs2')]), num_(r[idx('tgs3')])]),
+      tgsK: avgRaw_([num_(r[idx('tgsk1')]), num_(r[idx('tgsk2')]), num_(r[idx('tgsk3')])]),
+      pts: num_(r[idx('pts')]),
+      uas: num_(r[idx(isGenap ? 'pat' : 'pas')])
+    };
+
     const key = kelas + '||' + mapel;
     if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
-    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir, efektif });
+    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir, efektif, komponen });
   }
 
   const avg_ = (vals) => vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : null;
@@ -588,12 +616,22 @@ function getKetuntasanPredikatKelas() {
   return keys.map((key) => {
     const g = groups[key];
     const counts = { A: 0, B: 0, C: 0, D: 0 };
+
+    // Rata-rata kelas per komponen (dari SEMUA siswa, bukan cuma yang
+    // C/D) — acuan pembanding "rendah" nggak masuk akal kalau cuma
+    // dihitung dari siswa yang sudah pasti lemah.
+    const komponenAvgKelas = {};
+    compKeys.forEach(k => { komponenAvgKelas[k] = avgRaw_(g.siswa.map(s => s.komponen[k])); });
+
     const perluTindakLanjut = [];
     g.siswa.forEach((s) => {
       const band = _predikatDariNilaiEfektif_(s.efektif);
       counts[band.kode]++;
       if (band.kode === 'C' || band.kode === 'D') {
-        perluTindakLanjut.push({ nama: s.nama, nilai: s.efektif, predikat: band.kode });
+        const komponenRendah = compKeys
+          .filter(k => s.komponen[k] !== null && komponenAvgKelas[k] !== null && s.komponen[k] < komponenAvgKelas[k])
+          .map(k => ({ label: KOMPONEN_LABEL[k], nilai: Math.round(s.komponen[k] * 100) / 100 }));
+        perluTindakLanjut.push({ nama: s.nama, nilai: s.efektif, predikat: band.kode, komponenRendah });
       }
     });
     perluTindakLanjut.sort((a, b) => a.nilai - b.nilai);

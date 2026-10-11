@@ -126,7 +126,7 @@ function _renderKetuntasanPredikatKelas_(){
       '<td style="text-align:center"><span style="background:' + pctBg + ';color:' + pctColor + ';padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700">' + g.persenTuntas + '%</span></td>' +
       '<td style="text-align:center">' +
         (jumlahCD
-          ? '<button class="ghost" onclick="_toggleKetuntasanDetail_(' + i + ')" style="font-size:12px">👀 Lihat ' + jumlahCD + ' siswa</button>'
+          ? '<button class="ghost" onclick="_toggleKetuntasanDetail_(' + i + ')" style="font-size:12px">📝 ' + jumlahCD + ' perlu remedial</button>'
           : '<span class="muted" style="font-size:12px">✅ Semua tuntas</span>') +
       '</td>' +
       '</tr>';
@@ -141,13 +141,29 @@ function _renderKetuntasanPredikatKelas_(){
 
 function _renderKetuntasanDetailList_(list){
   if(!list.length) return '';
-  var html = '<div style="padding:8px 4px"><b style="font-size:12.5px">⚠️ Siswa perlu tindak lanjut (predikat C/D, urut dari nilai terendah):</b>' +
-    '<ul style="margin:6px 0 0 18px;font-size:12.5px;line-height:1.8">';
-  list.forEach(function(s){
+  var html = '<div style="padding:10px 4px">' +
+    '<b style="font-size:12.5px">⚠️ Siswa perlu remedial (predikat C/D, Belum Mencapai Ketuntasan — urut dari nilai terendah):</b>' +
+    '<div class="table-wrap" style="margin-top:8px"><table style="font-size:12px">' +
+    '<thead><tr><th>No</th><th class="left">Nama Siswa</th><th>Nilai Total</th><th>Predikat</th><th class="left">Komponen Rendah (di bawah rata-rata kelas)</th></tr></thead><tbody>';
+  list.forEach(function(s, i){
     var color = s.predikat === 'D' ? '#991b1b' : '#854d0e';
-    html += '<li>' + _escKPK_(s.nama) + ' — <b style="color:' + color + '">' + s.nilai + ' (' + s.predikat + ')</b></li>';
+    var bg    = s.predikat === 'D' ? '#fee2e2' : '#fef9c3';
+    var komp  = s.komponenRendah || [];
+    var kompHtml = komp.length
+      ? komp.map(function(k){
+          return '<span style="display:inline-block;background:' + bg + ';color:' + color + ';padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;margin:1px 3px 1px 0">' +
+            _escKPK_(k.label) + ': ' + k.nilai + '</span>';
+        }).join('')
+      : '<span class="muted" style="font-size:11px">Nilai total rendah, tapi tiap komponen relatif merata (kelas memang perlu penguatan menyeluruh)</span>';
+    html += '<tr>' +
+      '<td style="text-align:center">' + (i + 1) + '</td>' +
+      '<td class="left">' + _escKPK_(s.nama) + '</td>' +
+      '<td style="text-align:center;font-weight:700;color:' + color + '">' + s.nilai + '</td>' +
+      '<td style="text-align:center"><span style="background:' + bg + ';color:' + color + ';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">' + s.predikat + '</span></td>' +
+      '<td class="left">' + kompHtml + '</td>' +
+      '</tr>';
   });
-  html += '</ul></div>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
