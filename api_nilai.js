@@ -364,6 +364,64 @@ function guruHapusSiswaDariKelas(kelas, rowNumber, namaKonfirmasi) {
 }
 
 /**
+ * _siswaAktifSet_(kelas, ownerEmail)
+ * NIS + nama siswa yang MASIH ADA di roster SISWA sekarang (periode
+ * aktif) untuk kelas+guru ini — dipakai "Kelola Siswa per Kelas" (tab
+ * Setting) baru dikeluarkan masih muncul di Riwayat Nilai/Ketuntasan
+ * Kelas/remedial walau sudah tidak di roster (nilai_siswa TIDAK dihapus
+ * saat "Keluarkan", sengaja, supaya histori aman — tapi harus
+ * disembunyikan dari tampilan periode AKTIF biar tidak membingungkan).
+ * Cocokkan lewat NIS (utama) atau nama (fallback kalau NIS kosong).
+ */
+function _siswaAktifSet_(kelas, ownerEmail) {
+  const result = { nisSet: new Set(), namaSet: new Set() };
+  const sh = sheet('SISWA');
+  if (!sh) return result;
+  const email = String(ownerEmail || '').toLowerCase().trim();
+  const kls = String(kelas || '').trim();
+  const tahunAktif = getSetting().tahun_pelajaran || '';
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[0] || '').trim() !== kls) continue;
+    if (String(r[5] || '').toLowerCase().trim() !== email) continue;
+    if (!_siswaRowMatchesPeriode_(r, tahunAktif)) continue;
+    const nis = String(r[2] || '').trim();
+    const nama = String(r[3] || '').trim().toLowerCase();
+    if (nis) result.nisSet.add(nis);
+    if (nama) result.namaSet.add(nama);
+  }
+  return result;
+}
+
+/** true kalau (tahun,semester) yang diminta SAMA dengan periode aktif akun ini sekarang. */
+function _samaPeriodeAktif_(tahun, semester) {
+  let setting = {};
+  try { setting = getSetting() || {}; } catch (e) { return false; }
+  return String(setting.tahun_pelajaran || '').trim() === String(tahun || '').trim()
+    && String(setting.semester || '').toLowerCase().trim() === String(semester || '').toLowerCase().trim();
+}
+
+/**
+ * Saring baris nilai supaya siswa yang sudah "Keluarkan" dari roster
+ * SISWA (periode AKTIF saja — lihat _samaPeriodeAktif_) tidak ikut
+ * tampil. Periode HISTORIS sengaja TIDAK disaring — roster SISWA cuma
+ * mencerminkan kondisi SEKARANG, tidak valid utk merekonstruksi siapa
+ * aktif di periode lama (sama alasannya dengan komentar di
+ * scripts-nilai.html soal roster periode riwayat).
+ */
+function _saringSiswaAktif_(hasil, kelas, ownerEmail, tahun, semester) {
+  if (!_samaPeriodeAktif_(tahun, semester)) return hasil;
+  const aktif = _siswaAktifSet_(kelas, ownerEmail);
+  if (!aktif.nisSet.size && !aktif.namaSet.size) return hasil; // roster kosong/gagal baca — jangan sembunyikan semua
+  return hasil.filter(r => {
+    const nis  = String(r.nis || r[1] || '').trim();
+    const nama = String(r.nama_siswa || r[2] || '').trim().toLowerCase();
+    return (nis && aktif.nisSet.has(nis)) || (nama && aktif.namaSet.has(nama));
+  });
+}
+
+/**
  * Ambil nilai tersimpan untuk kombinasi kelas/mapel/tahun/semester.
  * @returns {Array} array of row objects
  */
@@ -374,7 +432,7 @@ function getNilaiSiswa(kelas, mapel, tahun, semester) {
   const h = rows[0];
   const idx = (n) => h.indexOf(n);
 
-  return rows.slice(1)
+  const hasil = rows.slice(1)
     .filter(r => {
       const ownerOk = String(r[idx('owner_email')]).toLowerCase().trim() === auth.email;
       return ownerOk
@@ -406,6 +464,8 @@ function getNilaiSiswa(kelas, mapel, tahun, semester) {
       nilai_remedial: r[idx('nilai_remedial')],
       nilai_akhir   : r[idx('nilai_akhir')]
     }));
+
+  return _saringSiswaAktif_(hasil, kelas, auth.email, tahun, semester);
 }
 
 /**
@@ -705,6 +765,18 @@ function getKetuntasanPredikatKelas() {
     return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
   };
 
+  // Siswa yang sudah "Keluarkan" (Kelola Siswa, tab Setting) dari roster
+  // SISWA jangan ikut tampil di KPI ini — tapi HANYA kalau tahun/semester
+  // yang dipakai di sini memang periode aktif sekarang (bukan hasil
+  // fallback ke periode lama, lihat blok di atas) — roster SISWA cuma
+  // valid utk kondisi SEKARANG, bukan periode historis.
+  const periodeIniAktif = _samaPeriodeAktif_(tahun, semester);
+  const aktifCache = {};
+  const getAktifSet_ = (kls) => {
+    if (!aktifCache[kls]) aktifCache[kls] = _siswaAktifSet_(kls, auth.email);
+    return aktifCache[kls];
+  };
+
   const groups = {};
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
@@ -716,6 +788,15 @@ function getKetuntasanPredikatKelas() {
     const mapel = String(r[idx('mapel')] || '').trim();
     const nama  = String(r[idx('nama_siswa')] || '').trim();
     if (!kelas) continue;
+
+    if (periodeIniAktif) {
+      const aktif = getAktifSet_(kelas);
+      if (aktif.nisSet.size || aktif.namaSet.size) {
+        const nis = String(r[idx('nis')] || '').trim();
+        const masihAktif = (nis && aktif.nisSet.has(nis)) || (nama && aktif.namaSet.has(nama.toLowerCase()));
+        if (!masihAktif) continue;
+      }
+    }
 
     // Nilai Murni dihitung ULANG dari komponen mentah (bukan dipercaya dari
     // kolom nilai_asli tersimpan) — kolom tersimpan bisa basi kalau baris
@@ -866,6 +947,16 @@ function getSiswaPotensiBelumAdaNilai() {
   };
   const compKeys = Object.keys(KOMPONEN_LABEL);
 
+  // Periode di fungsi ini SELALU periode aktif (tidak ada fallback ke
+  // periode lain seperti getKetuntasanPredikatKelas) — jadi siswa yang
+  // sudah "Keluarkan" dari roster SISWA (Kelola Siswa, tab Setting) bisa
+  // langsung disaring tanpa syarat tambahan.
+  const aktifCache = {};
+  const getAktifSet_ = (kls) => {
+    if (!aktifCache[kls]) aktifCache[kls] = _siswaAktifSet_(kls, auth.email);
+    return aktifCache[kls];
+  };
+
   const groups = {};
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
@@ -876,12 +967,21 @@ function getSiswaPotensiBelumAdaNilai() {
     const kelas = String(r[idx('kelas')] || '').trim();
     const mapel = String(r[idx('mapel')] || '').trim();
     if (!kelas) continue;
+
+    const namaSiswa = String(r[idx('nama_siswa')] || '').trim();
+    const nisSiswa  = String(r[idx('nis')] || '').trim();
+    const aktif = getAktifSet_(kelas);
+    if (aktif.nisSet.size || aktif.namaSet.size) {
+      const masihAktif = (nisSiswa && aktif.nisSet.has(nisSiswa)) || (namaSiswa && aktif.namaSet.has(namaSiswa.toLowerCase()));
+      if (!masihAktif) continue;
+    }
+
     const key = kelas + '||' + mapel;
     if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
 
     groups[key].siswa.push({
-      nama: String(r[idx('nama_siswa')] || '').trim(),
-      nis:  String(r[idx('nis')] || '').trim(),
+      nama: namaSiswa,
+      nis:  nisSiswa,
       komponen: {
         tgsM: avgOrKosong_([r[idx('tgs1')], r[idx('tgs2')], r[idx('tgs3')]]),
         tgsK: avgOrKosong_([r[idx('tgsk1')], r[idx('tgsk2')], r[idx('tgsk3')]]),
