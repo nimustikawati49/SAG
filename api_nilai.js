@@ -94,8 +94,8 @@ function hitungNilaiRow_(r) {
   const uas       = isGenap ? parse(r.pat) : parse(r.pas);
   const pts_num   = parse(r.pts);
 
-  // Nilai Total (murni): 40% harian + 30% PTS + 30% SAS/ASAT — kalau
-  // belum semua komponen terisi (mis. SAS/ASAT belum diujikan), dihitung
+  // Nilai Total (murni): 40% harian + 30% PTS + 30% ASAS/ASAT — kalau
+  // belum semua komponen terisi (mis. ASAS/ASAT belum diujikan), dihitung
   // dari komponen yang SUDAH ADA saja dengan bobot dinormalisasi ulang,
   // supaya ada progres sementara (dipakai KKTP/Ketuntasan Kelas) tanpa
   // menunggu semester selesai. Kalau ketiganya lengkap, hasilnya PERSIS
@@ -698,7 +698,7 @@ function _predikatDariNilaiEfektif_(n) {
 // (Tugas Mandiri = rata tgs1-3, Tugas Kelompok = rata tgsk1-3) supaya
 // konsisten istilah di seluruh Dashboard.
 function _komponenLabelKetuntasan_(isGenap) {
-  return { uh1: 'UH1', uh2: 'UH2', uh3: 'UH3', tgsM: 'Tugas Mandiri', tgsK: 'Tugas Kelompok', pts: 'PTS', uas: isGenap ? 'ASAT' : 'SAS' };
+  return { uh1: 'UH1', uh2: 'UH2', uh3: 'UH3', tgsM: 'Tugas Mandiri', tgsK: 'Tugas Kelompok', pts: 'PTS', uas: isGenap ? 'ASAT' : 'ASAS' };
 }
 
 function getKetuntasanPredikatKelas() {
@@ -924,7 +924,7 @@ function getKetuntasanPredikatKelas() {
  * getSiswaPotensiBelumAdaNilai()
  * KPI Dashboard — deteksi dini siswa yang "berpotensi belum ada nilai" di
  * BEBERAPA komponen sekaligus (Tugas Mandiri/Kelompok, UH1-3, PTS,
- * SAS/ASAT), dibandingkan RELATIF terhadap teman sekelasnya (sama seperti
+ * ASAS/ASAT), dibandingkan RELATIF terhadap teman sekelasnya (sama seperti
  * tanda ⚠️ di Riwayat Nilai) — bukan absolut, supaya komponen yang memang
  * belum diisi SIAPA PUN di kelas itu (guru belum sempat input) tidak ikut
  * menandai siswa seolah dia yang bermasalah. Siswa ditandai kalau MINIMAL
@@ -955,7 +955,7 @@ function getSiswaPotensiBelumAdaNilai() {
   const KOMPONEN_LABEL = {
     tgsM: 'Tugas Mandiri', tgsK: 'Tugas Kelompok',
     uh1: 'UH1', uh2: 'UH2', uh3: 'UH3',
-    pts: 'PTS', uas: isGenap ? 'ASAT' : 'SAS'
+    pts: 'PTS', uas: isGenap ? 'ASAT' : 'ASAS'
   };
   const compKeys = Object.keys(KOMPONEN_LABEL);
 

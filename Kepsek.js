@@ -472,7 +472,7 @@ function getRekapSekolah(forceRefresh) {
   var totalSiswa       = guruList.reduce(function(s, g) { return s + g.totalSiswa; }, 0);
 
   // ── Ketuntasan siswa per kelas berdasarkan KKTP (rentang per Fase) ──
-  // Skor per siswa = rata-rata (Rata Harian + PTS + SAS/ASAT) digabung
+  // Skor per siswa = rata-rata (Rata Harian + PTS + ASAS/ASAT) digabung
   // dari SEMUA mapel yang diampu guru-guru sekolah ini, lalu dibandingkan
   // ke rentang KKTP sesuai fase jenjang kelasnya (lihat KKTP_FASE_BANDS_
   // di atas) — bukan satu KKM tunggal, supaya sesuai standar Kurikulum
@@ -494,7 +494,7 @@ function getRekapSekolah(forceRefresh) {
       }
 
       // Ketuntasan KKTP dihitung dari rata-rata (Rata Harian + PTS +
-      // SAS/ASAT) SAJA — bukan nilai_akhir/nilai_asli yang sudah ada
+      // ASAS/ASAT) SAJA — bukan nilai_akhir/nilai_asli yang sudah ada
       // (itu formula campuran 40% [Harian+Tugas] + 30% PTS + 30% UAS).
       // Tugas Mandiri/Kelompok sengaja TIDAK ikut. Komponen yang kosong
       // dilewati, rata-rata dihitung dari yang tersedia saja.

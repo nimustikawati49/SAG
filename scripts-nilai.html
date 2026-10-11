@@ -514,7 +514,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
     return;
   }
   const isGenap = String(semester || '').toLowerCase().includes('genap');
-  const labelUas = isGenap ? 'ASAT' : 'SAS';
+  const labelUas = isGenap ? 'ASAT' : 'ASAS';
   const isEmpty_ = v => v === null || v === undefined || v === '';
   const avg = arr => {
     const nums = arr.filter(v => !isEmpty_(v)).map(Number).filter(n => !isNaN(n));
@@ -619,7 +619,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
     summaryHtml += '<div class="alert-banner info" style="margin-bottom:14px">' +
       'ℹ️ <b>Statistik Nilai Murni belum bisa dihitung</b> — kolom <b>Nilai Akhir</b> di tabel bawah masih "-" untuk semua ' + rows.length + ' siswa ' +
       '(Nilai Total/nilai_asli belum tersimpan sama sekali untuk kelas+mapel+periode ini). ' +
-      'Buka Input Nilai untuk kelas ini, pastikan ada yang terisi (minimal salah satu dari UH/Tugas/PTS/SAS/ASAT), lalu klik <b>💾 Simpan Nilai</b> — setelah itu kembali ke sini.' +
+      'Buka Input Nilai untuk kelas ini, pastikan ada yang terisi (minimal salah satu dari UH/Tugas/PTS/ASAS/ASAT), lalu klik <b>💾 Simpan Nilai</b> — setelah itu kembali ke sini.' +
       '</div>';
   }
 
@@ -1306,7 +1306,7 @@ function renderTabelNilai() {
 
   const showTgsk = !!nilaiState.colVis.tgsk;
   const showRata = !!nilaiState.colVis.rataDetail;
-  // No, NIS, Nama (3) + Tugas Mandiri (3) + UH (3) + PTS + SAS (2) + Rata Total + Total Nilai + Nilai Akhir (3)
+  // No, NIS, Nama (3) + Tugas Mandiri (3) + UH (3) + PTS + ASAS/ASAT (2) + Rata Total + Total Nilai + Nilai Akhir (3)
   const totalCols = 14 + (showTgsk ? 3 : 0) + (showRata ? 2 : 0);
 
   // Lebar kolom proporsional (table-layout:fixed) — supaya tabel selalu pas
@@ -1375,7 +1375,7 @@ function renderTabelNilai() {
   // Render header dinamis sesuai semester
   const tHead = document.getElementById('tabelNilaiThead');
   if (tHead) {
-    const pasPat = isGenap ? 'ASAT' : 'SAS';
+    const pasPat = isGenap ? 'ASAT' : 'ASAS';
     tHead.innerHTML = `
       <tr>
         <th rowspan="2">No</th>
@@ -1891,16 +1891,6 @@ function loadKelasUntukCetak_(preferKelas) {
     .getKelasYangAdaNilai(mapel, tahun, semester);
 }
 
-/**
- * bukaCetakNilaiDariRiwayat_()
- * Buka modal Cetak Nilai LANGSUNG dari Riwayat Nilai, pakai kelas/mapel/
- * tahun/semester yang sedang ditampilkan di sana — guru tidak perlu
- * pindah ke Input Nilai dulu cuma untuk mencetak PTS/SAS/ASAT (Katrol).
- * nilaiState.kelas sengaja diisi sentinel yang TIDAK PERNAH cocok dengan
- * nama kelas asli, supaya doCetakNilai()/exportNilaiExcelUI() SELALU
- * fetch data fresh lewat getNilaiSiswa() (bukan reuse nilaiState.rows
- * dari sesi Input Nilai sebelumnya yang mungkin kelas/mapel-nya beda).
- */
 // Context TERPISAH dari nilaiState (Input Nilai) saat Cetak Nilai dibuka
 // dari Riwayat Nilai — JANGAN pernah menimpa nilaiState.kelas/mapel/dst
 // di sini: itu akan merusak state Input Nilai (mis. kalau guru balik ke
@@ -1913,7 +1903,11 @@ let _cetakOverride = null;
  * bukaCetakNilaiDariRiwayat_()
  * Buka modal Cetak Nilai LANGSUNG dari Riwayat Nilai, pakai kelas/mapel/
  * tahun/semester yang sedang ditampilkan di sana — guru tidak perlu
- * pindah ke Input Nilai dulu cuma untuk mencetak PTS/SAS/ASAT (Katrol).
+ * pindah ke Input Nilai dulu cuma untuk mencetak PTS/ASAS/ASAT (Katrol).
+ * nilaiState.kelas TIDAK pernah disentuh (lihat _cetakOverride di atas)
+ * supaya doCetakNilai()/exportNilaiExcelUI() SELALU fetch data fresh
+ * lewat getNilaiSiswa(), bukan reuse nilaiState.rows dari sesi Input
+ * Nilai sebelumnya yang mungkin kelas/mapel-nya beda.
  */
 function bukaCetakNilaiDariRiwayat_() {
   const kelas = (document.getElementById('monNilaiKelasSelect') || {}).value || '';
@@ -1941,7 +1935,7 @@ function bukaCetakNilaiDariRiwayat_() {
 }
 
 /**
- * Katrol satu komponen (PTS atau SAS/ASAT) secara proporsional per kelas:
+ * Katrol satu komponen (PTS atau ASAS/ASAT) secara proporsional per kelas:
  * siswa dengan nilai mentah terendah di ARRAY YANG DIBERIKAN dipetakan ke
  * target.min, tertinggi ke target.max — rumus sama persis dengan Katrol
  * Nilai Total di nilaiHitungKatrolBatch_UI, cuma sumbernya satu komponen
@@ -1958,7 +1952,7 @@ function _katrolKomponen_(rawVals, target) {
     if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
     const n = Number(v);
     const k = (maxA === minA) ? target.min : ((n - minA) / (maxA - minA)) * (target.max - target.min) + target.min;
-    // Bulat utuh (bukan desimal) — nilai PTS/SAS/ASAT yang dicetak/export
+    // Bulat utuh (bukan desimal) — nilai PTS/ASAS/ASAT yang dicetak/export
     // memang dimaksudkan tampil sebagai angka bulat.
     return Math.round(k);
   });
@@ -1967,17 +1961,19 @@ function _katrolKomponen_(rawVals, target) {
 // Komponen yang bisa dipilih utk dicetak — field mentah per siswa +
 // label kolom. 'sas' dan 'asat' sama-sama membaca field 'pas'/'pat' apa
 // adanya (pilihan manual, TIDAK otomatis ikut semester aktif) supaya guru
-// bisa tetap cetak SAS walau semester aktifnya sudah Genap, atau
-// sebaliknya.
+// bisa tetap cetak ASAS walau semester aktifnya sudah Genap, atau
+// sebaliknya. Kunci 'sas' sengaja dipertahankan (bukan diganti 'asas')
+// supaya tidak perlu ubah value radio button di layout.html — cuma
+// label tampilannya yang diganti jadi ASAS.
 const CETAK_KOMPONEN_MAP_ = {
   pts : { field: 'pts', label: 'PTS' },
-  sas : { field: 'pas', label: 'SAS' },
+  sas : { field: 'pas', label: 'ASAS' },
   asat: { field: 'pat', label: 'ASAT' }
 };
 
 /**
  * Generate HTML tabel nilai untuk satu kelas (untuk print/export) —
- * menampilkan SATU komponen (PTS/SAS/ASAT) hasil Katrol, sesuai pilihan
+ * menampilkan SATU komponen (PTS/ASAS/ASAT) hasil Katrol, sesuai pilihan
  * guru di modal Cetak Nilai.
  * @param {string} kelasNm  – nama kelas
  * @param {Array}  rows     – array row data nilai

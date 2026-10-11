@@ -575,14 +575,14 @@
 
   <!-- ===== KPI SISWA BERPOTENSI BELUM ADA NILAI =====
        Deteksi dini siswa dengan ≥2 komponen nilai (Tugas Mandiri/Kelompok,
-       UH1-3, PTS, SAS/ASAT) yang masih kosong PADAHAL sudah diisi untuk
+       UH1-3, PTS, ASAS/ASAT) yang masih kosong PADAHAL sudah diisi untuk
        siswa lain di kelas+mapel yang sama (relatif, bukan absolut) —
        lihat getSiswaPotensiBelumAdaNilai() di api_nilai.js. Sinyal dini,
        bukan vonis: bisa juga karena guru belum sempat input, bukan
        berarti siswanya pasti tidak aktif. -->
   <details class="card" style="margin-top:24px" open ontoggle="if(this.open) loadSiswaPotensiBelumAdaNilai()">
     <summary style="cursor:pointer;font-weight:700;font-size:16px">🔎 Siswa Berpotensi Belum Ada Nilai <span class="muted" style="font-weight:400;font-size:12px">— deteksi dini dari kelengkapan komponen nilai</span></summary>
-    <p class="muted" style="margin:10px 0;font-size:12.5px">Siswa ditandai kalau minimal 2 komponen nilai (Tugas Mandiri/Kelompok, UH1-3, PTS, SAS/ASAT) masih kosong, padahal komponen itu sudah diisi untuk teman sekelasnya. Bisa jadi siswa belum mengumpulkan tugas — bisa juga nilainya memang belum sempat diinput. Cek dulu sebelum menyimpulkan.</p>
+    <p class="muted" style="margin:10px 0;font-size:12.5px">Siswa ditandai kalau minimal 2 komponen nilai (Tugas Mandiri/Kelompok, UH1-3, PTS, ASAS/ASAT) masih kosong, padahal komponen itu sudah diisi untuk teman sekelasnya. Bisa jadi siswa belum mengumpulkan tugas — bisa juga nilainya memang belum sempat diinput. Cek dulu sebelum menyimpulkan.</p>
     <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
       <button class="ghost" onclick="loadSiswaPotensiBelumAdaNilai()" style="font-size:13px">🔄 Muat</button>
     </div>
@@ -968,7 +968,7 @@
           </select>
         </div>
         <button id="btnMonMuatNilai" onclick="muatMonitoringNilai()" disabled>🔎 Tampilkan</button>
-        <button class="ghost" onclick="bukaCetakNilaiDariRiwayat_()" title="Cetak PTS/SAS/ASAT (Katrol) untuk kelas yang sedang dipilih">🖨️ Cetak Nilai</button>
+        <button class="ghost" onclick="bukaCetakNilaiDariRiwayat_()" title="Cetak PTS/ASAS/ASAT (Katrol) untuk kelas yang sedang dipilih">🖨️ Cetak Nilai</button>
       </div>
       <div id="monNilaiFilterStatus" class="muted" style="font-size:12px;margin-top:6px"></div>
     </div>
@@ -2410,14 +2410,14 @@
       <li><b>TGS1–TGS3</b>: nilai tugas mandiri harian</li>
       <li><b>TK1–TK3</b> (Tugas Kelompok): opsional, muncul otomatis kalau sudah ada isinya atau bisa dimunculkan lewat toggle "Tampilkan kolom"</li>
       <li><b>UH1–UH3</b>: nilai ulangan harian</li>
-      <li><b>PTS</b>: Penilaian Tengah Semester &nbsp;•&nbsp; <b>SAS/ASAT</b>: Sumatif Akhir Semester (ganjil) / Sumatif Akhir Tahun (genap)</li>
+      <li><b>PTS</b>: Penilaian Tengah Semester &nbsp;•&nbsp; <b>ASAS/ASAT</b>: Asesmen Sumatif Akhir Semester (ganjil) / Asesmen Sumatif Akhir Tahun (genap)</li>
     </ul>
     <b>Cara nilai dihitung:</b>
     <ul style="margin:4px 0 10px 18px">
       <li><b>Rata Tugas</b> = rata-rata semua nilai tugas mandiri &amp; kelompok yang sudah terisi (tidak wajib penuh)</li>
       <li><b>Rata UH</b> = rata-rata nilai UH1–UH3 yang sudah terisi</li>
       <li><b>Rata Total</b> = rata-rata dari Rata Tugas &amp; Rata UH</li>
-      <li><b>Total Nilai</b> (nilai murni) = 40% Rata Total + 30% PTS + 30% SAS/ASAT</li>
+      <li><b>Total Nilai</b> (nilai murni) = 40% Rata Total + 30% PTS + 30% ASAS/ASAT</li>
       <li><b>Nilai Akhir</b> = Total Nilai yang sudah disesuaikan lewat <b>Katrol</b> (lihat kartu "⚙️ Pengaturan Nilai" di bawah untuk detail rumusnya)</li>
     </ul>
     <b>Cetak / Export:</b> tersedia pilihan nilai murni atau katrol, kolom mana saja yang ditampilkan, ukuran kertas A4/F4 dengan orientasi potrait/landscape (header tabel berulang otomatis tiap halaman), dan export ke Excel.
@@ -2531,7 +2531,7 @@
         <button class="nil-pill" data-key="uh2"   onclick="setFokusKomponen('uh2')">UH 2</button>
         <button class="nil-pill" data-key="uh3"   onclick="setFokusKomponen('uh3')">UH 3</button>
         <button class="nil-pill" data-key="pts"   onclick="setFokusKomponen('pts')">PTS</button>
-        <button class="nil-pill" data-key="pas"   onclick="setFokusKomponen('pas')">SAS</button>
+        <button class="nil-pill" data-key="pas"   onclick="setFokusKomponen('pas')">ASAS</button>
         <button class="nil-pill" data-key="pat"   onclick="setFokusKomponen('pat')">ASAT</button>
       </div>
     </div>
@@ -2569,7 +2569,7 @@
             <th colspan="3">Tugas Mandiri</th>
             <th colspan="3">Ulangan Harian</th>
             <th rowspan="2">PTS</th>
-            <th rowspan="2">SAS</th>
+            <th rowspan="2">ASAS</th>
             <th rowspan="2">Rata Total</th>
             <th rowspan="2" style="background:#4338ca">Total Nilai</th>
             <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
@@ -2601,7 +2601,7 @@
       <h3>⚙️ Pengaturan Nilai (Katrol &amp; KKM)</h3>
       <div style="background:#eff6ff;border-left:4px solid #3b82f6;color:#1e40af;
         border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.7;margin-top:8px">
-        <b>Nilai Total</b> (murni) dihitung dari <b>40% rata-rata harian</b> (gabungan Rata Tugas &amp; Rata UH) + <b>30% PTS</b> + <b>30% SAS/ASAT</b> — kolom <b>Total Nilai</b> di tabel. Kalau ada komponen yang belum diisi (mis. SAS/ASAT belum diujikan), Nilai Total dihitung dari komponen yang <b>sudah ada saja</b> (bobot disesuaikan otomatis) supaya tetap ada progres sementara — begitu semua komponen lengkap, hasilnya kembali ke formula penuh di atas.<br>
+        <b>Nilai Total</b> (murni) dihitung dari <b>40% rata-rata harian</b> (gabungan Rata Tugas &amp; Rata UH) + <b>30% PTS</b> + <b>30% ASAS/ASAT</b> — kolom <b>Total Nilai</b> di tabel. Kalau ada komponen yang belum diisi (mis. ASAS/ASAT belum diujikan), Nilai Total dihitung dari komponen yang <b>sudah ada saja</b> (bobot disesuaikan otomatis) supaya tetap ada progres sementara — begitu semua komponen lengkap, hasilnya kembali ke formula penuh di atas.<br>
         <b>Nilai Katrol</b> lalu menyesuaikan Nilai Total tadi secara proporsional per kelas: siswa dengan Nilai Total <i>terendah</i> di kelas dinaikkan tepat ke <b>Nilai Terendah Target</b> di bawah ini, siswa dengan Nilai Total <i>tertinggi</i> dinaikkan ke <b>Nilai Tertinggi Target</b> — urutan/selisih nilai asli antar siswa tetap terjaga, tidak ada nilai yang dikarang.<br>
         <b>KKM</b> hanya dipakai untuk menandai baris/nilai yang masih di bawah standar (warna kuning) — nilai di bawah KKM tetap tersimpan apa adanya, tidak otomatis diubah.
       </div>
@@ -2735,7 +2735,7 @@
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="cetakKomponen" value="pts" checked onchange="setCetakReady_(false)"> PTS (Katrol)</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="radio" name="cetakKomponen" value="sas" onchange="setCetakReady_(false)"> SAS (Katrol)</label>
+          <input type="radio" name="cetakKomponen" value="sas" onchange="setCetakReady_(false)"> ASAS (Katrol)</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="cetakKomponen" value="asat" onchange="setCetakReady_(false)"> ASAT (Katrol)</label>
       </div>
@@ -2747,7 +2747,7 @@
       <label style="font-weight:600;display:block;margin-bottom:6px" for="cetakJudulInput">Judul Daftar Nilai:</label>
       <input type="text" id="cetakJudulInput" placeholder="mis. DAFTAR NILAI SUMATIF AKHIR SEMESTER GANJIL TAHUN PELAJARAN 2025/2026"
              style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px" oninput="setCetakReady_(false)">
-      <p class="muted" style="font-size:11px;margin-top:4px">Kosongkan untuk judul otomatis ("DAFTAR NILAI PTS/SAS/ASAT").</p>
+      <p class="muted" style="font-size:11px;margin-top:4px">Kosongkan untuk judul otomatis ("DAFTAR NILAI PTS/ASAS/ASAT").</p>
     </div>
 
     <!-- Ukuran Kertas -->
