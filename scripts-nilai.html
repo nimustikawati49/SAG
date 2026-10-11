@@ -1985,29 +1985,23 @@ const CETAK_KOMPONEN_MAP_ = {
  * @returns {string} HTML string
  */
 function buildNilaiTableHtml_(kelasNm, rows, opts) {
-  const { komponen, kkm, katrolTarget } = opts;
+  const { komponen, katrolTarget } = opts;
   const def = CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts;
   const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
 
-  const noteHtml = v => {
-    if (v === null || v === undefined || isNaN(Number(v))) {
-      return '<span class="note-missing">Belum mengumpulkan</span>';
-    }
-    const n = Number(v);
-    return n < kkm ? `<span class="note-low">${n.toFixed(0)} • Rendah</span>` : n.toFixed(0);
-  };
+  // Polos — tanpa anotasi "Rendah"/warna/Ket (T/BT), cuma angka atau
+  // "Belum mengumpulkan" kalau memang belum ada nilainya sama sekali.
+  const noteHtml = v => (v === null || v === undefined || isNaN(Number(v)))
+    ? '<span class="note-missing">Belum mengumpulkan</span>'
+    : Number(v).toFixed(0);
 
-  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>L/P</th><th>${def.label}</th><th>Ket</th>`;
+  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>L/P</th><th>Nilai</th>`;
 
-  const bodyRows = rows.map((r, i) => {
-    const finalVal = r.nilai_akhir;
-    const lulus    = finalVal !== null && !isNaN(Number(finalVal)) && Number(finalVal) >= kkm;
-    const tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>` +
-      `<td>${r.jk || '-'}</td>` +
-      `<td>${noteHtml(nilaiKatrol[i])}</td>` +
-      `<td>${lulus ? 'T' : 'BT'}</td>`;
-    return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
-  }).join('');
+  const bodyRows = rows.map((r, i) =>
+    `<tr><td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>` +
+    `<td>${r.jk || '-'}</td>` +
+    `<td>${noteHtml(nilaiKatrol[i])}</td></tr>`
+  ).join('');
 
   return `<thead><tr>${hdr}</tr></thead><tbody>${bodyRows}</tbody>`;
 }
@@ -2098,9 +2092,6 @@ function doCetakNilai(mode = 'print') {
             '<p>NIP. ' + nip + '</p>' +
           '</div>' +
         '</div>' +
-        '<p class="ket" style="margin-top:6px;font-size:10px;color:#555">' +
-          'Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas' +
-        '</p>' +
       '</div>';
 
     const cetakStyle =
@@ -2112,9 +2103,14 @@ function doCetakNilai(mode = 'print') {
       '  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}' +
       'h1{display:none}' +
       '.sekolah{text-align:center;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.5px}' +
-      '.kop-img{display:block;width:100%;max-height:120px;object-fit:contain;margin-bottom:8px}' +
+      // width:100% + height:auto (bukan max-height+object-fit) supaya kop
+      // SELALU pas selebar kertas — max-height sebelumnya bikin gambar
+      // menciut lebih sempit dari halaman demi menjaga rasio di bawah
+      // 120px, padahal kop biasanya memang pendek&lebar (letterhead).
+      '.kop-img{display:block;width:100%;height:auto;margin:0 auto 8px}' +
       '.judul-cetak{text-align:center;font-size:14px;font-weight:700;text-transform:uppercase;' +
-      '  letter-spacing:.5px;padding-bottom:6px;margin-bottom:10px;border-bottom:2px solid #000}' +
+      '  letter-spacing:.5px;padding-bottom:6px;margin:0 auto 10px;border-bottom:2px solid #000;' +
+      '  line-height:1.35;max-width:90%}' +
       '.info-simple{margin-bottom:12px;font-size:12px}' +
       '.info-simple td{padding:1px 4px;vertical-align:top}' +
       '.info-simple .info-label{font-weight:700;white-space:nowrap;padding-right:4px}' +
@@ -2125,9 +2121,7 @@ function doCetakNilai(mode = 'print') {
       // Ulangi header tabel di setiap halaman cetak & jangan potong 1 baris jadi 2 halaman
       '.nilai tr{page-break-inside:avoid}' +
       '.nilai .tl{text-align:left;min-width:120px}' +
-      '.nilai .blt td{background:#ffeeee}' +
       '.note-missing{color:#dc2626;font-weight:700}' +
-      '.note-low{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-weight:700}' +
       '.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px}' +
       '.box{text-align:center;width:200px}' +
       '.garis{border-bottom:1px solid #000;margin:44px 0 4px}' +
