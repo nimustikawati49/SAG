@@ -94,10 +94,20 @@ function hitungNilaiRow_(r) {
   const uas       = isGenap ? parse(r.pat) : parse(r.pas);
   const pts_num   = parse(r.pts);
 
-  let nilai_asli = null;
-  if (nilai_fix !== null && pts_num !== null && uas !== null) {
-    nilai_asli = (0.4 * nilai_fix) + (0.3 * pts_num) + (0.3 * uas);
-  }
+  // Nilai Total (murni): 40% harian + 30% PTS + 30% SAS/ASAT — kalau
+  // belum semua komponen terisi (mis. SAS/ASAT belum diujikan), dihitung
+  // dari komponen yang SUDAH ADA saja dengan bobot dinormalisasi ulang,
+  // supaya ada progres sementara (dipakai KKTP/Ketuntasan Kelas) tanpa
+  // menunggu semester selesai. Kalau ketiganya lengkap, hasilnya PERSIS
+  // sama dengan formula lama (bobot totalnya tetap 1.0).
+  const komponenAsli = [];
+  if (nilai_fix !== null) komponenAsli.push({ v: nilai_fix, w: 0.4 });
+  if (pts_num   !== null) komponenAsli.push({ v: pts_num,   w: 0.3 });
+  if (uas       !== null) komponenAsli.push({ v: uas,       w: 0.3 });
+  const totalBobotAsli = komponenAsli.reduce((a, k) => a + k.w, 0);
+  const nilai_asli = totalBobotAsli > 0
+    ? komponenAsli.reduce((a, k) => a + k.v * k.w, 0) / totalBobotAsli
+    : null;
 
   return { rata_uh, rata_tugas, nilai_fix, nilai_asli };
 }

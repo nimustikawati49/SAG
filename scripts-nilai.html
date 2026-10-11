@@ -1185,10 +1185,17 @@ function nilaiHitungRow_(r, semester) {
   const isGenap  = String(semester || '').toLowerCase().includes('genap');
   const uas      = isGenap ? p(r.pat) : p(r.pas);
   const pts_num  = p(r.pts);
-  let nilai_asli = null;
-  if (nilai_fix !== null && pts_num !== null && uas !== null) {
-    nilai_asli = (0.4 * nilai_fix) + (0.3 * pts_num) + (0.3 * uas);
-  }
+  // Sama persis dengan hitungNilaiRow_() di api_nilai.js: renormalisasi
+  // bobot kalau belum semua komponen terisi, supaya preview live di
+  // grid ini cocok dengan yang bakal tersimpan server saat Simpan Nilai.
+  const komponenAsli = [];
+  if (nilai_fix !== null) komponenAsli.push({ v: nilai_fix, w: 0.4 });
+  if (pts_num   !== null) komponenAsli.push({ v: pts_num,   w: 0.3 });
+  if (uas       !== null) komponenAsli.push({ v: uas,       w: 0.3 });
+  const totalBobotAsli = komponenAsli.reduce((a, k) => a + k.w, 0);
+  const nilai_asli = totalBobotAsli > 0
+    ? komponenAsli.reduce((a, k) => a + k.v * k.w, 0) / totalBobotAsli
+    : null;
   return { rata_uh, rata_tugas, nilai_fix, nilai_asli };
 }
 
@@ -1547,34 +1554,29 @@ function bindCetakModalGuard_() {
   modal.addEventListener('change', (e) => {
     const t = e.target;
     if (!t) return;
-    if (t.closest('#cetakKelasContainer')) setCetakReady_(false);
+    if (t.id === 'cetakKelasSelect' || t.name === 'cetakKomponen') setCetakReady_(false);
   });
 }
 
-/** Load daftar kelas yang punya nilai (untuk checkbox di modal) */
+/** Load daftar kelas yang punya nilai (untuk dropdown di modal) */
 function loadKelasUntukCetak_() {
   const { mapel, tahun, semester, kelas } = nilaiState;
-  const container = document.getElementById('cetakKelasContainer');
-  if (!container) return;
+  const sel = document.getElementById('cetakKelasSelect');
+  if (!sel) return;
 
-  container.innerHTML = '<p class="muted" style="font-size:12px">⏳ Memuat daftar kelas...</p>';
+  sel.innerHTML = '<option value="">⏳ Memuat daftar kelas...</option>';
 
   google.script.run
     .withSuccessHandler(list => {
       // Ensure current class is always in list
       if (!list.includes(kelas)) list.unshift(kelas);
-      container.innerHTML = list.map(k =>
-        `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
-          <input type="checkbox" value="${k}" ${k === kelas ? 'checked' : ''} onchange="setCetakReady_(false)">
-          ${k} ${k === kelas ? '<span class="muted" style="font-size:11px">(dimuat)</span>' : ''}
-        </label>`
+      sel.innerHTML = list.map(k =>
+        `<option value="${k}" ${k === kelas ? 'selected' : ''}>${k}${k === kelas ? ' (dimuat)' : ''}</option>`
       ).join('');
     })
     .withFailureHandler(() => {
       // Fallback: show only current class
-      container.innerHTML = `<label style="display:flex;align-items:center;gap:8px;font-size:13px">
-        <input type="checkbox" value="${kelas}" checked onchange="setCetakReady_(false)"> ${kelas}
-      </label>`;
+      sel.innerHTML = `<option value="${kelas}" selected>${kelas}</option>`;
     })
     .getKelasYangAdaNilai(mapel, tahun, semester);
 }
@@ -1601,19 +1603,30 @@ function _katrolKomponen_(rawVals, target) {
   });
 }
 
+// Komponen yang bisa dipilih utk dicetak — field mentah per siswa +
+// label kolom. 'sas' dan 'asat' sama-sama membaca field 'pas'/'pat' apa
+// adanya (pilihan manual, TIDAK otomatis ikut semester aktif) supaya guru
+// bisa tetap cetak SAS walau semester aktifnya sudah Genap, atau
+// sebaliknya.
+const CETAK_KOMPONEN_MAP_ = {
+  pts : { field: 'pts', label: 'PTS' },
+  sas : { field: 'pas', label: 'SAS' },
+  asat: { field: 'pat', label: 'ASAT' }
+};
+
 /**
  * Generate HTML tabel nilai untuk satu kelas (untuk print/export) —
- * disederhanakan khusus Nilai PTS (Katrol) & Nilai SAS/ASAT (Katrol) saja.
+ * menampilkan SATU komponen (PTS/SAS/ASAT) hasil Katrol, sesuai pilihan
+ * guru di modal Cetak Nilai.
  * @param {string} kelasNm  – nama kelas
  * @param {Array}  rows     – array row data nilai
- * @param {object} opts     – { isGenap, kkm, katrolTarget }
+ * @param {object} opts     – { komponen: 'pts'|'sas'|'asat', kkm, katrolTarget }
  * @returns {string} HTML string
  */
 function buildNilaiTableHtml_(kelasNm, rows, opts) {
-  const { isGenap, kkm, katrolTarget } = opts;
-  const uasLabel = isGenap ? 'ASAT' : 'SAS';
-  const ptsKatrol = _katrolKomponen_(rows.map(r => r.pts), katrolTarget);
-  const uasKatrol = _katrolKomponen_(rows.map(r => isGenap ? r.pat : r.pas), katrolTarget);
+  const { komponen, kkm, katrolTarget } = opts;
+  const def = CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts;
+  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
 
   const noteHtml = v => {
     if (v === null || v === undefined || isNaN(Number(v))) {
@@ -1623,13 +1636,13 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
     return n < kkm ? `<span class="note-low">${n.toFixed(2)} • Rendah</span>` : n.toFixed(2);
   };
 
-  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>PTS (Katrol)</th><th>${uasLabel} (Katrol)</th><th>Ket</th>`;
+  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>${def.label} (Katrol)</th><th>Ket</th>`;
 
   const bodyRows = rows.map((r, i) => {
     const finalVal = r.nilai_akhir;
     const lulus    = finalVal !== null && !isNaN(Number(finalVal)) && Number(finalVal) >= kkm;
     const tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>` +
-      `<td>${noteHtml(ptsKatrol[i])}</td><td>${noteHtml(uasKatrol[i])}</td>` +
+      `<td>${noteHtml(nilaiKatrol[i])}</td>` +
       `<td>${lulus ? 'T' : 'BT'}</td>`;
     return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
   }).join('');
@@ -1643,9 +1656,9 @@ function previewCetakNilai() {
 
 /** Buka window cetak dengan format header kiri-kanan */
 function doCetakNilai(mode = 'print') {
-  const kelasChecked = [...document.querySelectorAll('#cetakKelasContainer input:checked')]
-    .map(el => el.value);
-  if (!kelasChecked.length) { alert('Pilih minimal satu kelas'); return; }
+  const kelas = document.getElementById('cetakKelasSelect')?.value || '';
+  if (!kelas) { alert('Pilih kelas'); return; }
+  const komponen = document.querySelector('input[name="cetakKomponen"]:checked')?.value || 'pts';
 
   const isPreview = String(mode || '').toLowerCase() === 'preview';
   if (!isPreview && !nilaiState.cetakPreviewOk) {
@@ -1667,71 +1680,58 @@ function doCetakNilai(mode = 'print') {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
 
   const { mapel, tahun, semester, setting } = nilaiState;
-  const isGenap = semester.toLowerCase().includes('genap');
   const kkm     = Number(setting.kkm || 70);
-  // Target rentang Katrol PTS & SAS/ASAT dicetak — pakai target Katrol
-  // yang sama dengan Nilai Total (Pengaturan Nilai Katrol & KKM), supaya
+  // Target rentang Katrol komponen dicetak — pakai target Katrol yang
+  // sama dengan Nilai Total (Pengaturan Nilai Katrol & KKM), supaya
   // konsisten dengan satu-satunya target yang guru atur di Input Nilai.
   const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
+  const komponenLabel = (CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts).label;
 
-  // Collect data: current class already in state; others fetched
-  const allData = {}; // { kelas: rows[] }
-  allData[nilaiState.kelas] = nilaiState.rows;
-
-  const toFetch = kelasChecked.filter(k => k !== nilaiState.kelas);
-  let pending   = toFetch.length;
-
-  const buildAndPrint = (settingGuru) => {
+  const buildAndPrint = (settingGuru, rows) => {
     const namaGuru    = settingGuru?.nama_guru    || '___________________';
     const nip         = settingGuru?.nip_guru || settingGuru?.nip || '-';
     const namaSekolah = settingGuru?.nama_sekolah || '';
     const tanggal     = new Date().toLocaleDateString('id-ID', { year:'numeric', month:'long', day:'numeric' });
 
-    let pagesHtml = '';
-    kelasChecked.forEach((k, ki) => {
-      const rows = allData[k] || [];
-      if (!rows.length) { return; } // skip empty
-      const tbl = buildNilaiTableHtml_(k, rows, { isGenap, kkm, katrolTarget });
-      pagesHtml +=
-        (ki > 0 ? '<div class="pb"></div>' : '') +
-        '<div class="page">' +
-          (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '') +
-          '<h1>DAFTAR NILAI PTS &amp; SAS/ASAT (KATROL)</h1>' +
-          '<table class="info">' +
-            '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
-            '<tr>' +
-              '<td class="info-left">' +
-                '<b>Mata Pelajaran</b> : ' + mapel + '<br>' +
-                '<b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + k + '<br>' +
-                '<b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kkm +
-              '</td>' +
-              '<td class="info-right">' +
-                '<b>Tahun Pelajaran</b> : ' + tahun + '<br>' +
-                '<b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + semester +
-              '</td>' +
-            '</tr>' +
-          '</table>' +
-          '<table class="nilai">' + tbl + '</table>' +
-          '<div class="ttd">' +
-            '<div class="box">' +
-              '<p>' + tanggal + '</p>' +
-              '<p>Guru Mata Pelajaran</p>' +
-              '<div class="garis"></div>' +
-              '<p><b>' + namaGuru + '</b></p>' +
-              '<p>NIP. ' + nip + '</p>' +
-            '</div>' +
-          '</div>' +
-          '<p class="ket" style="margin-top:6px;font-size:10px;color:#555">' +
-            'Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas' +
-          '</p>' +
-        '</div>';
-    });
-
-    if (!pagesHtml) {
+    if (!rows.length) {
       if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
       alert('Tidak ada data nilai untuk kelas yang dipilih');
       return;
     }
+
+    const tbl = buildNilaiTableHtml_(kelas, rows, { komponen, kkm, katrolTarget });
+    const pagesHtml =
+      '<div class="page">' +
+        (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '') +
+        '<h1>DAFTAR NILAI ' + komponenLabel + ' (KATROL)</h1>' +
+        '<table class="info">' +
+          '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
+          '<tr>' +
+            '<td class="info-left">' +
+              '<b>Mata Pelajaran</b> : ' + mapel + '<br>' +
+              '<b>Kelas&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kelas + '<br>' +
+              '<b>KKM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + kkm +
+            '</td>' +
+            '<td class="info-right">' +
+              '<b>Tahun Pelajaran</b> : ' + tahun + '<br>' +
+              '<b>Semester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b> : ' + semester +
+            '</td>' +
+          '</tr>' +
+        '</table>' +
+        '<table class="nilai">' + tbl + '</table>' +
+        '<div class="ttd">' +
+          '<div class="box">' +
+            '<p>' + tanggal + '</p>' +
+            '<p>Guru Mata Pelajaran</p>' +
+            '<div class="garis"></div>' +
+            '<p><b>' + namaGuru + '</b></p>' +
+            '<p>NIP. ' + nip + '</p>' +
+          '</div>' +
+        '</div>' +
+        '<p class="ket" style="margin-top:6px;font-size:10px;color:#555">' +
+          'Ket: T = Tuntas &nbsp;•&nbsp; BT = Belum Tuntas' +
+        '</p>' +
+      '</div>';
 
     const cetakStyle =
       '@page{size:' + pageW + 'mm ' + pageH + 'mm;margin:10mm}' +
@@ -1795,38 +1795,30 @@ function doCetakNilai(mode = 'print') {
     closeCetakNilai();
   };
 
-  // Fetch setting + additional classes
-  google.script.run
-    .withSuccessHandler(settingGuru => {
-      if (!pending) {
-        buildAndPrint(settingGuru);
-        return;
-      }
-      // Fetch nilai for additional kelas sequentially
-      let fetched = 0;
-      toFetch.forEach(k => {
-        google.script.run
-          .withSuccessHandler(rows => {
-            allData[k] = rows || [];
-            fetched++;
-            if (fetched === toFetch.length) buildAndPrint(settingGuru);
-          })
-          .withFailureHandler(() => {
-            allData[k] = [];
-            fetched++;
-            if (fetched === toFetch.length) buildAndPrint(settingGuru);
-          })
-          .getNilaiSiswa(k, mapel, tahun, semester);
-      });
-    })
-    .withFailureHandler(() => {
-      if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
-      alert('Gagal ambil data setting guru');
-    })
-    .getSetting();
+  const rowsReady = rows => {
+    google.script.run
+      .withSuccessHandler(settingGuru => buildAndPrint(settingGuru, rows))
+      .withFailureHandler(() => {
+        if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+        alert('Gagal ambil data setting guru');
+      })
+      .getSetting();
+  };
+
+  if (kelas === nilaiState.kelas) {
+    rowsReady(nilaiState.rows);
+  } else {
+    google.script.run
+      .withSuccessHandler(rows => rowsReady(rows || []))
+      .withFailureHandler(() => {
+        if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+        alert('Gagal ambil data nilai kelas ' + kelas);
+      })
+      .getNilaiSiswa(kelas, mapel, tahun, semester);
+  }
 }
 
-/** Export ke file Excel via SheetJS (multi-kelas) */
+/** Export ke file Excel via SheetJS (satu kelas, satu komponen) */
 function exportNilaiExcelUI() {
   if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap'); return; }
   if (!nilaiState.cetakPreviewOk) {
@@ -1834,80 +1826,63 @@ function exportNilaiExcelUI() {
     return;
   }
 
-  const kelasChecked = [...document.querySelectorAll('#cetakKelasContainer input:checked')]
-    .map(el => el.value);
-  if (!kelasChecked.length) { alert('Pilih minimal satu kelas'); return; }
+  const kelas = document.getElementById('cetakKelasSelect')?.value || '';
+  if (!kelas) { alert('Pilih kelas'); return; }
+  const komponen = document.querySelector('input[name="cetakKomponen"]:checked')?.value || 'pts';
+  const def = CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts;
 
   const btn = document.getElementById('btnDoExcel');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
 
   const { mapel, tahun, semester, setting } = nilaiState;
-  const isGenap = semester.toLowerCase().includes('genap');
   const kkm     = Number(setting.kkm || 70);
-  const pasPat  = isGenap ? 'ASAT' : 'SAS';
-  // Target rentang Katrol PTS & SAS/ASAT — sama dengan yang dipakai di
+  // Target rentang Katrol komponen — sama dengan yang dipakai di
   // doCetakNilai(), bersumber dari Pengaturan Nilai Katrol & KKM.
   const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
 
-  const allData = {};
-  allData[nilaiState.kelas] = nilaiState.rows;
-  const toFetch = kelasChecked.filter(k => k !== nilaiState.kelas);
-  let fetched   = 0;
-
-  const buildAndExport = () => {
-    const wb = XLSX.utils.book_new();
+  const buildAndExport = (rows) => {
     const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
       ? Number(Number(v).toFixed(2)) : '-';
+    const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
 
-    kelasChecked.forEach(k => {
-      const rows = allData[k] || [];
-      const ptsKatrol = _katrolKomponen_(rows.map(r => r.pts), katrolTarget);
-      const uasKatrol = _katrolKomponen_(rows.map(r => isGenap ? r.pat : r.pas), katrolTarget);
+    const wb = XLSX.utils.book_new();
+    const meta = [
+      [`Daftar Nilai ${mapel}`], [],
+      ['Kelas', kelas], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm], []
+    ];
+    const colHdr = ['No', 'NIS', 'Nama Siswa', def.label + ' (Katrol)', 'Keterangan'];
 
-      // Header info rows
-      const meta = [
-        [`Daftar Nilai ${mapel}`], [],
-        ['Kelas', k], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm], []
+    const dataRows = rows.map((r, i) => {
+      const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
+        ? Number(r.nilai_akhir) : null;
+      return [
+        i + 1, r.nis || '', r.nama_siswa || '',
+        fmt(nilaiKatrol[i]),
+        (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
       ];
-      const colHdr = ['No', 'NIS', 'Nama Siswa', 'PTS (Katrol)', pasPat + ' (Katrol)', 'Keterangan'];
-
-      const dataRows = rows.map((r, i) => {
-        const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
-          ? Number(r.nilai_akhir) : null;
-        return [
-          i + 1, r.nis || '', r.nama_siswa || '',
-          fmt(ptsKatrol[i]), fmt(uasKatrol[i]),
-          (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
-        ];
-      });
-
-      const sheetData = [...meta, colHdr, ...dataRows];
-      const ws = XLSX.utils.aoa_to_sheet(sheetData);
-      const sheetName = k.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
     });
 
+    const sheetData = [...meta, colHdr, ...dataRows];
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    const sheetName = kelas.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
+
     if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
-    XLSX.writeFile(wb, `Nilai_${mapel}_${semester}_${tahun}.xlsx`);
+    XLSX.writeFile(wb, `Nilai_${def.label}_${mapel}_${kelas}_${semester}_${tahun}.xlsx`);
     closeCetakNilai();
   };
 
-  if (!toFetch.length) { buildAndExport(); return; }
-
-  toFetch.forEach(k => {
+  if (kelas === nilaiState.kelas) {
+    buildAndExport(nilaiState.rows);
+  } else {
     google.script.run
-      .withSuccessHandler(rows => {
-        allData[k] = rows || [];
-        fetched++;
-        if (fetched === toFetch.length) buildAndExport();
-      })
+      .withSuccessHandler(rows => buildAndExport(rows || []))
       .withFailureHandler(() => {
-        allData[k] = [];
-        fetched++;
-        if (fetched === toFetch.length) buildAndExport();
+        if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
+        alert('Gagal ambil data nilai kelas ' + kelas);
       })
-      .getNilaiSiswa(k, mapel, tahun, semester);
-  });
+      .getNilaiSiswa(kelas, mapel, tahun, semester);
+  }
 }
 
 
