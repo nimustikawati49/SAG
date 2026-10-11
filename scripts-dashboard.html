@@ -57,6 +57,7 @@ function _dashKpiStopSkeleton_(){
    getKetuntasanPredikatKelas() di api_nilai.js) — terpisah dari status
    Tuntas/Belum Tuntas berbasis KKM yang sudah ada di fitur lain. ===== */
 var _ketuntasanPredikatData = [];
+var _ketuntasanPredikatMeta = null;
 
 function loadKetuntasanPredikatKelas(){
   var box = document.getElementById('ketuntasanPredikatBox');
@@ -65,9 +66,10 @@ function loadKetuntasanPredikatKelas(){
   var stopTimer = startElapsedNotice_(document.getElementById('ketuntasanPredikatLoadingText'), '⏳ Memuat ketuntasan kelas...');
 
   google.script.run
-    .withSuccessHandler(function(rows){
+    .withSuccessHandler(function(res){
       stopTimer();
-      _ketuntasanPredikatData = rows || [];
+      _ketuntasanPredikatData = (res && res.list) || [];
+      _ketuntasanPredikatMeta = res || null;
       _renderKetuntasanPredikatKelas_();
     })
     .withFailureHandler(function(err){
@@ -85,8 +87,20 @@ function _renderKetuntasanPredikatKelas_(){
   var box = document.getElementById('ketuntasanPredikatBox');
   if(!box) return;
   var rows = _ketuntasanPredikatData || [];
+  var meta = _ketuntasanPredikatMeta;
+
+  // Kalau server terpaksa fallback ke periode lain (Pengaturan Umum belum
+  // disinkronkan ke tahun/semester yang dipakai di Input Nilai), tampilkan
+  // catatannya supaya guru tahu data ini dari periode MANA, bukan diam-diam.
+  var fallbackNote = (meta && meta.pakaiFallbackPeriode && meta.periode)
+    ? '<div class="alert-banner info" style="margin-bottom:10px">⚠️ Periode aktif di Pengaturan Umum (' +
+      _escKPK_((meta.periodeAktif && meta.periodeAktif.tahun) || '-') + ' / ' + _escKPK_((meta.periodeAktif && meta.periodeAktif.semester) || '-') +
+      ') belum punya nilai tersimpan — menampilkan data dari <b>' + _escKPK_(meta.periode.tahun) + ' / ' + _escKPK_(meta.periode.semester) +
+      '</b> (periode yang paling banyak dipakai di Input Nilai). Samakan Pengaturan Umum kalau ini memang periode yang sedang berjalan.</div>'
+    : '';
+
   if(!rows.length){
-    box.innerHTML = '<div class="alert-banner info">ℹ️ Belum ada nilai tersimpan untuk periode aktif — isi dulu di menu Input Nilai.</div>';
+    box.innerHTML = fallbackNote + '<div class="alert-banner info">ℹ️ Belum ada nilai tersimpan untuk periode aktif — isi dulu di menu Input Nilai.</div>';
     return;
   }
 
@@ -136,7 +150,7 @@ function _renderKetuntasanPredikatKelas_(){
   });
 
   html += '</tbody></table></div>';
-  box.innerHTML = html;
+  box.innerHTML = fallbackNote + html;
 }
 
 function _renderKetuntasanDetailList_(list){

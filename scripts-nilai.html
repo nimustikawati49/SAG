@@ -347,11 +347,11 @@ function muatMonitoringNilai() {
   const stopElapsed = startElapsedNotice_(btn, '⏳ Memuat...');
   if (wrap) wrap.innerHTML = '<p class="muted">⏳ Memuat data...</p>';
 
-  const done = { siswa: isActivePeriode ? false : true, nilai: false };
-  let siswaData = [], nilaiData = [];
+  const done = { siswa: isActivePeriode ? false : true, nilai: false, setting: false };
+  let siswaData = [], nilaiData = [], kkmValue = 70;
 
   const tryRender = () => {
-    if (!done.siswa || !done.nilai) return;
+    if (!done.siswa || !done.nilai || !done.setting) return;
     stopElapsed();
     if (typeof endProgress === 'function') endProgress();
     if (btn) { btn.disabled = false; btn.textContent = '🔎 Tampilkan'; }
@@ -371,7 +371,7 @@ function muatMonitoringNilai() {
       };
     });
 
-    _renderMonitoringNilaiTable_(rows, sem);
+    _renderMonitoringNilaiTable_(rows, sem, kkmValue);
   };
 
   if (isActivePeriode) {
@@ -404,13 +404,21 @@ function muatMonitoringNilai() {
       tryRender();
     })
     .getNilaiBundle(kelas, mapel, tahun, sem);
+
+  // KKM khusus kelas+mapel ini (SETTING_NILAI) — dipakai utk Tuntas/Belum
+  // Tuntas di kartu statistik Nilai Murni, sama sumbernya dgn kartu KKM di
+  // Input Nilai (bukan 70 generik).
+  google.script.run
+    .withSuccessHandler(s => { kkmValue = Number((s && s.kkm) || 70); done.setting = true; tryRender(); })
+    .withFailureHandler(() => { kkmValue = 70; done.setting = true; tryRender(); })
+    .getSettingNilai(kelas, mapel, tahun, sem);
 }
 
 // Sel ditandai ⚠️ HANYA kalau kosong DAN ada siswa lain di kelas/mapel
 // yang sama sudah punya nilai untuk komponen itu (relatif terhadap
 // teman sekelas) — bukan sekadar kosong sendirian (itu wajar kalau
 // memang belum ada satu pun yang dinilai untuk komponen itu).
-function _renderMonitoringNilaiTable_(rows, semester) {
+function _renderMonitoringNilaiTable_(rows, semester, kkm) {
   const wrap = document.getElementById('monNilaiWrap');
   if (!wrap) return;
   if (!rows.length) {
@@ -461,16 +469,30 @@ function _renderMonitoringNilaiTable_(rows, semester) {
       '.</div>';
   }
 
-  // Halaman ini baca-saja Nilai MURNI (sebelum Katrol) — jadi % KKTP
-  // dihitung dari rata-rata nilai_asli kelas, sama rubriknya dengan
-  // KKTP_BANDS_NILAI_UI_ di statistik Input Nilai.
+  // Halaman ini baca-saja Nilai MURNI (sebelum Katrol) — jadi kartu
+  // statistik di sini SENGAJA dari nilai_asli, bukan nilai_akhir, supaya
+  // guru bisa lihat capaian KKTP murni sebelum disesuaikan Katrol. Sama
+  // gaya kartunya dengan statistik di Input Nilai, cuma sumber datanya
+  // beda (murni vs katrol).
   const kktpVals = rows.map(r => r.nilai_asli).filter(v => !isEmpty_(v)).map(Number).filter(n => !isNaN(n));
   if (kktpVals.length) {
-    const kktpRata = kktpVals.reduce((a, b) => a + b, 0) / kktpVals.length;
-    const kktpBand = _kktpBandDariNilai_(kktpRata);
-    summaryHtml += '<div style="background:' + kktpBand.bg + ';border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;align-items:center;gap:10px">' +
-      '<span style="font-size:20px;font-weight:700;color:' + kktpBand.color + '">' + kktpRata.toFixed(0) + '%</span>' +
-      '<span style="color:' + kktpBand.color + '"><b>' + kktpBand.status + '</b> (Predikat ' + kktpBand.kode + ') — dari rata-rata Nilai Murni kelas ini</span>' +
+    const kkmMurni = Number(kkm || 70);
+    const rataMurni = kktpVals.reduce((a, b) => a + b, 0) / kktpVals.length;
+    const tuntasMurni = kktpVals.filter(v => v >= kkmMurni).length;
+    const kktpBand = _kktpBandDariNilai_(rataMurni);
+    const statCard = (label, value, color) =>
+      '<div class="card" style="text-align:center;padding:12px 6px;margin:0">' +
+        '<div class="muted" style="font-size:11px">' + label + '</div>' +
+        '<div style="font-size:20px;font-weight:700;color:' + color + '">' + value + '</div>' +
+      '</div>';
+    summaryHtml += '<div class="muted" style="font-size:11px;margin:4px 0">📊 Statistik Nilai Murni (sebelum Katrol):</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px">' +
+        statCard('Rata-rata Kelas', rataMurni.toFixed(2), '#6C63FF') +
+        statCard('Nilai Tertinggi', Math.max(...kktpVals).toFixed(2), '#22c55e') +
+        statCard('Nilai Terendah', Math.min(...kktpVals).toFixed(2), '#ef4444') +
+        statCard('Tuntas (≥ KKM)', tuntasMurni, '#22c55e') +
+        statCard('Belum Tuntas', kktpVals.length - tuntasMurni, '#ef4444') +
+        statCard('% KKTP Kelas', rataMurni.toFixed(0) + '%<div class="muted" style="font-size:9.5px;font-weight:400">' + kktpBand.status + ' (' + kktpBand.kode + ')</div>', kktpBand.color) +
       '</div>';
   }
 

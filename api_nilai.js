@@ -557,18 +557,57 @@ function _komponenLabelKetuntasan_(isGenap) {
 function getKetuntasanPredikatKelas() {
   const auth    = getAuth();
   const setting = getSetting();
-  const tahun   = setting.tahun_pelajaran || '';
-  const semester= setting.semester || '';
-  if (!tahun || !semester) return [];
-  const isGenap = String(semester).toLowerCase().indexOf('genap') > -1;
-  const KOMPONEN_LABEL = _komponenLabelKetuntasan_(isGenap);
-  const compKeys = Object.keys(KOMPONEN_LABEL);
+  const tahunAktif    = setting.tahun_pelajaran || '';
+  const semesterAktif = setting.semester || '';
+  let tahun    = tahunAktif;
+  let semester = semesterAktif;
 
   const sh = sheetNilai_();
   const rows = sh.getDataRange().getValues();
-  if (rows.length < 2) return [];
+  const emptyResult_ = () => ({ list: [], periode: { tahun: tahunAktif, semester: semesterAktif }, periodeAktif: { tahun: tahunAktif, semester: semesterAktif }, pakaiFallbackPeriode: false });
+  if (rows.length < 2) return emptyResult_();
   const h = rows[0];
   const idx = (n) => h.indexOf(n);
+
+  const ownerRows_ = (t, s) => rows.slice(1).filter(r =>
+    String(r[idx('owner_email')]).toLowerCase().trim() === auth.email &&
+    String(r[idx('tahun')]).trim() === String(t).trim() &&
+    String(r[idx('semester')]).trim().toLowerCase() === String(s).trim().toLowerCase() &&
+    r[idx('nilai_asli')] !== '' && r[idx('nilai_asli')] !== null && r[idx('nilai_asli')] !== undefined &&
+    !isNaN(Number(r[idx('nilai_asli')]))
+  );
+
+  // "Periode aktif" (Pengaturan Umum) kadang belum diperbarui guru saat
+  // ganti tahun ajaran/semester, padahal nilai sudah disimpan di periode
+  // yang BARU dipilih langsung di Input Nilai/Riwayat Nilai (keduanya
+  // punya dropdown tahun/semester sendiri, tidak terikat Pengaturan
+  // Umum) — akibatnya KPI ini selalu kosong meski nilai sudah ada.
+  // Kalau periode aktif tidak punya baris nilai_asli sama sekali, jangan
+  // tampilkan kosong — fallback ke periode (tahun+semester) yang PALING
+  // BANYAK punya baris nilai_asli milik guru ini, supaya KPI tetap
+  // berguna walau Pengaturan Umum belum disinkronkan manual.
+  if (!tahun || !semester || !ownerRows_(tahun, semester).length) {
+    const counts = {};
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (String(r[idx('owner_email')]).toLowerCase().trim() !== auth.email) continue;
+      const nilaiRaw = r[idx('nilai_asli')];
+      if (nilaiRaw === '' || nilaiRaw === null || nilaiRaw === undefined || isNaN(Number(nilaiRaw))) continue;
+      const key = String(r[idx('tahun')] || '').trim() + '||' + String(r[idx('semester')] || '').trim();
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    if (best) {
+      const parts = best.split('||');
+      tahun = parts[0];
+      semester = parts[1];
+    }
+  }
+  if (!tahun || !semester) return emptyResult_();
+
+  const isGenap = String(semester).toLowerCase().indexOf('genap') > -1;
+  const KOMPONEN_LABEL = _komponenLabelKetuntasan_(isGenap);
+  const compKeys = Object.keys(KOMPONEN_LABEL);
 
   const num_ = (v) => (v !== '' && v !== null && v !== undefined && !isNaN(Number(v))) ? Number(v) : null;
   const avgRaw_ = (vals) => {
@@ -621,9 +660,10 @@ function getKetuntasanPredikatKelas() {
   }
 
   const avg_ = (vals) => vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : null;
+  const pakaiFallbackPeriode = (tahun !== tahunAktif) || (String(semester).toLowerCase() !== String(semesterAktif).toLowerCase());
 
   const keys = Object.keys(groups).sort();
-  return keys.map((key) => {
+  const list = keys.map((key) => {
     const g = groups[key];
     const counts = { A: 0, B: 0, C: 0, D: 0 };
 
@@ -671,6 +711,13 @@ function getKetuntasanPredikatKelas() {
       pakaiNilaiAkhir : adaNilaiAkhir
     };
   });
+
+  return {
+    list: list,
+    periode: { tahun: tahun, semester: semester },
+    periodeAktif: { tahun: tahunAktif, semester: semesterAktif },
+    pakaiFallbackPeriode: pakaiFallbackPeriode
+  };
 }
 
 /**
