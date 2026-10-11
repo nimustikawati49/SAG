@@ -361,14 +361,20 @@ function muatMonitoringNilai() {
 
     const rows = siswaData.map(s => {
       const saved = nilaiMap[String(s.nis || '').trim()] || {};
-      return {
+      const raw = {
         nis: s.nis, nama_siswa: s.nama,
         tgs1: saved.tgs1, tgs2: saved.tgs2, tgs3: saved.tgs3,
         tgsk1: saved.tgsk1, tgsk2: saved.tgsk2, tgsk3: saved.tgsk3,
         uh1: saved.uh1, uh2: saved.uh2, uh3: saved.uh3,
-        pts: saved.pts, pas: saved.pas, pat: saved.pat,
-        rata_uh: saved.rata_uh, nilai_asli: saved.nilai_asli
+        pts: saved.pts, pas: saved.pas, pat: saved.pat
       };
+      // Hitung ULANG rata_uh/nilai_asli dari komponen mentah, jangan
+      // percaya kolom tersimpan — bisa basi kalau baris itu terakhir
+      // disimpan sebelum formula nilai_asli direnormalisasi.
+      const calc = nilaiHitungRow_(raw, sem);
+      raw.rata_uh = calc.rata_uh;
+      raw.nilai_asli = calc.nilai_asli;
+      return raw;
     });
 
     _renderMonitoringNilaiTable_(rows, sem, kkmValue);

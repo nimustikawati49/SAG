@@ -113,9 +113,11 @@ function _renderKetuntasanPredikatKelas_(){
 
   var html = '<div class="table-wrap"><table><thead><tr>' +
     '<th style="text-align:left">Kelas</th><th style="text-align:left">Mapel</th><th>Siswa</th>' +
+    '<th title="Nilai Murni (sebelum Katrol) terendah di kelas ini">Nilai Terendah (Murni)</th>' +
+    '<th title="Nilai Murni (sebelum Katrol) tertinggi di kelas ini">Nilai Tertinggi (Murni)</th>' +
     '<th title="Rata-rata Harian (UH/Tugas) kelas">Rata Harian</th>' +
     '<th title="Nilai Akhir kalau sudah di-Katrol; kalau belum, dari Rata-rata Total (nilai murni)">Nilai Akhir</th>' +
-    '<th>A</th><th>B</th><th>C</th><th>D</th><th>% Tuntas</th><th>Aksi</th>' +
+    '<th>A</th><th>B</th><th>C</th><th>D</th><th title="% KKTP berbasis Nilai Murni">% KKTP (Murni)</th><th>Aksi</th>' +
     '</tr></thead><tbody>';
 
   rows.forEach(function(g, i){
@@ -126,10 +128,14 @@ function _renderKetuntasanPredikatKelas_(){
     var nilaiAkhirVal  = g.pakaiNilaiAkhir ? g.nilaiAkhir : g.rataTotal;
     var nilaiAkhirTxt  = (nilaiAkhirVal !== null && nilaiAkhirVal !== undefined) ? nilaiAkhirVal.toFixed(2) : '-';
     var nilaiAkhirSub  = g.pakaiNilaiAkhir ? 'Nilai Akhir' : 'Rata-rata Total';
+    var murniMinTxt = (g.nilaiMurniMin !== null && g.nilaiMurniMin !== undefined) ? g.nilaiMurniMin.toFixed(2) : '-';
+    var murniMaxTxt = (g.nilaiMurniMax !== null && g.nilaiMurniMax !== undefined) ? g.nilaiMurniMax.toFixed(2) : '-';
     html += '<tr>' +
       '<td class="left"><b>' + _escKPK_(g.kelas) + '</b></td>' +
       '<td class="left">' + _escKPK_(g.mapel || '-') + '</td>' +
       '<td style="text-align:center">' + g.total + '</td>' +
+      '<td style="text-align:center;color:#991b1b;font-weight:700">' + murniMinTxt + '</td>' +
+      '<td style="text-align:center;color:#166534;font-weight:700">' + murniMaxTxt + '</td>' +
       '<td style="text-align:center">' + rataHarianTxt + '</td>' +
       '<td style="text-align:center">' + nilaiAkhirTxt +
         '<div class="muted" style="font-size:10px;line-height:1.2">' + nilaiAkhirSub + '</div></td>' +
@@ -144,7 +150,7 @@ function _renderKetuntasanPredikatKelas_(){
           : '<span class="muted" style="font-size:12px">✅ Semua tuntas</span>') +
       '</td>' +
       '</tr>';
-    html += '<tr id="ketuntasanDetail_' + i + '" style="display:none"><td colspan="11" style="background:#f9fafb">' +
+    html += '<tr id="ketuntasanDetail_' + i + '" style="display:none"><td colspan="13" style="background:#f9fafb">' +
       _renderKetuntasanDetailList_(g.perluTindakLanjut || []) +
       '</td></tr>';
   });

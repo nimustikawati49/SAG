@@ -569,31 +569,46 @@ function getKetuntasanPredikatKelas() {
   const h = rows[0];
   const idx = (n) => h.indexOf(n);
 
-  const ownerRows_ = (t, s) => rows.slice(1).filter(r =>
+  // Nilai Murni dipakai di SELURUH fungsi ini (deteksi periode maupun
+  // pengelompokan utama) dihitung ULANG dari komponen mentah, bukan
+  // dipercaya dari kolom nilai_asli tersimpan — kolom itu bisa basi kalau
+  // baris terakhir disimpan SEBELUM formula direnormalisasi, dan baris
+  // itu belum pernah disentuh ulang sejak itu. Satu sumber kebenaran
+  // dipakai di dua fase ini supaya tidak ada ketidakcocokan (mis. deteksi
+  // bilang periode aktif "kosong" padahal pengelompokan utama sebenarnya
+  // bisa menghitungnya).
+  const hitungAsliRow_ = (r, sem) => hitungNilaiRow_({
+    uh1: r[idx('uh1')], uh2: r[idx('uh2')], uh3: r[idx('uh3')],
+    tgs1: r[idx('tgs1')], tgs2: r[idx('tgs2')], tgs3: r[idx('tgs3')],
+    tgsk1: r[idx('tgsk1')], tgsk2: r[idx('tgsk2')], tgsk3: r[idx('tgsk3')],
+    pts: r[idx('pts')], pas: r[idx('pas')], pat: r[idx('pat')],
+    semester: sem
+  }).nilai_asli;
+
+  const ownerRowsCount_ = (t, s) => rows.slice(1).filter(r =>
     String(r[idx('owner_email')]).toLowerCase().trim() === auth.email &&
     String(r[idx('tahun')]).trim() === String(t).trim() &&
     String(r[idx('semester')]).trim().toLowerCase() === String(s).trim().toLowerCase() &&
-    r[idx('nilai_asli')] !== '' && r[idx('nilai_asli')] !== null && r[idx('nilai_asli')] !== undefined &&
-    !isNaN(Number(r[idx('nilai_asli')]))
-  );
+    hitungAsliRow_(r, s) !== null
+  ).length;
 
   // "Periode aktif" (Pengaturan Umum) kadang belum diperbarui guru saat
   // ganti tahun ajaran/semester, padahal nilai sudah disimpan di periode
   // yang BARU dipilih langsung di Input Nilai/Riwayat Nilai (keduanya
   // punya dropdown tahun/semester sendiri, tidak terikat Pengaturan
   // Umum) — akibatnya KPI ini selalu kosong meski nilai sudah ada.
-  // Kalau periode aktif tidak punya baris nilai_asli sama sekali, jangan
-  // tampilkan kosong — fallback ke periode (tahun+semester) yang PALING
-  // BANYAK punya baris nilai_asli milik guru ini, supaya KPI tetap
+  // Kalau periode aktif tidak punya baris yang bisa dihitung sama sekali,
+  // jangan tampilkan kosong — fallback ke periode (tahun+semester) yang
+  // PALING BANYAK punya baris terhitung milik guru ini, supaya KPI tetap
   // berguna walau Pengaturan Umum belum disinkronkan manual.
-  if (!tahun || !semester || !ownerRows_(tahun, semester).length) {
+  if (!tahun || !semester || !ownerRowsCount_(tahun, semester)) {
     const counts = {};
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
       if (String(r[idx('owner_email')]).toLowerCase().trim() !== auth.email) continue;
-      const nilaiRaw = r[idx('nilai_asli')];
-      if (nilaiRaw === '' || nilaiRaw === null || nilaiRaw === undefined || isNaN(Number(nilaiRaw))) continue;
-      const key = String(r[idx('tahun')] || '').trim() + '||' + String(r[idx('semester')] || '').trim();
+      const semRow = String(r[idx('semester')] || '').trim();
+      if (hitungAsliRow_(r, semRow) === null) continue;
+      const key = String(r[idx('tahun')] || '').trim() + '||' + semRow;
       counts[key] = (counts[key] || 0) + 1;
     }
     const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
@@ -622,26 +637,35 @@ function getKetuntasanPredikatKelas() {
     if (String(r[idx('tahun')]).trim() !== String(tahun).trim()) continue;
     if (String(r[idx('semester')]).trim().toLowerCase() !== String(semester).trim().toLowerCase()) continue;
 
-    const nilaiRaw = r[idx('nilai_asli')];
-    if (nilaiRaw === '' || nilaiRaw === null || nilaiRaw === undefined || isNaN(Number(nilaiRaw))) continue;
-    const nilai = Number(nilaiRaw);
-
     const kelas = String(r[idx('kelas')] || '').trim();
     const mapel = String(r[idx('mapel')] || '').trim();
     const nama  = String(r[idx('nama_siswa')] || '').trim();
     if (!kelas) continue;
 
+    // Nilai Murni dihitung ULANG dari komponen mentah (bukan dipercaya dari
+    // kolom nilai_asli tersimpan) — kolom tersimpan bisa basi kalau baris
+    // itu terakhir disimpan SEBELUM formula direnormalisasi (lihat
+    // hitungNilaiRow_), dan guru belum sempat menyentuh ulang baris itu
+    // (Simpan Nilai tanpa edit apa pun tetap menulis ulang via
+    // hitungNilaiRow_ sebenarnya — tapi menghitung ulang di sini membuat
+    // KPI ini SELALU benar terlepas dari riwayat simpan, tanpa guru perlu
+    // tahu kapan harus simpan ulang).
+    const calc = hitungNilaiRow_({
+      uh1: r[idx('uh1')], uh2: r[idx('uh2')], uh3: r[idx('uh3')],
+      tgs1: r[idx('tgs1')], tgs2: r[idx('tgs2')], tgs3: r[idx('tgs3')],
+      tgsk1: r[idx('tgsk1')], tgsk2: r[idx('tgsk2')], tgsk3: r[idx('tgsk3')],
+      pts: r[idx('pts')], pas: r[idx('pas')], pat: r[idx('pat')],
+      semester: semester
+    });
+    if (calc.nilai_asli === null) continue;
+    const nilai = calc.nilai_asli;
+
     const rataHarianRaw = r[idx('rata_uh')];
     const rataHarian = (rataHarianRaw !== '' && rataHarianRaw !== null && rataHarianRaw !== undefined && !isNaN(Number(rataHarianRaw)))
-      ? Number(rataHarianRaw) : null;
+      ? Number(rataHarianRaw) : calc.rata_uh;
     const nilaiAkhirRaw = r[idx('nilai_akhir')];
     const nilaiAkhir = (nilaiAkhirRaw !== '' && nilaiAkhirRaw !== null && nilaiAkhirRaw !== undefined && !isNaN(Number(nilaiAkhirRaw)))
       ? Number(nilaiAkhirRaw) : null;
-
-    // efektif: Nilai Akhir (setelah Katrol/Remedial) kalau sudah dihitung,
-    // fallback ke Nilai Murni kalau guru belum sempat Hitung Ulang —
-    // inilah nilai yang DIPAKAI untuk predikat A-D, bukan selalu murni.
-    const efektif = nilaiAkhir !== null ? nilaiAkhir : nilai;
 
     // Nilai per komponen (dari skala 0-100 mentah, bukan hasil rumus
     // Katrol) — dipakai utk bandingkan siswa C/D vs rata-rata kelas per
@@ -656,7 +680,10 @@ function getKetuntasanPredikatKelas() {
 
     const key = kelas + '||' + mapel;
     if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
-    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir, efektif, komponen });
+    // efektif = Nilai Murni — predikat A-D/KKTP/daftar remedial di KPI ini
+    // SENGAJA berbasis Nilai Murni (bukan Nilai Akhir/Katrol), sesuai
+    // permintaan eksplisit: "berdasarkan nilai murni/mentah".
+    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir, efektif: nilai, komponen });
   }
 
   const avg_ = (vals) => vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : null;
@@ -692,7 +719,8 @@ function getKetuntasanPredikatKelas() {
     const rataHarianKelas = avg_(g.siswa.map(s => s.rataHarian).filter(v => v !== null));
     const nilaiAkhirList  = g.siswa.map(s => s.nilaiAkhir).filter(v => v !== null);
     const adaNilaiAkhir   = nilaiAkhirList.length > 0;
-    const rataTotalKelas  = avg_(g.siswa.map(s => s.nilai));
+    const nilaiMurniList  = g.siswa.map(s => s.nilai);
+    const rataTotalKelas  = avg_(nilaiMurniList);
 
     return {
       kelas: g.kelas,
@@ -708,7 +736,11 @@ function getKetuntasanPredikatKelas() {
       // murni) supaya kolom tidak kosong sebelum guru sempat Hitung Ulang.
       nilaiAkhir      : adaNilaiAkhir ? avg_(nilaiAkhirList) : null,
       rataTotal       : rataTotalKelas,
-      pakaiNilaiAkhir : adaNilaiAkhir
+      pakaiNilaiAkhir : adaNilaiAkhir,
+      // Nilai Murni tertinggi/terendah di kelas ini — dasar permintaan
+      // eksplisit "nilai terendah, nilai tertinggi" di kartu Ketuntasan Kelas.
+      nilaiMurniMax   : Math.round(Math.max(...nilaiMurniList) * 100) / 100,
+      nilaiMurniMin   : Math.round(Math.min(...nilaiMurniList) * 100) / 100
     };
   });
 
