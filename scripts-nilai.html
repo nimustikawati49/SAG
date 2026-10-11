@@ -494,6 +494,15 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm) {
         statCard('Belum Tuntas', kktpVals.length - tuntasMurni, '#ef4444') +
         statCard('% KKTP Kelas', rataMurni.toFixed(0) + '%<div class="muted" style="font-size:9.5px;font-weight:400">' + kktpBand.status + ' (' + kktpBand.kode + ')</div>', kktpBand.color) +
       '</div>';
+  } else {
+    // Jangan diam-diam sembunyikan kartu — jelaskan PERSISNYA kenapa belum
+    // bisa dihitung, supaya guru tidak perlu menebak-nebak kenapa statistik
+    // tidak muncul padahal tabel di bawah sudah terisi.
+    summaryHtml += '<div class="alert-banner info" style="margin-bottom:14px">' +
+      'ℹ️ <b>Statistik Nilai Murni belum bisa dihitung</b> — kolom <b>Nilai Akhir</b> di tabel bawah masih "-" untuk semua ' + rows.length + ' siswa ' +
+      '(Nilai Total/nilai_asli belum tersimpan sama sekali untuk kelas+mapel+periode ini). ' +
+      'Buka Input Nilai untuk kelas ini, pastikan ada yang terisi (minimal salah satu dari UH/Tugas/PTS/SAS/ASAT), lalu klik <b>💾 Simpan Nilai</b> — setelah itu kembali ke sini.' +
+      '</div>';
   }
 
   let html = summaryHtml + '<div class="table-wrap"><table><thead><tr>' +
@@ -1311,38 +1320,58 @@ function _kktpBandDariNilai_(n) {
   return n > 100 ? KKTP_BANDS_NILAI_UI_[0] : KKTP_BANDS_NILAI_UI_[KKTP_BANDS_NILAI_UI_.length - 1];
 }
 
-/** Update panel statistik + grafik */
-function updateStatistikUI_nilai() {
-  const kkm  = Number(nilaiState.setting.kkm || 70);
-  const vals = nilaiState.rows
-    .map(r => r.nilai_akhir)
-    .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
-    .map(Number);
-
+/**
+ * Isi satu set kartu statistik (Rata/Max/Min/Tuntas/Belum/%KKTP) — dipakai
+ * dua kali oleh updateStatistikUI_nilai(): sekali untuk Nilai Mentah/Murni
+ * (prefix 'nilaiMurniStat', sumber nilai_asli) dan sekali untuk Nilai
+ * Akhir setelah Katrol (prefix 'nilaiStat', sumber nilai_akhir — id lama,
+ * tidak diubah supaya tidak merusak apa pun yang sudah ada).
+ */
+function _fillStatCards_(prefix, vals, kkm) {
   const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
 
   if (!vals.length) {
-    ['nilaiStatRata','nilaiStatMax','nilaiStatMin','nilaiStatTuntas','nilaiStatBelum','nilaiStatKktp','nilaiStatKktpLabel']
+    [prefix + 'Rata', prefix + 'Max', prefix + 'Min', prefix + 'Tuntas', prefix + 'Belum', prefix + 'Kktp', prefix + 'KktpLabel']
       .forEach(id => setEl(id, '-'));
-    const kktpEl = document.getElementById('nilaiStatKktp');
+    const kktpEl = document.getElementById(prefix + 'Kktp');
     if (kktpEl) kktpEl.style.color = '#6b7280';
-    updateNilaiKelengkapanInfo_();
     return;
   }
   const rata = vals.reduce((a, b) => a + b, 0) / vals.length;
-  setEl('nilaiStatRata',   rata.toFixed(2));
-  setEl('nilaiStatMax',    Math.max(...vals).toFixed(2));
-  setEl('nilaiStatMin',    Math.min(...vals).toFixed(2));
-  setEl('nilaiStatTuntas', vals.filter(v => v >= kkm).length);
-  setEl('nilaiStatBelum',  vals.filter(v => v <  kkm).length);
+  setEl(prefix + 'Rata',   rata.toFixed(2));
+  setEl(prefix + 'Max',    Math.max(...vals).toFixed(2));
+  setEl(prefix + 'Min',    Math.min(...vals).toFixed(2));
+  setEl(prefix + 'Tuntas', vals.filter(v => v >= kkm).length);
+  setEl(prefix + 'Belum',  vals.filter(v => v <  kkm).length);
 
   const kktpBand = _kktpBandDariNilai_(rata);
-  const kktpEl   = document.getElementById('nilaiStatKktp');
-  setEl('nilaiStatKktp', rata.toFixed(0) + '%');
+  const kktpEl   = document.getElementById(prefix + 'Kktp');
+  setEl(prefix + 'Kktp', rata.toFixed(0) + '%');
   if (kktpEl) kktpEl.style.color = kktpBand.color;
-  setEl('nilaiStatKktpLabel', kktpBand.status + ' (' + kktpBand.kode + ')');
+  setEl(prefix + 'KktpLabel', kktpBand.status + ' (' + kktpBand.kode + ')');
+}
 
-  updateGrafikNilai_(vals, kkm);
+/** Update panel statistik (Nilai Mentah & Nilai Akhir) + grafik */
+function updateStatistikUI_nilai() {
+  const kkm = Number(nilaiState.setting.kkm || 70);
+
+  const valsMurni = nilaiState.rows
+    .map(r => r.nilai_asli)
+    .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    .map(Number);
+  _fillStatCards_('nilaiMurniStat', valsMurni, kkm);
+
+  const valsAkhir = nilaiState.rows
+    .map(r => r.nilai_akhir)
+    .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    .map(Number);
+  _fillStatCards_('nilaiStat', valsAkhir, kkm);
+
+  if (!valsAkhir.length) {
+    updateNilaiKelengkapanInfo_();
+    return;
+  }
+  updateGrafikNilai_(valsAkhir, kkm);
   updateNilaiKelengkapanInfo_();
 }
 

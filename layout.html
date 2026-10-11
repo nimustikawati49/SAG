@@ -2588,7 +2588,38 @@
       </div>
     </div>
 
-    <!-- Statistik -->
+    <!-- Statistik: Nilai Mentah/Murni (nilai_asli, sebelum Katrol) -->
+    <div class="muted" style="font-size:12px;font-weight:600;margin:4px 0 6px">📋 Nilai Mentah (Murni, sebelum Katrol)</div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px">
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Rata-rata Kelas</div>
+        <div id="nilaiMurniStatRata" style="font-size:22px;font-weight:700;color:#6C63FF">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Nilai Tertinggi</div>
+        <div id="nilaiMurniStatMax" style="font-size:22px;font-weight:700;color:#22c55e">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Nilai Terendah</div>
+        <div id="nilaiMurniStatMin" style="font-size:22px;font-weight:700;color:#ef4444">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Tuntas (≥ KKM)</div>
+        <div id="nilaiMurniStatTuntas" style="font-size:22px;font-weight:700;color:#22c55e">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px">Belum Tuntas</div>
+        <div id="nilaiMurniStatBelum" style="font-size:22px;font-weight:700;color:#ef4444">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px" title="Persentase ketercapaian KKTP dari rata-rata Nilai Murni kelas">% KKTP Kelas</div>
+        <div id="nilaiMurniStatKktp" style="font-size:22px;font-weight:700;color:#6b7280">-</div>
+        <div id="nilaiMurniStatKktpLabel" class="muted" style="font-size:10.5px;margin-top:2px">-</div>
+      </div>
+    </div>
+
+    <!-- Statistik: Nilai Akhir (setelah Katrol/Remedial) -->
+    <div class="muted" style="font-size:12px;font-weight:600;margin:4px 0 6px">🎯 Nilai Akhir (setelah Katrol/Remedial)</div>
     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px">
       <div class="card" style="text-align:center;padding:12px 6px">
         <div class="muted" style="font-size:11px">Rata-rata Kelas</div>
