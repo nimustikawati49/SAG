@@ -562,10 +562,19 @@ function getKetuntasanPredikatKelas() {
     const nama  = String(r[idx('nama_siswa')] || '').trim();
     if (!kelas) continue;
 
+    const rataHarianRaw = r[idx('rata_uh')];
+    const rataHarian = (rataHarianRaw !== '' && rataHarianRaw !== null && rataHarianRaw !== undefined && !isNaN(Number(rataHarianRaw)))
+      ? Number(rataHarianRaw) : null;
+    const nilaiAkhirRaw = r[idx('nilai_akhir')];
+    const nilaiAkhir = (nilaiAkhirRaw !== '' && nilaiAkhirRaw !== null && nilaiAkhirRaw !== undefined && !isNaN(Number(nilaiAkhirRaw)))
+      ? Number(nilaiAkhirRaw) : null;
+
     const key = kelas + '||' + mapel;
     if (!groups[key]) groups[key] = { kelas, mapel, siswa: [] };
-    groups[key].siswa.push({ nama, nilai });
+    groups[key].siswa.push({ nama, nilai, rataHarian, nilaiAkhir });
   }
+
+  const avg_ = (vals) => vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : null;
 
   const keys = Object.keys(groups).sort();
   return keys.map((key) => {
@@ -583,13 +592,27 @@ function getKetuntasanPredikatKelas() {
 
     const total  = g.siswa.length;
     const tuntas = counts.A + counts.B;
+
+    const rataHarianKelas = avg_(g.siswa.map(s => s.rataHarian).filter(v => v !== null));
+    const nilaiAkhirList  = g.siswa.map(s => s.nilaiAkhir).filter(v => v !== null);
+    const adaNilaiAkhir   = nilaiAkhirList.length > 0;
+    const rataTotalKelas  = avg_(g.siswa.map(s => s.nilai));
+
     return {
       kelas: g.kelas,
       mapel: g.mapel,
       total,
       counts,
       persenTuntas: total ? Math.round((tuntas / total) * 100) : 0,
-      perluTindakLanjut
+      perluTindakLanjut,
+      rataHarian  : rataHarianKelas,
+      // Nilai Akhir kelas kalau sudah ada siswa yang di-Katrol/disimpan
+      // ulang (lihat nilaiHitungKatrolBatch_UI di scripts-nilai.html);
+      // kalau belum ada SAMA SEKALI, fallback ke Rata-rata Total (nilai
+      // murni) supaya kolom tidak kosong sebelum guru sempat Hitung Ulang.
+      nilaiAkhir      : adaNilaiAkhir ? avg_(nilaiAkhirList) : null,
+      rataTotal       : rataTotalKelas,
+      pakaiNilaiAkhir : adaNilaiAkhir
     };
   });
 }

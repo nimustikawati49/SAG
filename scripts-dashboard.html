@@ -98,6 +98,8 @@ function _renderKetuntasanPredikatKelas_(){
 
   var html = '<div class="table-wrap"><table><thead><tr>' +
     '<th style="text-align:left">Kelas</th><th style="text-align:left">Mapel</th><th>Siswa</th>' +
+    '<th title="Rata-rata Harian (UH/Tugas) kelas">Rata Harian</th>' +
+    '<th title="Nilai Akhir kalau sudah di-Katrol; kalau belum, dari Rata-rata Total (nilai murni)">Nilai Akhir</th>' +
     '<th>A</th><th>B</th><th>C</th><th>D</th><th>% Tuntas</th><th>Aksi</th>' +
     '</tr></thead><tbody>';
 
@@ -105,10 +107,17 @@ function _renderKetuntasanPredikatKelas_(){
     var pctColor = g.persenTuntas >= 80 ? '#166534' : (g.persenTuntas >= 60 ? '#854d0e' : '#991b1b');
     var pctBg    = g.persenTuntas >= 80 ? '#dcfce7' : (g.persenTuntas >= 60 ? '#fef9c3' : '#fee2e2');
     var jumlahCD = (g.perluTindakLanjut || []).length;
+    var rataHarianTxt = (g.rataHarian !== null && g.rataHarian !== undefined) ? g.rataHarian.toFixed(2) : '-';
+    var nilaiAkhirVal  = g.pakaiNilaiAkhir ? g.nilaiAkhir : g.rataTotal;
+    var nilaiAkhirTxt  = (nilaiAkhirVal !== null && nilaiAkhirVal !== undefined) ? nilaiAkhirVal.toFixed(2) : '-';
+    var nilaiAkhirSub  = g.pakaiNilaiAkhir ? 'Nilai Akhir' : 'Rata-rata Total';
     html += '<tr>' +
       '<td class="left"><b>' + _escKPK_(g.kelas) + '</b></td>' +
       '<td class="left">' + _escKPK_(g.mapel || '-') + '</td>' +
       '<td style="text-align:center">' + g.total + '</td>' +
+      '<td style="text-align:center">' + rataHarianTxt + '</td>' +
+      '<td style="text-align:center">' + nilaiAkhirTxt +
+        '<div class="muted" style="font-size:10px;line-height:1.2">' + nilaiAkhirSub + '</div></td>' +
       '<td style="text-align:center"><span style="' + badgeStyle.A + ';padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">' + g.counts.A + '</span></td>' +
       '<td style="text-align:center"><span style="' + badgeStyle.B + ';padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">' + g.counts.B + '</span></td>' +
       '<td style="text-align:center"><span style="' + badgeStyle.C + ';padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">' + g.counts.C + '</span></td>' +
@@ -120,7 +129,7 @@ function _renderKetuntasanPredikatKelas_(){
           : '<span class="muted" style="font-size:12px">✅ Semua tuntas</span>') +
       '</td>' +
       '</tr>';
-    html += '<tr id="ketuntasanDetail_' + i + '" style="display:none"><td colspan="9" style="background:#f9fafb">' +
+    html += '<tr id="ketuntasanDetail_' + i + '" style="display:none"><td colspan="11" style="background:#f9fafb">' +
       _renderKetuntasanDetailList_(g.perluTindakLanjut || []) +
       '</td></tr>';
   });
