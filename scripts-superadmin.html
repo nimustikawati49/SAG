@@ -1900,4 +1900,74 @@ function deleteHariLiburUI(tanggal) {
     .deleteHariLibur(tanggal);
 }
 
+/* ===================================================================
+   CEK DATA NILAI (DEBUG) — diagnostik baca-saja untuk nyari kenapa
+   Ketuntasan Kelas / Riwayat Nilai kosong padahal guru sudah Simpan Nilai.
+   =================================================================== */
+function SA_cekDataNilaiDebug_() {
+  var email = (document.getElementById('ksGuruSelect') || {}).value || '';
+  var kelas = (document.getElementById('ksKelasInput') || {}).value || '';
+  var box = document.getElementById('ksDebugBox');
+  if (!box) return;
+  if (!email || !kelas.trim()) { if (typeof showToast === 'function') showToast('Pilih guru dan isi kelas dulu.', 'error'); return; }
+
+  box.innerHTML = '<div class="muted" style="font-size:12px">⏳ Memuat data mentah...</div>';
+  google.script.run
+    .withSuccessHandler(function(res) { SA_renderCekDataNilaiDebug_(res); })
+    .withFailureHandler(function(err) {
+      box.innerHTML = '<div class="alert-banner error">❌ ' + _escSA(err.message || 'Gagal memuat') + '</div>';
+    })
+    .superadminCekDataNilaiMentah(email, kelas.trim());
+}
+
+function SA_renderCekDataNilaiDebug_(res) {
+  var box = document.getElementById('ksDebugBox');
+  if (!box) return;
+  var period = res.period_aktif || {};
+  var rows = res.rows || [];
+
+  var html = '<div class="alert-banner info" style="margin-bottom:10px;font-size:12px">' +
+    'Periode AKTIF guru ini sekarang: <b>' + _escSA(period.tahun_pelajaran || '-') + ' / ' + _escSA(period.semester || '-') + '</b>' +
+    '</div>';
+
+  if (!rows.length) {
+    html += '<div class="muted" style="font-size:12px">Tidak ada baris NILAI_SISWA sama sekali untuk kelas ini — belum pernah tersimpan.</div>';
+    box.innerHTML = html;
+    return;
+  }
+
+  var isEmpty = function(v) { return v === null || v === undefined || v === ''; };
+  html += '<div class="table-wrap"><table style="font-size:11.5px"><thead><tr>' +
+    '<th class="left">Nama</th><th>Mapel</th><th>Tahun</th><th>Smt</th>' +
+    '<th>UH1</th><th>TGS1</th><th>TGSK1</th><th>PTS</th><th>PAS</th><th>PAT</th>' +
+    '<th>Rata Harian</th><th>Nilai Fix</th><th>Nilai Asli</th><th>Nilai Akhir</th>' +
+    '</tr></thead><tbody>';
+
+  rows.forEach(function(r) {
+    var periodeCocok = String(r.tahun) === String(period.tahun_pelajaran || '') &&
+      String(r.semester).toLowerCase().trim() === String(period.semester || '').toLowerCase().trim();
+    var rowBg = periodeCocok ? '' : 'background:#fef3c7';
+    var asliBg = isEmpty(r.nilai_asli) ? 'background:#fee2e2;font-weight:700' : '';
+    html += '<tr style="' + rowBg + '">' +
+      '<td class="left">' + _escSA(r.nama) + '</td>' +
+      '<td>' + _escSA(r.mapel) + '</td>' +
+      '<td>' + _escSA(String(r.tahun)) + '</td>' +
+      '<td>' + _escSA(r.semester) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.uh1) ? '-' : String(r.uh1)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.tgs1) ? '-' : String(r.tgs1)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.tgsk1) ? '-' : String(r.tgsk1)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.pts) ? '-' : String(r.pts)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.pas) ? '-' : String(r.pas)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.pat) ? '-' : String(r.pat)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.rata_uh) ? '-' : String(r.rata_uh)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.nilai_fix) ? '-' : String(r.nilai_fix)) + '</td>' +
+      '<td style="' + asliBg + '">' + _escSA(isEmpty(r.nilai_asli) ? 'KOSONG' : String(r.nilai_asli)) + '</td>' +
+      '<td>' + _escSA(isEmpty(r.nilai_akhir) ? '-' : String(r.nilai_akhir)) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<p class="muted" style="font-size:11px;margin-top:6px">Baris kuning = tahun/semester baris TIDAK cocok dengan periode aktif di atas (penyebab umum Ketuntasan Kelas kosong). Kolom Nilai Asli merah/"KOSONG" = nilai_asli belum/tidak tersimpan untuk baris itu.</p>';
+  box.innerHTML = html;
+}
+
 </script>

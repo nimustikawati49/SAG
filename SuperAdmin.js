@@ -2024,3 +2024,52 @@ function _invalidateSiswaCacheForGuru_(email) {
     CacheService.getScriptCache().remove('SHEET_SISWA_' + String(email || '').toLowerCase().trim());
   } catch (e) { /* non-critical */ }
 }
+
+/**
+ * superadminCekDataNilaiMentah(guruEmail, kelas)
+ * Diagnostik baca-saja — dump isi baris NILAI_SISWA milik satu guru untuk
+ * satu kelas APA ADANYA (semua mapel/tahun/semester yang ada, tidak
+ * difilter ke periode aktif seperti getKetuntasanPredikatKelas), plus
+ * periode yang sedang AKTIF untuk guru itu sebagai pembanding. Dipakai
+ * untuk mencari tahu kenapa Ketuntasan Kelas/Riwayat Nilai kosong padahal
+ * guru merasa sudah menyimpan nilai — kemungkinan besar nilai_asli
+ * memang masih kosong di sheet, ATAU tahun/semester baris tidak cocok
+ * dengan periode aktif.
+ */
+function superadminCekDataNilaiMentah(guruEmail, kelas) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  const email = String(guruEmail || '').toLowerCase().trim();
+  const kls   = String(kelas || '').trim();
+  if (!email || !kls) throw new Error('Pilih guru dan kelas.');
+
+  const period = getUserAcademicPeriod(email);
+  const ss = getSpreadsheet_({ email: email });
+  const sh = ss.getSheetByName('NILAI_SISWA');
+  if (!sh) return { period_aktif: period, rows: [] };
+
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return { period_aktif: period, rows: [] };
+  const h = data[0].map(function(x) { return String(x || '').toLowerCase().trim(); });
+  const idx = {};
+  h.forEach(function(name, i) { idx[name] = i; });
+
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[idx.kelas] || '').trim() !== kls) continue;
+    out.push({
+      nama      : r[idx.nama_siswa] || '',
+      mapel     : r[idx.mapel] || '',
+      tahun     : r[idx.tahun] || '',
+      semester  : r[idx.semester] || '',
+      uh1       : r[idx.uh1], uh2: r[idx.uh2], uh3: r[idx.uh3],
+      tgs1      : r[idx.tgs1], tgsk1: r[idx.tgsk1],
+      pts       : r[idx.pts], pas: r[idx.pas], pat: r[idx.pat],
+      rata_uh   : r[idx.rata_uh],
+      nilai_fix : r[idx.nilai_fix],
+      nilai_asli: r[idx.nilai_asli],
+      nilai_akhir: r[idx.nilai_akhir]
+    });
+  }
+  return { period_aktif: period, rows: out };
+}
