@@ -241,11 +241,23 @@ function _computeDashboardMeta_(email, period, jurnalRows){
       const counts = _countSiswaPerKelasBatch_(period.tahun_pelajaran, period.semester, kelasAktif);
       let sum = 0;
       kelasAktif.forEach(function(k) {
-        // Ambil yang lebih besar antara RiwayatKelas (sinkronan) dan SISWA
-        // (roster asli guru) — supaya kalau RiwayatKelas basi/telat sinkron,
-        // dashboard tidak melaporkan siswa lebih sedikit dari yang benar-benar
-        // ada di sheet SISWA milik guru ini.
-        sum += Math.max(counts[k] || 0, legacyCountPerKelas[k] || 0);
+        // SISWA adalah roster yang LANGSUNG dikelola guru (upload CSV,
+        // Tambah/Hapus Siswa) — begitu guru keluarkan/tambah siswa,
+        // sheet ini SELALU langsung ter-update (lihat guruHapusSiswaDariKelas/
+        // guruTambahSiswaKeKelas di api_nilai.js). RiwayatKelas cuma
+        // sinkronan otomatis yang bisa telat/basi dan TIDAK ikut
+        // diperbarui oleh Kelola Siswa, jadi dulu pernah dipakai
+        // Math.max(counts[k], legacyCountPerKelas[k]) — niatnya cuma jaga-
+        // jaga kalau RiwayatKelas basi ke arah KURANG, tapi efeknya
+        // Math.max tidak pernah bisa TURUN sama sekali: begitu RiwayatKelas
+        // sempat lebih besar (mis. sebelum ada siswa yang dikeluarkan),
+        // total siswa di dashboard permanen nyangkut di angka lama walau
+        // SISWA sudah benar berkurang. Kalau kelas ini ADA datanya di
+        // SISWA, percaya SISWA (lebih akurat & selalu fresh); RiwayatKelas
+        // cuma dipakai fallback utk kelas yang sama sekali belum ada
+        // datanya di SISWA.
+        const adaDiSiswa = Object.prototype.hasOwnProperty.call(legacyCountPerKelas, k);
+        sum += adaDiSiswa ? legacyCountPerKelas[k] : (counts[k] || 0);
       });
       totalSiswa = sum;
     }

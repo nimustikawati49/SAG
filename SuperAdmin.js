@@ -2051,6 +2051,15 @@ function _invalidateSiswaCacheForGuru_(email) {
   try {
     CacheService.getScriptCache().remove('SHEET_SISWA_' + String(email || '').toLowerCase().trim());
   } catch (e) { /* non-critical */ }
+  // Best-effort: getUserCache() cuma bisa menghapus cache milik user yang
+  // SEDANG EKSEKUSI (platform Apps Script tidak punya cara hapus cache
+  // user LAIN dari jarak jauh) — jadi ini cuma ngefek kalau SuperAdmin
+  // kebetulan menghapus siswa di akunnya sendiri (guruEmail == email yang
+  // sedang login, kasus umum di app ini karena SuperAdmin biasanya juga
+  // berperan sebagai guru). Tanpa ini, dashboard SuperAdmin sendiri bisa
+  // nyangkut data lama sampai 5 menit (TTL DASH_ALL) walau SISWA sudah
+  // ter-update, mirip bug Math.max yang pernah bikin Total Siswa nyangkut.
+  try { CacheService.getUserCache().remove('DASH_ALL'); } catch (e) {}
 }
 
 /**
