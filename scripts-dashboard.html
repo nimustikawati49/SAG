@@ -151,7 +151,7 @@ function _renderKetuntasanPredikatKelas_(){
       '</td>' +
       '</tr>';
     html += '<tr id="ketuntasanDetail_' + i + '" style="display:none"><td colspan="13" style="background:#f9fafb">' +
-      _renderKetuntasanDetailList_(g.perluTindakLanjut || []) +
+      _renderKetuntasanDetailList_(g.perluTindakLanjut || [], i) +
       '</td></tr>';
   });
 
@@ -159,10 +159,40 @@ function _renderKetuntasanPredikatKelas_(){
   box.innerHTML = fallbackNote + html;
 }
 
-function _renderKetuntasanDetailList_(list){
+/**
+ * _salinRemedialWA_(idx)
+ * Salin daftar nama siswa perlu remedial kelas ke-idx (dari
+ * _ketuntasanPredikatData, data yang sama dipakai render tabel) sebagai
+ * teks polos siap tempel ke grup WA — nomor urut + nama saja, tanpa
+ * markup/badge, supaya rapi begitu ditempel di chat.
+ */
+function _salinRemedialWA_(idx){
+  var g = (_ketuntasanPredikatData || [])[idx];
+  if (!g) return;
+  var list = g.perluTindakLanjut || [];
+  if (!list.length) return;
+
+  var teks = 'Daftar Siswa Perlu Remedial — ' + g.kelas + (g.mapel ? ' (' + g.mapel + ')' : '') + '\n' +
+    list.map(function(s, i){ return (i + 1) + '. ' + s.nama; }).join('\n');
+
+  var btn = document.getElementById('btnSalinRemedial_' + idx);
+  var sukses = function(){
+    if (btn) { var t = btn.textContent; btn.textContent = '✅ Tersalin!'; setTimeout(function(){ btn.textContent = t; }, 1500); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(teks).then(sukses).catch(function(){ prompt('Salin manual (Ctrl+C):', teks); });
+  } else {
+    prompt('Salin manual (Ctrl+C):', teks);
+  }
+}
+
+function _renderKetuntasanDetailList_(list, idx){
   if(!list.length) return '';
   var html = '<div style="padding:10px 4px">' +
-    '<b style="font-size:12.5px">⚠️ Siswa perlu remedial (predikat C/D, Belum Mencapai Ketuntasan — urut dari nilai terendah):</b>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">' +
+      '<b style="font-size:12.5px">⚠️ Siswa perlu remedial (predikat C/D, Belum Mencapai Ketuntasan — urut dari nilai terendah):</b>' +
+      '<button class="ghost" onclick="_salinRemedialWA_(' + idx + ')" style="font-size:12px" id="btnSalinRemedial_' + idx + '">📋 Salin Daftar Nama (untuk WA)</button>' +
+    '</div>' +
     '<div class="table-wrap" style="margin-top:8px"><table style="font-size:12px">' +
     '<thead><tr><th>No</th><th class="left">Nama Siswa</th><th>Nilai Total</th><th>Predikat</th><th class="left">Komponen Rendah (di bawah rata-rata kelas)</th></tr></thead><tbody>';
   list.forEach(function(s, i){

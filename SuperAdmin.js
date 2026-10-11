@@ -1833,7 +1833,23 @@ function uploadKopSekolah(kodeSekolah, payload) {
   } catch (folderErr) {
     file = DriveApp.createFile(blob);
   }
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  // Domain sekolah (belajar.id, dsb) sering MEMBLOKIR berbagi "siapa saja
+  // yang punya link" (ANYONE_WITH_LINK) lewat kebijakan admin Workspace —
+  // operasi createFile() di atas biasanya tetap berhasil, tapi
+  // setSharing(ANYONE_WITH_LINK) sendiri yang lempar "Access denied:
+  // DriveApp". Coba yang lebih longgar dulu (ANYONE), turun ke yang
+  // paling aman utk domain sekolah (siapa saja SATU domain dengan link),
+  // dan kalau SEMUA cara berbagi gagal pun, jangan gagalkan upload-nya —
+  // filenya tetap tersimpan, guru satu domain biasanya tetap bisa buka
+  // lewat kebijakan default Workspace (anggota domain saling lihat).
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (shareErr) {
+    try {
+      file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (shareErr2) { /* dibiarkan pakai permission default milik file */ }
+  }
   const stableUrl = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w800';
 
   const sh = _ensureKopSekolahSheet_();

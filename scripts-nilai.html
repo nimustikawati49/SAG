@@ -1695,7 +1695,7 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
     return n < kkm ? `<span class="note-low">${n.toFixed(0)} • Rendah</span>` : n.toFixed(0);
   };
 
-  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>${def.label} (Katrol)</th><th>Ket</th>`;
+  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>${def.label}</th><th>Ket</th>`;
 
   const bodyRows = rows.map((r, i) => {
     const finalVal = r.nilai_akhir;
@@ -1770,7 +1770,7 @@ function doCetakNilai(mode = 'print') {
     const pagesHtml =
       '<div class="page">' +
         headerHtml +
-        '<h1>DAFTAR NILAI ' + komponenLabel + ' (KATROL)</h1>' +
+        '<h1>DAFTAR NILAI ' + komponenLabel + '</h1>' +
         '<table class="info">' +
           '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
           '<tr>' +
@@ -1918,7 +1918,7 @@ function exportNilaiExcelUI() {
       [`Daftar Nilai ${mapel}`], [],
       ['Kelas', kelas], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm], []
     ];
-    const colHdr = ['No', 'NIS', 'Nama Siswa', def.label + ' (Katrol)', 'Keterangan'];
+    const colHdr = ['No', 'NIS', 'Nama Siswa', def.label, 'Keterangan'];
 
     const dataRows = rows.map((r, i) => {
       const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
