@@ -603,9 +603,13 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
           '<b style="font-size:13px;color:#991b1b">⚠️ ' + remedialList.length + ' siswa perlu remedial (Belum Mencapai Ketuntasan, urut nilai terendah):</b>' +
           '<button class="ghost" onclick="_salinRemedialRiwayat_()" id="btnSalinRemedialRiwayat" style="font-size:12px">📋 Salin Daftar Nama (untuk WA)</button>' +
         '</div>' +
-        '<ol style="margin:0 0 0 18px;font-size:12.5px;line-height:1.8;color:#7f1d1d">' +
-          remedialList.map(s => '<li>' + esc(s.nama) + ' — <b>' + s.nilai.toFixed(0) + '</b></li>').join('') +
-        '</ol>' +
+        '<ul style="margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.6">' +
+          remedialList.map(s => {
+            const band = _kktpBandDariNilai_(s.nilai);
+            return '<li style="border-left:5px solid ' + band.border + ';padding:4px 10px;margin-bottom:4px;background:#fff">' +
+              esc(s.nama) + ' — <b style="color:' + band.color + '">' + s.nilai.toFixed(0) + ' (' + band.kode + ')</b></li>';
+          }).join('') +
+        '</ul>' +
       '</div>';
     }
   } else {
@@ -628,8 +632,13 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
   '</tr></thead><tbody>';
 
   rows.forEach((r, i) => {
+    // Border kiri warna predikat A-D (nilai_asli) — hijau/kuning/orange/
+    // merah, sama palet dgn kartu Dashboard & legend Keterangan Predikat,
+    // supaya guru langsung lihat capaian siswa tanpa baca angka dulu.
+    const band = (!isEmpty_(r.nilai_asli) && !isNaN(Number(r.nilai_asli))) ? _kktpBandDariNilai_(Number(r.nilai_asli)) : null;
+    const rowBorderStyle = band ? 'border-left:5px solid ' + band.border + ';' : '';
     html += '<tr>' +
-      '<td>' + (i + 1) + '</td>' +
+      '<td style="' + rowBorderStyle + '">' + (i + 1) + '</td>' +
       '<td>' + esc(r.nis) + '</td>' +
       '<td class="left">' + esc(r.nama_siswa) + '</td>' +
       cell('_tgsM', r) + cell('_tgsK', r) +
@@ -1545,11 +1554,14 @@ function nilaiOnInput(rowIdx, field, val) {
  * (Kepsek.js). Dipakai utk badge "% KKTP Kelas" di statistik Input Nilai
  * (persentase ketercapaian dari rata-rata kelas, bukan dari KKM mapel).
  */
+// Palet A=hijau, B=kuning, C=orange, D=merah — dipakai KONSISTEN di
+// seluruh app (kartu Dashboard, legend Keterangan Predikat, baris siswa
+// di Riwayat Nilai) lewat field .border/.bg/.color di sini.
 const KKTP_BANDS_NILAI_UI_ = [
-  { min: 86, max: 100, kode: 'A', status: 'Sudah Mencapai Ketuntasan', color: '#166534', bg: '#dcfce7' },
-  { min: 66, max: 85,  kode: 'B', status: 'Sudah Mencapai Ketuntasan', color: '#0369a1', bg: '#e0f2fe' },
-  { min: 41, max: 65,  kode: 'C', status: 'Belum Mencapai Ketuntasan', color: '#854d0e', bg: '#fef9c3' },
-  { min: 0,  max: 40,  kode: 'D', status: 'Belum Mencapai Ketuntasan', color: '#991b1b', bg: '#fee2e2' }
+  { min: 86, max: 100, kode: 'A', status: 'Sudah Mencapai Ketuntasan', color: '#166534', bg: '#dcfce7', border: '#22c55e' },
+  { min: 66, max: 85,  kode: 'B', status: 'Sudah Mencapai Ketuntasan', color: '#854d0e', bg: '#fef9c3', border: '#eab308' },
+  { min: 41, max: 65,  kode: 'C', status: 'Belum Mencapai Ketuntasan', color: '#9a3412', bg: '#ffedd5', border: '#f97316' },
+  { min: 0,  max: 40,  kode: 'D', status: 'Belum Mencapai Ketuntasan', color: '#991b1b', bg: '#fee2e2', border: '#ef4444' }
 ];
 function _kktpBandDariNilai_(n) {
   for (const b of KKTP_BANDS_NILAI_UI_) if (n >= b.min && n <= b.max) return b;
