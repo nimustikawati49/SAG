@@ -1547,10 +1547,7 @@ function bindCetakModalGuard_() {
   modal.addEventListener('change', (e) => {
     const t = e.target;
     if (!t) return;
-    const isCetakInput = t.closest('#cetakKelasContainer')
-      || t.name === 'cetakType'
-      || /^cetakCol/.test(t.id || '');
-    if (isCetakInput) setCetakReady_(false);
+    if (t.closest('#cetakKelasContainer')) setCetakReady_(false);
   });
 }
 
@@ -1583,69 +1580,57 @@ function loadKelasUntukCetak_() {
 }
 
 /**
- * Generate HTML tabel nilai untuk satu kelas (untuk print/export)
+ * Katrol satu komponen (PTS atau SAS/ASAT) secara proporsional per kelas:
+ * siswa dengan nilai mentah terendah di ARRAY YANG DIBERIKAN dipetakan ke
+ * target.min, tertinggi ke target.max — rumus sama persis dengan Katrol
+ * Nilai Total di nilaiHitungKatrolBatch_UI, cuma sumbernya satu komponen
+ * saja. null/kosong tetap null (siswa itu belum punya nilai komponen ini).
+ * @param {Array} rawVals  – nilai mentah 1 komponen, urutan sejajar rows
+ * @param {{min:number,max:number}} target
+ * @returns {Array} nilai hasil katrol, null kalau raw-nya kosong
+ */
+function _katrolKomponen_(rawVals, target) {
+  const nums = rawVals.filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v))).map(Number);
+  if (!nums.length) return rawVals.map(() => null);
+  const minA = Math.min(...nums), maxA = Math.max(...nums);
+  return rawVals.map(v => {
+    if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
+    const n = Number(v);
+    const k = (maxA === minA) ? target.min : ((n - minA) / (maxA - minA)) * (target.max - target.min) + target.min;
+    return Math.round(k * 100) / 100;
+  });
+}
+
+/**
+ * Generate HTML tabel nilai untuk satu kelas (untuk print/export) —
+ * disederhanakan khusus Nilai PTS (Katrol) & Nilai SAS/ASAT (Katrol) saja.
  * @param {string} kelasNm  – nama kelas
  * @param {Array}  rows     – array row data nilai
- * @param {object} opts     – { type, showCols, isGenap, kkm, rankMap }
+ * @param {object} opts     – { isGenap, kkm, katrolTarget }
  * @returns {string} HTML string
  */
 function buildNilaiTableHtml_(kelasNm, rows, opts) {
-  const { type, sc, isGenap, kkm } = opts;
-  const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
-    ? Number(v).toFixed(2) : '-';
-  const noteHtml = (v, markLow = true) => {
-    if (v === null || v === undefined || v === '' || isNaN(Number(v))) {
+  const { isGenap, kkm, katrolTarget } = opts;
+  const uasLabel = isGenap ? 'ASAT' : 'SAS';
+  const ptsKatrol = _katrolKomponen_(rows.map(r => r.pts), katrolTarget);
+  const uasKatrol = _katrolKomponen_(rows.map(r => isGenap ? r.pat : r.pas), katrolTarget);
+
+  const noteHtml = v => {
+    if (v === null || v === undefined || isNaN(Number(v))) {
       return '<span class="note-missing">Belum mengumpulkan</span>';
     }
     const n = Number(v);
-    if (markLow && n < kkm) {
-      return `<span class="note-low">${n.toFixed(2)} • Rendah</span>`;
-    }
-    return n.toFixed(2);
+    return n < kkm ? `<span class="note-low">${n.toFixed(2)} • Rendah</span>` : n.toFixed(2);
   };
 
-  // Ranking
-  const sorted  = [...rows].filter(r => r.nilai_akhir !== null && !isNaN(Number(r.nilai_akhir)))
-    .sort((a, b) => Number(b.nilai_akhir) - Number(a.nilai_akhir));
-  const rankMap = {};
-  let rk = 1;
-  sorted.forEach((r, i) => {
-    if (i > 0 && Number(r.nilai_akhir) < Number(sorted[i-1].nilai_akhir)) rk = i + 1;
-    rankMap[r.nis] = rk;
-  });
-
-  // Build header
-  let hdr = '<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th>';
-  if (sc.tgs) hdr += '<th>TGS1</th><th>TGS2</th><th>TGS3</th>';
-  if (sc.tgsk) hdr += '<th>TK1</th><th>TK2</th><th>TK3</th>';
-  if (sc.uh)  hdr += '<th>UH1</th><th>UH2</th><th>UH3</th>';
-  if (sc.pts) hdr += '<th>PTS</th>';
-  if (sc.pas) hdr += `<th>${isGenap ? 'ASAT' : 'SAS'}</th>`;
-  if (sc.rata) hdr += '<th>Rata</th>';
-  if (sc.total) hdr += `<th>${type === 'katrol' ? 'Katrol' : 'Murni'}</th>`;
-  if (sc.remedi) hdr += '<th>Remidi</th>';
-  if (sc.akhir) hdr += '<th>Nilai Akhir</th>';
-  hdr += '<th>Ket</th>';
-  if (sc.ranking) hdr += '<th>Rank</th>';
+  const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>PTS (Katrol)</th><th>${uasLabel} (Katrol)</th><th>Ket</th>`;
 
   const bodyRows = rows.map((r, i) => {
     const finalVal = r.nilai_akhir;
     const lulus    = finalVal !== null && !isNaN(Number(finalVal)) && Number(finalVal) >= kkm;
-    const akhirFmt = noteHtml(finalVal, true);
-
-    let tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>`;
-    if (sc.tgs)  tds += `<td>${noteHtml(r.tgs1, true)}</td><td>${noteHtml(r.tgs2, true)}</td><td>${noteHtml(r.tgs3, true)}</td>`;
-    if (sc.tgsk) tds += `<td>${noteHtml(r.tgsk1, true)}</td><td>${noteHtml(r.tgsk2, true)}</td><td>${noteHtml(r.tgsk3, true)}</td>`;
-    if (sc.uh)   tds += `<td>${noteHtml(r.uh1, true)}</td><td>${noteHtml(r.uh2, true)}</td><td>${noteHtml(r.uh3, true)}</td>`;
-    if (sc.pts)  tds += `<td>${noteHtml(r.pts, true)}</td>`;
-    if (sc.pas)  tds += `<td>${noteHtml(isGenap ? r.pat : r.pas, true)}</td>`;
-    if (sc.rata) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.rata_uh, true)}</td>`;
-    if (sc.total) tds += `<td>${noteHtml(type === 'katrol' ? r.nilai_katrol : r.nilai_asli, true)}</td>`;
-    if (sc.remedi) tds += `<td>${noteHtml(r.nilai_remedial, true)}</td>`;
-    if (sc.akhir) tds += `<td>${akhirFmt}</td>`;
-    tds += `<td>${lulus ? 'T' : 'BT'}</td>`;
-    if (sc.ranking) tds += `<td>${rankMap[r.nis] || '-'}</td>`;
-
+    const tds = `<td>${i+1}</td><td>${r.nis||'-'}</td><td class="tl">${r.nama_siswa||''}</td>` +
+      `<td>${noteHtml(ptsKatrol[i])}</td><td>${noteHtml(uasKatrol[i])}</td>` +
+      `<td>${lulus ? 'T' : 'BT'}</td>`;
     return `<tr class="${lulus ? '' : 'blt'}">${tds}</tr>`;
   }).join('');
 
@@ -1668,19 +1653,6 @@ function doCetakNilai(mode = 'print') {
     return;
   }
 
-  const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
-  const sc = {
-    tgs    : document.getElementById('cetakColTGS')?.checked,
-    tgsk   : document.getElementById('cetakColTGSK')?.checked,
-    uh     : document.getElementById('cetakColUH')?.checked,
-    pts    : document.getElementById('cetakColPTS')?.checked,
-    pas    : document.getElementById('cetakColPAS')?.checked,
-    rata   : document.getElementById('cetakColRata')?.checked,
-    total  : document.getElementById('cetakColTotal')?.checked,
-    remedi : document.getElementById('cetakColRemedi')?.checked,
-    akhir  : document.getElementById('cetakColAkhir')?.checked,
-    ranking: document.getElementById('cetakColRanking')?.checked,
-  };
   const paperSize   = document.querySelector('input[name="cetakPaper"]:checked')?.value  || 'a4';
   const paperOrient = document.querySelector('input[name="cetakOrient"]:checked')?.value || 'landscape';
   // Ukuran fisik kertas (mm) — dipakai untuk @page CSS supaya kolom yang
@@ -1697,6 +1669,10 @@ function doCetakNilai(mode = 'print') {
   const { mapel, tahun, semester, setting } = nilaiState;
   const isGenap = semester.toLowerCase().includes('genap');
   const kkm     = Number(setting.kkm || 70);
+  // Target rentang Katrol PTS & SAS/ASAT dicetak — pakai target Katrol
+  // yang sama dengan Nilai Total (Pengaturan Nilai Katrol & KKM), supaya
+  // konsisten dengan satu-satunya target yang guru atur di Input Nilai.
+  const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
 
   // Collect data: current class already in state; others fetched
   const allData = {}; // { kelas: rows[] }
@@ -1715,12 +1691,12 @@ function doCetakNilai(mode = 'print') {
     kelasChecked.forEach((k, ki) => {
       const rows = allData[k] || [];
       if (!rows.length) { return; } // skip empty
-      const tbl = buildNilaiTableHtml_(k, rows, { type, sc, isGenap, kkm });
+      const tbl = buildNilaiTableHtml_(k, rows, { isGenap, kkm, katrolTarget });
       pagesHtml +=
         (ki > 0 ? '<div class="pb"></div>' : '') +
         '<div class="page">' +
           (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '') +
-          '<h1>DAFTAR NILAI ' + (type === 'katrol' ? 'KATROL' : 'MURNI') + '</h1>' +
+          '<h1>DAFTAR NILAI PTS &amp; SAS/ASAT (KATROL)</h1>' +
           '<table class="info">' +
             '<tr><td colspan="2" class="info-title">DAFTAR NILAI ' + mapel.toUpperCase() + '</td></tr>' +
             '<tr>' +
@@ -1862,20 +1838,6 @@ function exportNilaiExcelUI() {
     .map(el => el.value);
   if (!kelasChecked.length) { alert('Pilih minimal satu kelas'); return; }
 
-  const type    = document.querySelector('input[name="cetakType"]:checked')?.value || 'murni';
-  const sc = {
-    tgs    : document.getElementById('cetakColTGS')?.checked,
-    tgsk   : document.getElementById('cetakColTGSK')?.checked,
-    uh     : document.getElementById('cetakColUH')?.checked,
-    pts    : document.getElementById('cetakColPTS')?.checked,
-    pas    : document.getElementById('cetakColPAS')?.checked,
-    rata   : document.getElementById('cetakColRata')?.checked,
-    total  : document.getElementById('cetakColTotal')?.checked,
-    remedi : document.getElementById('cetakColRemedi')?.checked,
-    akhir  : document.getElementById('cetakColAkhir')?.checked,
-    ranking: document.getElementById('cetakColRanking')?.checked,
-  };
-
   const btn = document.getElementById('btnDoExcel');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
 
@@ -1883,6 +1845,9 @@ function exportNilaiExcelUI() {
   const isGenap = semester.toLowerCase().includes('genap');
   const kkm     = Number(setting.kkm || 70);
   const pasPat  = isGenap ? 'ASAT' : 'SAS';
+  // Target rentang Katrol PTS & SAS/ASAT — sama dengan yang dipakai di
+  // doCetakNilai(), bersumber dari Pengaturan Nilai Katrol & KKM.
+  const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
 
   const allData = {};
   allData[nilaiState.kelas] = nilaiState.rows;
@@ -1891,55 +1856,29 @@ function exportNilaiExcelUI() {
 
   const buildAndExport = () => {
     const wb = XLSX.utils.book_new();
-    const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
+    const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
       ? Number(Number(v).toFixed(2)) : '-';
 
     kelasChecked.forEach(k => {
       const rows = allData[k] || [];
-      // Ranking
-      const sorted2 = [...rows].filter(r => r.nilai_akhir !== null && !isNaN(Number(r.nilai_akhir)))
-        .sort((a, b) => Number(b.nilai_akhir) - Number(a.nilai_akhir));
-      const rankMap2 = {};
-      let rk2 = 1;
-      sorted2.forEach((r, i) => {
-        if (i > 0 && Number(r.nilai_akhir) < Number(sorted2[i-1].nilai_akhir)) rk2 = i + 1;
-        rankMap2[r.nis] = rk2;
-      });
+      const ptsKatrol = _katrolKomponen_(rows.map(r => r.pts), katrolTarget);
+      const uasKatrol = _katrolKomponen_(rows.map(r => isGenap ? r.pat : r.pas), katrolTarget);
 
       // Header info rows
       const meta = [
         [`Daftar Nilai ${mapel}`], [],
-        ['Kelas', k], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm],
-        ['Jenis Nilai', type === 'katrol' ? 'Nilai Katrol' : 'Nilai Murni'], []
+        ['Kelas', k], ['Tahun Pelajaran', tahun], ['Semester', semester], ['KKM', kkm], []
       ];
-      let colHdr = ['No','NIS','Nama Siswa'];
-      if (sc.tgs) colHdr = colHdr.concat(['TGS1','TGS2','TGS3']);
-      if (sc.tgsk) colHdr = colHdr.concat(['TK1','TK2','TK3']);
-      if (sc.uh)  colHdr = colHdr.concat(['UH1','UH2','UH3']);
-      if (sc.pts) colHdr.push('PTS');
-      if (sc.pas) colHdr.push(pasPat);
-      if (sc.rata) colHdr.push('Rata-rata');
-      if (sc.total) colHdr.push(type === 'katrol' ? 'Nilai Katrol' : 'Nilai Murni');
-      if (sc.remedi) colHdr.push('Remedial');
-      if (sc.akhir) colHdr.push('Nilai Akhir');
-      colHdr.push('Keterangan');
-      if (sc.ranking) colHdr.push('Ranking');
+      const colHdr = ['No', 'NIS', 'Nama Siswa', 'PTS (Katrol)', pasPat + ' (Katrol)', 'Keterangan'];
 
       const dataRows = rows.map((r, i) => {
-        const akhir = fmt(r.nilai_akhir);
-        let row = [i + 1, r.nis || '', r.nama_siswa || ''];
-        if (sc.tgs)  row = row.concat([fmt(r.tgs1), fmt(r.tgs2), fmt(r.tgs3)]);
-        if (sc.tgsk) row = row.concat([fmt(r.tgsk1), fmt(r.tgsk2), fmt(r.tgsk3)]);
-        if (sc.uh)   row = row.concat([fmt(r.uh1), fmt(r.uh2), fmt(r.uh3)]);
-        if (sc.pts)  row.push(fmt(r.pts));
-        if (sc.pas)  row.push(fmt(isGenap ? r.pat : r.pas));
-        if (sc.rata) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.rata_uh));
-        if (sc.total) row.push(fmt(type === 'katrol' ? r.nilai_katrol : r.nilai_asli));
-        if (sc.remedi) row.push(fmt(r.nilai_remedial));
-        if (sc.akhir) row.push(akhir);
-        row.push((akhir !== '' && akhir >= kkm) ? 'Tuntas' : 'Belum Tuntas');
-        if (sc.ranking) row.push(rankMap2[r.nis] || '-');
-        return row;
+        const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
+          ? Number(r.nilai_akhir) : null;
+        return [
+          i + 1, r.nis || '', r.nama_siswa || '',
+          fmt(ptsKatrol[i]), fmt(uasKatrol[i]),
+          (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
+        ];
       });
 
       const sheetData = [...meta, colHdr, ...dataRows];

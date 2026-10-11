@@ -2604,17 +2604,6 @@
       </div>
     </div>
 
-    <!-- Jenis Nilai -->
-    <div style="margin-bottom:14px">
-      <label style="font-weight:600;display:block;margin-bottom:6px">Jenis Nilai:</label>
-      <div style="display:flex;gap:20px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="radio" name="cetakType" value="murni" checked> Nilai Murni</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="radio" name="cetakType" value="katrol"> Nilai Katrol</label>
-      </div>
-    </div>
-
     <!-- Ukuran Kertas -->
     <div style="margin-bottom:14px">
       <label style="font-weight:600;display:block;margin-bottom:6px">Ukuran &amp; Orientasi Kertas:</label>
@@ -2631,32 +2620,15 @@
       <p class="muted" style="font-size:11px;margin-top:4px">Landscape disarankan kalau kolom yang ditampilkan banyak, supaya tidak ada kolom terpotong.</p>
     </div>
 
-    <!-- Kolom yang ditampilkan -->
+    <!-- Kolom yang dicetak -->
     <div style="margin-bottom:18px">
-      <label style="font-weight:600;display:block;margin-bottom:8px">Kolom yang ditampilkan:</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColTGS" checked> Tugas Mandiri 1, 2, 3</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColTGSK" checked> Tugas Kelompok 1, 2, 3</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColUH" checked> UH 1, 2, 3</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColPTS" checked> PTS</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColPAS" checked> SAS / ASAT</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColRata" checked> Rata-rata</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColTotal" checked> Nilai Total (murni/katrol)</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColAkhir" checked> Nilai Akhir</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColRemedi" checked> Remedial</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="cetakColRanking" checked> Ranking</label>
-      </div>
-      <p class="muted" style="font-size:11px;margin-top:6px">Hasil cetak/preview akan menampilkan persis kolom yang dicentang di sini — kolom <b>Ket</b> (Tuntas/Belum Tuntas) selalu ikut tampil sebagai keterangan.</p>
+      <label style="font-weight:600;display:block;margin-bottom:8px">Kolom yang dicetak:</label>
+      <p class="muted" style="font-size:12px;background:#f3f4f6;border-radius:8px;padding:8px 12px">
+        Daftar nilai cetak hanya menampilkan <b>Nilai PTS (Katrol)</b> dan <b>Nilai SAS/ASAT (Katrol)</b> —
+        masing-masing diskalakan proporsional per kelas (siswa terendah → Nilai Terendah Target,
+        siswa tertinggi → Nilai Tertinggi Target, dari Pengaturan Nilai Katrol &amp; KKM), plus kolom
+        <b>Ket</b> (Tuntas/Belum Tuntas berdasarkan Nilai Akhir vs KKM).
+      </p>
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap">
