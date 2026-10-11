@@ -260,6 +260,52 @@ function initMonitoringNilai() {
   });
 }
 
+/**
+ * bukaRiwayatNilaiKelas_(kelas, mapel, tahun, semester)
+ * Navigasi langsung dari Dashboard (kartu Ketuntasan Kelas) ke tab
+ * Riwayat Nilai dengan kelas/mapel/tahun/semester SUDAH terisi otomatis
+ * dan datanya langsung dimuat — guru tidak perlu pilih ulang manual.
+ * Jalur lebih pendek dari initMonitoringNilai() (tidak perlu fetch daftar
+ * SEMUA periode historis) karena tahun/semester targetnya sudah pasti
+ * tahu dari pemanggil.
+ */
+function bukaRiwayatNilaiKelas_(kelas, mapel, tahun, semester) {
+  sbGo_('riwayatNilai', function() {
+    const tSel = document.getElementById('monNilaiTahunInput');
+    if (tSel) {
+      if (![...tSel.options].some(o => o.value === tahun)) {
+        tSel.innerHTML = '<option value="' + tahun + '">' + tahun + '</option>' + tSel.innerHTML;
+      }
+      tSel.value = tahun;
+    }
+    const sSel = document.getElementById('monNilaiSemesterSelect');
+    if (sSel) sSel.innerHTML = _semesterOptionsHtml_nilai_(semester);
+
+    const kSel = document.getElementById('monNilaiKelasSelect');
+    if (kSel) kSel.innerHTML = '<option value="' + kelas + '">⏳ Memuat...</option>';
+    const mSel = document.getElementById('monNilaiMapelSelect');
+    if (mSel) mSel.innerHTML = '<option value="">⏳ Memuat...</option>';
+
+    google.script.run
+      .withSuccessHandler(list => {
+        if (kSel) {
+          kSel.innerHTML = '<option value="">-- Pilih Kelas --</option>' +
+            (list || []).map(k => '<option value="' + k + '">' + k + '</option>').join('');
+          kSel.value = kelas;
+        }
+        google.script.run
+          .withSuccessHandler(mlist => {
+            if (mSel) { _isiMapelSelect_(mSel, mlist || []); mSel.value = mapel; }
+            muatMonitoringNilai();
+          })
+          .withFailureHandler(() => { muatMonitoringNilai(); })
+          .getMapelNilaiUntukPeriode(kelas, tahun, semester);
+      })
+      .withFailureHandler(() => {})
+      .getKelasNilaiUntukPeriode(tahun, semester);
+  });
+}
+
 function onMonNilaiPeriodeChange_() {
   refreshMonNilaiKelasDropdown_();
 }
@@ -377,7 +423,7 @@ function muatMonitoringNilai() {
       return raw;
     });
 
-    _renderMonitoringNilaiTable_(rows, sem, kkmValue);
+    _renderMonitoringNilaiTable_(rows, sem, kkmValue, kelas, mapel);
   };
 
   if (isActivePeriode) {
@@ -424,7 +470,27 @@ function muatMonitoringNilai() {
 // yang sama sudah punya nilai untuk komponen itu (relatif terhadap
 // teman sekelas) — bukan sekadar kosong sendirian (itu wajar kalau
 // memang belum ada satu pun yang dinilai untuk komponen itu).
-function _renderMonitoringNilaiTable_(rows, semester, kkm) {
+/**
+ * _salinRemedialRiwayat_()
+ * Salin daftar siswa perlu remedial (disiapkan saat render tabel, lihat
+ * window._riwayatRemedialTeks_) sebagai teks polos ke clipboard — siap
+ * tempel ke grup WA.
+ */
+function _salinRemedialRiwayat_() {
+  const teks = window._riwayatRemedialTeks_ || '';
+  if (!teks) return;
+  const btn = document.getElementById('btnSalinRemedialRiwayat');
+  const sukses = () => {
+    if (btn) { const t = btn.textContent; btn.textContent = '✅ Tersalin!'; setTimeout(() => { btn.textContent = t; }, 1500); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(teks).then(sukses).catch(() => prompt('Salin manual (Ctrl+C):', teks));
+  } else {
+    prompt('Salin manual (Ctrl+C):', teks);
+  }
+}
+
+function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
   const wrap = document.getElementById('monNilaiWrap');
   if (!wrap) return;
   if (!rows.length) {
@@ -500,6 +566,32 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm) {
         statCard('Belum Tuntas', kktpVals.length - tuntasMurni, '#ef4444') +
         statCard('% KKTP Kelas', rataMurni.toFixed(0) + '%<div class="muted" style="font-size:9.5px;font-weight:400">' + kktpBand.status + ' (' + kktpBand.kode + ')</div>', kktpBand.color) +
       '</div>';
+
+    // Daftar siswa perlu remedial (Belum Mencapai Ketuntasan, Nilai Murni)
+    // + tombol salin ke WA — dipindah ke sini (dari Dashboard) supaya
+    // detail per-siswa hanya ada di satu tempat.
+    const remedialList = rows
+      .filter(r => !isEmpty_(r.nilai_asli) && !isNaN(Number(r.nilai_asli)))
+      .map(r => ({ nama: r.nama_siswa, nilai: Number(r.nilai_asli) }))
+      .filter(s => _kktpBandDariNilai_(s.nilai).status === 'Belum Mencapai Ketuntasan')
+      .sort((a, b) => a.nilai - b.nilai);
+
+    window._riwayatRemedialTeks_ = remedialList.length
+      ? 'Daftar Siswa Perlu Remedial — ' + (kelasNm || '') + (mapelNm ? ' (' + mapelNm + ')' : '') + '\n' +
+        remedialList.map((s, i) => (i + 1) + '. ' + s.nama).join('\n')
+      : '';
+
+    if (remedialList.length) {
+      summaryHtml += '<div style="background:#fef2f2;border-radius:10px;padding:12px 14px;margin-bottom:14px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+          '<b style="font-size:13px;color:#991b1b">⚠️ ' + remedialList.length + ' siswa perlu remedial (Belum Mencapai Ketuntasan, urut nilai terendah):</b>' +
+          '<button class="ghost" onclick="_salinRemedialRiwayat_()" id="btnSalinRemedialRiwayat" style="font-size:12px">📋 Salin Daftar Nama (untuk WA)</button>' +
+        '</div>' +
+        '<ol style="margin:0 0 0 18px;font-size:12.5px;line-height:1.8;color:#7f1d1d">' +
+          remedialList.map(s => '<li>' + esc(s.nama) + ' — <b>' + s.nilai.toFixed(0) + '</b></li>').join('') +
+        '</ol>' +
+      '</div>';
+    }
   } else {
     // Jangan diam-diam sembunyikan kartu — jelaskan PERSISNYA kenapa belum
     // bisa dihitung, supaya guru tidak perlu menebak-nebak kenapa statistik
