@@ -26,28 +26,31 @@ function assertKepsek_() {
  * ketercapaian tujuan pembelajaran.
  */
 var KKTP_BANDS_A_ = [
-  { min: 0,  max: 50,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial total (bimbingan penuh dari guru dan keterlibatan orang tua).' },
-  { min: 51, max: 70,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial parsial pada indikator tujuan pembelajaran yang belum dikuasai.' },
-  { min: 71, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Lanjutkan ke materi/tujuan pembelajaran berikutnya.' },
-  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Berikan aktivitas pengayaan atau tantangan belajar mandiri.' }
+  { min: 0,  max: 50,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial total (bimbingan penuh dari guru dan keterlibatan orang tua).' },
+  { min: 51, max: 70,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial parsial pada indikator tujuan pembelajaran yang belum dikuasai.' },
+  { min: 71, max: 85,  tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Lanjutkan ke materi/tujuan pembelajaran berikutnya.' },
+  { min: 86, max: 100, tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Berikan aktivitas pengayaan atau tantangan belajar mandiri.' }
 ];
 var KKTP_BANDS_BC_ = [
-  { min: 0,  max: 45,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial terstruktur pada seluruh bagian materi.' },
-  { min: 46, max: 65,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial mandiri melalui tugas tambahan atau tutor sebaya pada bagian yang kurang.' },
-  { min: 66, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa direkomendasikan mempertahankan konsistensi belajar.' },
-  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Sistem otomatis merekomendasikan materi pengayaan tingkat lanjut.' }
+  { min: 0,  max: 45,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial terstruktur pada seluruh bagian materi.' },
+  { min: 46, max: 65,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial mandiri melalui tugas tambahan atau tutor sebaya pada bagian yang kurang.' },
+  { min: 66, max: 85,  tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa direkomendasikan mempertahankan konsistensi belajar.' },
+  { min: 86, max: 100, tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Sistem otomatis merekomendasikan materi pengayaan tingkat lanjut.' }
 ];
+// Fase D (SMP kelas 7-9): rubrik KKTP sesuai contoh dari guru pengampu
+// (rata-rata/KKM rumus & grafik spreadsheet) — status pakai istilah
+// "Ketuntasan" (bukan "Tujuan") sesuai permintaan eksplisit.
 var KKTP_BANDS_D_ = [
-  { min: 0,  max: 40,  status: 'Belum Mencapai Tujuan', tindak: 'Intervensi khusus (remedial terbimbing tatap muka dengan guru).' },
-  { min: 41, max: 65,  status: 'Belum Mencapai Tujuan', tindak: 'Perbaikan portofolio atau revisi tugas pada indikator yang lemah.' },
-  { min: 66, max: 85,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa siap menghadapi asesmen sumatif lingkup materi berikutnya.' },
-  { min: 86, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Diberikan peran sebagai tutor sebaya atau proyek eksplorasi mandiri.' }
+  { min: 0,  max: 40,  tuntas: false, status: 'Belum Mencapai Ketuntasan', tindak: 'Remedial di seluruh bagian (pemahaman rumus dasar dan pembuatan grafik).' },
+  { min: 41, max: 65,  tuntas: false, status: 'Belum Mencapai Ketuntasan', tindak: 'Remedial pada bagian tertentu (misal: hanya pada teknik visualisasi grafik saja).' },
+  { min: 66, max: 85,  tuntas: true,  status: 'Sudah Mencapai Ketuntasan', tindak: 'Tidak perlu remedial, dapat melanjutkan ke materi berikutnya.' },
+  { min: 86, max: 100, tuntas: true,  status: 'Sudah Mencapai Ketuntasan', tindak: 'Diberikan pengayaan (misal: analisis data tingkat lanjut atau rumus logika kompleks).' }
 ];
 var KKTP_BANDS_EF_ = [
-  { min: 0,  max: 40,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial komprehensif (teori dan praktik ulang).' },
-  { min: 41, max: 70,  status: 'Belum Mencapai Tujuan', tindak: 'Remedial terfokus melalui pengerjaan ulang instrumen asesmen yang gagal.' },
-  { min: 71, max: 88,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Kompetensi esensial telah terpenuhi dengan baik.' },
-  { min: 89, max: 100, status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa diarahkan ke pendalaman materi berbasis riset atau aplikasi projek nyata.' }
+  { min: 0,  max: 40,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial komprehensif (teori dan praktik ulang).' },
+  { min: 41, max: 70,  tuntas: false, status: 'Belum Mencapai Tujuan', tindak: 'Remedial terfokus melalui pengerjaan ulang instrumen asesmen yang gagal.' },
+  { min: 71, max: 88,  tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Kompetensi esensial telah terpenuhi dengan baik.' },
+  { min: 89, max: 100, tuntas: true,  status: 'Sudah Mencapai Tujuan', tindak: 'Tuntas. Siswa diarahkan ke pendalaman materi berbasis riset atau aplikasi projek nyata.' }
 ];
 
 // Fase B & C dan Fase E & F masing-masing berbagi rentang persen yang
@@ -543,7 +546,7 @@ function getRekapSekolah(forceRefresh) {
             if (avg >= bandDefs[bi].min && avg <= bandDefs[bi].max) { band = bandDefs[bi]; break; }
           }
 
-          if (band.status === 'Sudah Mencapai Tujuan') {
+          if (band.tuntas) {
             tuntasCount++;
           } else {
             siswaBelum.push({ nama: (namaMapKtp[kelas] && namaMapKtp[kelas][nis]) || nis, nilai: avg });

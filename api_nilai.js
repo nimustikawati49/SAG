@@ -503,16 +503,18 @@ function getSettingNilai(kelas, mapel, tahun, semester) {
  * MURNI (nilai_asli, sebelum Katrol) tiap siswa ke kategori pencapaian +
  * saran tindak lanjut baku, terpisah dari status Tuntas/Belum Tuntas
  * berbasis KKM yang sudah ada di fitur lain (Riwayat Nilai/Rekap Sekolah).
+ * Rentang & teks sesuai KKTP Fase D (SMP kelas 7-9) — selaras dengan
+ * KKTP_BANDS_D_ di Kepsek.js dan legend di layout.html.
  */
 const PREDIKAT_BANDS_NILAI_ = [
-  { min: 86, max: 100, kode: 'A', status: 'Tuntas (Sangat Baik)',
-    tindak: 'Siswa melampaui target kompetensi. Diberikan materi pengayaan atau tantangan soal yang lebih tinggi (HOTS).' },
-  { min: 71, max: 85, kode: 'B', status: 'Tuntas (Baik)',
-    tindak: 'Siswa mencapai target kompetensi bab dengan baik. Tidak perlu remedial dan bisa langsung lanjut ke materi berikutnya.' },
-  { min: 56, max: 70, kode: 'C', status: 'Belum Tuntas (Cukup)',
-    tindak: 'Siswa belum mencapai batas minimal 71. Wajib remedial hanya pada bab/indikator materi tertentu yang nilainya lemah.' },
-  { min: 0, max: 55, kode: 'D', status: 'Belum Tuntas (Kurang)',
-    tindak: 'Siswa tertinggal jauh di materi tersebut. Wajib remedial total dengan pendampingan intensif dari guru.' }
+  { min: 86, max: 100, kode: 'A', status: 'Sudah Mencapai Ketuntasan',
+    tindak: 'Diberikan pengayaan (misal: analisis data tingkat lanjut atau rumus logika kompleks).' },
+  { min: 66, max: 85, kode: 'B', status: 'Sudah Mencapai Ketuntasan',
+    tindak: 'Tidak perlu remedial, dapat melanjutkan ke materi berikutnya.' },
+  { min: 41, max: 65, kode: 'C', status: 'Belum Mencapai Ketuntasan',
+    tindak: 'Remedial pada bagian tertentu (misal: hanya pada teknik visualisasi grafik saja).' },
+  { min: 0, max: 40, kode: 'D', status: 'Belum Mencapai Ketuntasan',
+    tindak: 'Remedial di seluruh bagian (pemahaman rumus dasar dan pembuatan grafik).' }
 ];
 
 function _predikatDariNilaiMurni_(n) {

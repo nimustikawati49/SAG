@@ -609,10 +609,10 @@
         <table style="font-size:12.5px">
           <thead><tr><th>Rentang Nilai</th><th>Predikat</th><th>Status Ketuntasan</th><th style="text-align:left">Tindak Lanjut &amp; Intervensi Guru</th></tr></thead>
           <tbody>
-            <tr><td style="text-align:center">86 – 100</td><td style="text-align:center"><b>A</b></td><td>Tuntas (Sangat Baik)</td><td class="left">Siswa melampaui target kompetensi. Diberikan materi pengayaan atau tantangan soal yang lebih tinggi (HOTS).</td></tr>
-            <tr><td style="text-align:center">71 – 85</td><td style="text-align:center"><b>B</b></td><td>Tuntas (Baik)</td><td class="left">Siswa mencapai target kompetensi bab dengan baik. Tidak perlu remedial dan bisa langsung lanjut ke materi berikutnya.</td></tr>
-            <tr><td style="text-align:center">56 – 70</td><td style="text-align:center"><b>C</b></td><td>Belum Tuntas (Cukup)</td><td class="left">Siswa belum mencapai batas minimal 71. Wajib remedial hanya pada bab/indikator materi tertentu yang nilainya lemah.</td></tr>
-            <tr><td style="text-align:center">0 – 55</td><td style="text-align:center"><b>D</b></td><td>Belum Tuntas (Kurang)</td><td class="left">Siswa tertinggal jauh di materi tersebut. Wajib remedial total dengan pendampingan intensif dari guru.</td></tr>
+            <tr><td style="text-align:center">86 – 100</td><td style="text-align:center"><b>A</b></td><td>Sudah Mencapai Ketuntasan</td><td class="left">Diberikan pengayaan (misal: analisis data tingkat lanjut atau rumus logika kompleks).</td></tr>
+            <tr><td style="text-align:center">66 – 85</td><td style="text-align:center"><b>B</b></td><td>Sudah Mencapai Ketuntasan</td><td class="left">Tidak perlu remedial, dapat melanjutkan ke materi berikutnya.</td></tr>
+            <tr><td style="text-align:center">41 – 65</td><td style="text-align:center"><b>C</b></td><td>Belum Mencapai Ketuntasan</td><td class="left">Remedial pada bagian tertentu (misal: hanya pada teknik visualisasi grafik saja).</td></tr>
+            <tr><td style="text-align:center">0 – 40</td><td style="text-align:center"><b>D</b></td><td>Belum Mencapai Ketuntasan</td><td class="left">Remedial di seluruh bagian (pemahaman rumus dasar dan pembuatan grafik).</td></tr>
           </tbody>
         </table>
       </div>
@@ -2534,7 +2534,7 @@
     </div>
 
     <!-- Statistik -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px">
       <div class="card" style="text-align:center;padding:12px 6px">
         <div class="muted" style="font-size:11px">Rata-rata Kelas</div>
         <div id="nilaiStatRata" style="font-size:22px;font-weight:700;color:#6C63FF">-</div>
@@ -2554,6 +2554,11 @@
       <div class="card" style="text-align:center;padding:12px 6px">
         <div class="muted" style="font-size:11px">Belum Tuntas</div>
         <div id="nilaiStatBelum" style="font-size:22px;font-weight:700;color:#ef4444">-</div>
+      </div>
+      <div class="card" style="text-align:center;padding:12px 6px">
+        <div class="muted" style="font-size:11px" title="Persentase ketercapaian KKTP dari rata-rata kelas (lihat Keterangan Predikat & Rentang Nilai)">% KKTP Kelas</div>
+        <div id="nilaiStatKktp" style="font-size:22px;font-weight:700;color:#6b7280">-</div>
+        <div id="nilaiStatKktpLabel" class="muted" style="font-size:10.5px;margin-top:2px">-</div>
       </div>
     </div>
 
