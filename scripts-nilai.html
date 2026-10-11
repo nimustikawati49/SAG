@@ -435,6 +435,7 @@ function muatMonitoringNilai() {
       // disimpan sebelum formula nilai_asli direnormalisasi.
       const calc = nilaiHitungRow_(raw, sem);
       raw.rata_uh = calc.rata_uh;
+      raw.nilai_fix = calc.nilai_fix;
       raw.nilai_asli = calc.nilai_asli;
       return raw;
     });
@@ -628,7 +629,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
     '<th>Tugas Mandiri</th><th>Tugas Kelompok</th>' +
     '<th>UH1</th><th>UH2</th><th>UH3</th>' +
     '<th>PTS</th><th>' + labelUas + '</th>' +
-    '<th>Rata Harian</th><th>Nilai Akhir</th>' +
+    '<th>Rata Total</th><th>Nilai Akhir</th>' +
   '</tr></thead><tbody>';
 
   rows.forEach((r, i) => {
@@ -644,7 +645,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
       cell('_tgsM', r) + cell('_tgsK', r) +
       cell('uh1', r) + cell('uh2', r) + cell('uh3', r) +
       cell('pts', r) + cell('_uas', r) +
-      '<td style="text-align:center">' + fmt(r.rata_uh) + '</td>' +
+      '<td style="text-align:center">' + fmt(r.nilai_fix) + '</td>' +
       '<td style="text-align:center;font-weight:700">' + fmt(r.nilai_asli) + '</td>' +
     '</tr>';
   });
@@ -1080,7 +1081,6 @@ function muatDataNilai(forceLocked = false) {
       const calc = nilaiHitungRow_(r, sem);
       Object.assign(r, calc);
     });
-    nilaiHitungKatrolBatch_UI();
 
     // Deteksi otomatis: kalau ada nilai tugas kelompok tersimpan, langsung tampilkan
     // kolomnya supaya tidak ketutupan; kalau belum ada, sembunyikan dulu biar ringkas.
@@ -1092,10 +1092,16 @@ function muatDataNilai(forceLocked = false) {
     const tgskEl = document.getElementById('nilaiColTGSK');
     if (tgskEl) tgskEl.checked = adaTgsk;
 
-    // Isi pengaturan ke form
+    // Isi pengaturan ke form — HARUS sebelum nilaiHitungKatrolBatch_UI() di
+    // bawah, soalnya fungsi itu baca nilaiMinTarget/nilaiMaxTarget langsung
+    // dari DOM. Kalau urutannya kebalik, katrol batch kepanggil pakai nilai
+    // lama yang masih nyangkut di form (dari kelas/mapel sebelumnya) alih-
+    // alih pengaturan guru yang baru saja dimuat untuk kelas ini, jadi
+    // "Nilai Akhir" yang tampil kebalik/tidak sesuai Min-Max Target.
     document.getElementById('nilaiMinTarget').value = settingData.nilai_min_target ?? 60;
     document.getElementById('nilaiMaxTarget').value = settingData.nilai_max_target ?? 95;
     document.getElementById('nilaiKKM').value       = settingData.kkm ?? 70;
+    nilaiHitungKatrolBatch_UI();
 
     // Update status bar
     document.getElementById('nilaiInfoKelas').textContent    = nilaiState.kelas;
@@ -1564,8 +1570,14 @@ const KKTP_BANDS_NILAI_UI_ = [
   { min: 0,  max: 40,  kode: 'D', status: 'Belum Mencapai Ketuntasan', color: '#991b1b', bg: '#fee2e2', border: '#ef4444' }
 ];
 function _kktpBandDariNilai_(n) {
-  for (const b of KKTP_BANDS_NILAI_UI_) if (n >= b.min && n <= b.max) return b;
-  return n > 100 ? KKTP_BANDS_NILAI_UI_[0] : KKTP_BANDS_NILAI_UI_[KKTP_BANDS_NILAI_UI_.length - 1];
+  // Array terurut DESCENDING (86,66,41,0) — band PERTAMA yang min-nya
+  // sudah terlampaui itu jawabannya. Sengaja TIDAK cek "n <= b.max" —
+  // nilai_asli hasil rata-rata bisa desimal (mis. 85.67), dan threshold
+  // integer (65/66, 85/86) bikin celah: 85.67 lolos dari max:85 (B) TAPI
+  // juga gagal min:86 (A), lalu jatuh ke fallback D meski harusnya A.
+  // Bug ini yang bikin nilai 86 sempat salah tampil predikat D.
+  for (const b of KKTP_BANDS_NILAI_UI_) if (n >= b.min) return b;
+  return KKTP_BANDS_NILAI_UI_[KKTP_BANDS_NILAI_UI_.length - 1];
 }
 
 /**

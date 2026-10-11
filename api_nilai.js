@@ -677,11 +677,17 @@ const PREDIKAT_BANDS_NILAI_ = [
 ];
 
 function _predikatDariNilaiEfektif_(n) {
+  // Array terurut DESCENDING (86,66,41,0) — ambil band PERTAMA yang
+  // min-nya sudah terlampaui. Sengaja TIDAK cek "n <= b.max": nilai hasil
+  // rata-rata bisa desimal (mis. 85.67), dan threshold integer (65/66,
+  // 85/86) bikin celah — 85.67 gagal max:85 (B) MAUPUN min:86 (A), lalu
+  // jatuh ke fallback D walau seharusnya A. Ini bug yang bikin nilai 86
+  // sempat salah tampil predikat D di Ketuntasan Kelas/remedial.
   for (let i = 0; i < PREDIKAT_BANDS_NILAI_.length; i++) {
     const b = PREDIKAT_BANDS_NILAI_[i];
-    if (n >= b.min && n <= b.max) return b;
+    if (n >= b.min) return b;
   }
-  return n > 100 ? PREDIKAT_BANDS_NILAI_[0] : PREDIKAT_BANDS_NILAI_[PREDIKAT_BANDS_NILAI_.length - 1];
+  return PREDIKAT_BANDS_NILAI_[PREDIKAT_BANDS_NILAI_.length - 1];
 }
 
 /**

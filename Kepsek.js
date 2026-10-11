@@ -541,9 +541,15 @@ function getRekapSekolah(forceRefresh) {
         var tuntasCount = 0;
         nisList.forEach(function(nis) {
           var avg = siswaMap[nis].reduce(function(a, b) { return a + b; }, 0) / siswaMap[nis].length;
-          var band = bandDefs[bandDefs.length - 1];
+          // bandDefs terurut ASCENDING (0,41,66,86/0,41,71,89 dst) — ambil
+          // band TERAKHIR yang min-nya sudah terlampaui (bukan cek "avg <=
+          // max"): avg bisa desimal, dan threshold integer bikin celah
+          // antar band (mis. 65.5 gagal max:65 MAUPUN min:66) yang kalau
+          // dibiarkan jatuh ke default malah salah arah (ke band teratas/
+          // tuntas, bukan band terdekat yang sebenarnya).
+          var band = bandDefs[0];
           for (var bi = 0; bi < bandDefs.length; bi++) {
-            if (avg >= bandDefs[bi].min && avg <= bandDefs[bi].max) { band = bandDefs[bi]; break; }
+            if (avg >= bandDefs[bi].min) band = bandDefs[bi];
           }
 
           if (band.tuntas) {
