@@ -1152,11 +1152,33 @@ function muatDataNilai(forceLocked = false) {
 /* ===================================================================
    KELOLA SISWA KELAS INI (guru sendiri, self-service)
    =================================================================== */
+/**
+ * guruInitKelolaSiswaKelasDropdown_()
+ * Isi dropdown Kelas di kartu "Kelola Siswa per Kelas" (tab Setting) —
+ * dipanggil lewat ontoggle saat kartu dibuka, pakai getKelas() (daftar
+ * kelas milik guru ini utk periode aktif, sama dipakai Jurnal) supaya
+ * tidak perlu replikasi seluruh filter Tahun/Semester/Kelas Input Nilai
+ * cuma untuk satu dropdown ini.
+ */
+function guruInitKelolaSiswaKelasDropdown_() {
+  const sel = document.getElementById('gksKelasSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">⏳ Memuat...</option>';
+  google.script.run
+    .withSuccessHandler(list => {
+      sel.innerHTML = (list && list.length)
+        ? '<option value="">-- Pilih Kelas --</option>' + list.map(k => '<option value="' + k + '">' + k + '</option>').join('')
+        : '<option value="">-- Belum ada kelas --</option>';
+    })
+    .withFailureHandler(() => { sel.innerHTML = '<option value="">Gagal memuat</option>'; })
+    .getKelas();
+}
+
 function guruMuatKelolaSiswa_() {
-  const kelas = (document.getElementById('nilaiKelasSelect') || {}).value || '';
+  const kelas = (document.getElementById('gksKelasSelect') || {}).value || '';
   const box = document.getElementById('guruKelolaSiswaBox');
   if (!box) return;
-  if (!kelas) { alert('Pilih kelas di filter "Kelas" di atas dulu.'); return; }
+  if (!kelas) { alert('Pilih kelas dulu.'); return; }
 
   box.innerHTML = '<div class="muted" style="font-size:12px">⏳ Memuat...</div>';
   google.script.run

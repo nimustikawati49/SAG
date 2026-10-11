@@ -1512,6 +1512,25 @@
   </div>
   </details>
 
+  <!-- Kelola Siswa per Kelas (self-service — tanpa perlu minta SuperAdmin) -->
+  <details class="card" id="kelolaSiswaCard" style="margin:24px 0" ontoggle="if(this.open) guruInitKelolaSiswaKelasDropdown_()">
+    <summary style="cursor:pointer;font-weight:700;font-size:15px">🧑‍🎓 Kelola Siswa per Kelas</summary>
+    <p class="muted" style="font-size:12px;margin:8px 0 12px">
+      Tambah siswa pindahan baru, atau keluarkan siswa yang sudah tidak aktif, untuk kelas tertentu.
+      Data nilai siswa yang sudah tersimpan tidak ikut terhapus kalau dikeluarkan.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Kelas</label>
+        <select id="gksKelasSelect" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;min-width:160px">
+          <option value="">⏳ Memuat...</option>
+        </select>
+      </div>
+      <button class="ghost" onclick="guruMuatKelolaSiswa_()" style="font-size:13px">🔎 Tampilkan Daftar Siswa</button>
+    </div>
+    <div id="guruKelolaSiswaBox"><div class="muted" style="font-size:12px">Pilih kelas, lalu klik tombol di atas.</div></div>
+  </details>
+
   <div class="card" style="margin:24px 0;background:#f8fafc;border-left:6px solid #0ea5e9">
     <h4 style="margin-top:0">Riwayat &amp; Kenaikan Kelas</h4>
     <p class="muted" style="font-size:12px;margin:0 0 10px">
@@ -2419,17 +2438,6 @@
     </div>
     <div id="nilaiFilterStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
   </div>
-
-  <!-- Kelola Siswa Kelas Ini (self-service — tanpa perlu minta SuperAdmin) -->
-  <details class="card" style="margin-bottom:16px">
-    <summary style="cursor:pointer;font-weight:700;font-size:15px">🧑‍🎓 Kelola Siswa Kelas Ini</summary>
-    <p class="muted" style="font-size:12px;margin:8px 0 12px">
-      Tambah siswa pindahan baru, atau keluarkan siswa yang sudah tidak aktif — untuk kelas yang dipilih
-      di filter "Kelas" di atas. Data nilai siswa yang sudah tersimpan tidak ikut terhapus kalau dikeluarkan.
-    </p>
-    <button class="ghost" onclick="guruMuatKelolaSiswa_()" style="font-size:13px;margin-bottom:10px">🔎 Tampilkan Daftar Siswa</button>
-    <div id="guruKelolaSiswaBox"><div class="muted" style="font-size:12px">Pilih kelas di filter atas, lalu klik tombol di atas.</div></div>
-  </details>
 
   <!-- Konten utama (tampil setelah muat) -->
   <div id="nilaiMainSection" style="display:none">
