@@ -1812,11 +1812,27 @@ function uploadKopSekolah(kodeSekolah, payload) {
   if (!payload || !payload.data) throw new Error('File gambar tidak valid.');
 
   const kodeSafe = kode.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) || 'SEKOLAH';
-  const folder = getUserNestedFolder_(auth.email, 'logo_folder', 'LOGO_JURNAL', ['Kop_Sekolah', kodeSafe]);
-
   const base64 = payload.data.split(',')[1];
-  const blob = Utilities.newBlob(Utilities.base64Decode(base64), payload.type, payload.name);
-  const file = folder.createFile(blob);
+  const blob = Utilities.newBlob(Utilities.base64Decode(base64), payload.type, 'Kop_' + kodeSafe + '_' + payload.name);
+
+  // Sengaja TIDAK bikin subfolder bertingkat (['Kop_Sekolah', kodeSafe]) —
+  // folder.createFolder() pada folder hasil resolusi RESOURCE_MAP sempat
+  // melempar "Access denied: DriveApp" tanpa ketahuan penyebabnya persis
+  // (kemungkinan folder itu bukan milik/tidak writable penuh oleh akun
+  // yang sedang login). uploadLogoSekolah() di Setting.js (pola yang
+  // sudah TERBUKTI jalan) juga cuma simpan LANGSUNG di satu folder, tanpa
+  // subfolder — disamakan di sini. Nama sekolah sudah ada di nama file
+  // (Kop_<sekolah>_...) jadi tetap gampang dibedakan tanpa folder terpisah.
+  // Fallback terakhir: kalau folder resource guru pun gagal diakses,
+  // simpan langsung di root Drive akun yang login (operasi paling minim
+  // izin — DriveApp.createFile() tanpa perlu cari/buat folder apa pun).
+  let file;
+  try {
+    const folder = getUserResourceFolder_(auth.email, 'logo_folder', 'LOGO_JURNAL');
+    file = folder.createFile(blob);
+  } catch (folderErr) {
+    file = DriveApp.createFile(blob);
+  }
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   const stableUrl = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w800';
 

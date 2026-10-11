@@ -1599,7 +1599,9 @@ function _katrolKomponen_(rawVals, target) {
     if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
     const n = Number(v);
     const k = (maxA === minA) ? target.min : ((n - minA) / (maxA - minA)) * (target.max - target.min) + target.min;
-    return Math.round(k * 100) / 100;
+    // Bulat utuh (bukan desimal) — nilai PTS/SAS/ASAT yang dicetak/export
+    // memang dimaksudkan tampil sebagai angka bulat.
+    return Math.round(k);
   });
 }
 
@@ -1633,7 +1635,7 @@ function buildNilaiTableHtml_(kelasNm, rows, opts) {
       return '<span class="note-missing">Belum mengumpulkan</span>';
     }
     const n = Number(v);
-    return n < kkm ? `<span class="note-low">${n.toFixed(2)} • Rendah</span>` : n.toFixed(2);
+    return n < kkm ? `<span class="note-low">${n.toFixed(0)} • Rendah</span>` : n.toFixed(0);
   };
 
   const hdr = `<th>No</th><th>NIS</th><th class="tl">Nama Siswa</th><th>${def.label} (Katrol)</th><th>Ket</th>`;
@@ -1851,7 +1853,7 @@ function exportNilaiExcelUI() {
 
   const buildAndExport = (rows) => {
     const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
-      ? Number(Number(v).toFixed(2)) : '-';
+      ? Math.round(Number(v)) : '-';
     const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
 
     const wb = XLSX.utils.book_new();
