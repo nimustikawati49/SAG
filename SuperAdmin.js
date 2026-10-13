@@ -2009,6 +2009,7 @@ function superadminTambahSiswaKeKelas(guruEmail, kelas, data) {
   ]);
 
   _invalidateSiswaCacheForGuru_(email);
+  _syncSiswaTambahKeRiwayat_({ nis: data.nis, nama, jk: data.jk }, period.tahun_pelajaran || '', period.semester || '', kls, email);
   logAudit('SUPERADMIN_TAMBAH_SISWA', email, kls + ' | ' + nama);
   return { ok: true };
 }
@@ -2032,9 +2033,12 @@ function superadminHapusSiswaDariKelas(guruEmail, kelas, rowNumber, namaKonfirma
   if (namaKonfirmasi && namaBaris.trim() !== String(namaKonfirmasi).trim()) {
     throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
   }
+  const nisBaris = String(rowVals[2] || '');
 
   sh.deleteRow(row);
   _invalidateSiswaCacheForGuru_(email);
+  const period = getUserAcademicPeriod(email);
+  _syncSiswaKeluarKeRiwayat_(nisBaris, namaBaris, period.tahun_pelajaran || '', period.semester || '', kls, email);
   logAudit('SUPERADMIN_HAPUS_SISWA', email, kls + ' | ' + namaBaris);
   return { ok: true };
 }

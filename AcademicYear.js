@@ -404,9 +404,20 @@ function setGlobalAcademicPeriod(tahun, semester) {
 }
 
 function getUserAcademicPeriod(email) {
-  ensureAcademicSchema_();
   const target = String(email || getLoginEmail()).toLowerCase().trim();
-  const sh = sheet('SETTING');
+  // sheet('SETTING') TANPA email selalu resolve ke spreadsheet user yang
+  // SEDANG EKSEKUSI (lihat getSpreadsheet_() di Code.js) — jadi kalau
+  // dipanggil dengan email guru LAIN (mis. SuperAdmin ngecek/mengubah data
+  // atas nama guru lain lewat superadminTambahSiswaKeKelas dkk), tanpa
+  // {email: target} di sini fungsi ini diam-diam baca SETTING milik
+  // SuperAdmin sendiri (hampir pasti tidak ada baris cocok utk email
+  // guru lain), lalu jatuh ke fallback global/default — salah satu
+  // penyebab data periode guru lain terlihat kosong/salah dari sisi
+  // SuperAdmin. Aman dipakai juga utk diri sendiri: resolveSpreadsheetIdForUser_
+  // dgn email sendiri menghasilkan spreadsheet yang sama persis dgn tanpa opsi.
+  const isSelf = target === String(getLoginEmail() || '').toLowerCase().trim();
+  if (isSelf) ensureAcademicSchema_();
+  const sh = sheet('SETTING', { email: target });
   if (!sh || sh.getLastRow() < 2) {
     const g = getGlobalAcademicPeriod_();
     return g || { tahun_pelajaran: getLegacyDefaultYear_(), semester: 'Ganjil' };
@@ -811,9 +822,15 @@ function getAcademicConfig() {
   };
 }
 
-function getOrCreateMasterSiswa_(rowObj) {
-  ensureAcademicSchema_();
-  const sh = sheet('MasterSiswa');
+function getOrCreateMasterSiswa_(rowObj, targetEmail) {
+  // targetEmail dipakai SuperAdmin saat beroperasi atas nama guru LAIN
+  // (lihat superadminTambahSiswaKeKelas) — ensureAcademicSchema_() cuma
+  // bisa ensure schema di spreadsheet user yang SEDANG EKSEKUSI, jadi
+  // dilewati kalau menyasar guru lain (bukan diri sendiri); sheet('MasterSiswa')
+  // sendiri tetap auto-bootstrap dari central kalau sheetnya belum ada
+  // (lihat sheet()/_ensureOperationalSheetFromCentral_ di Code.js).
+  if (!targetEmail) ensureAcademicSchema_();
+  const sh = sheet('MasterSiswa', targetEmail ? { email: targetEmail } : undefined);
   const rows = sh.getDataRange().getValues();
   const nis = String(rowObj.nis || '').trim();
   const nisn = String(rowObj.nisn || '').trim();
@@ -845,9 +862,9 @@ function getOrCreateMasterSiswa_(rowObj) {
   return { id: id, created: true };
 }
 
-function addRiwayatKelas_(siswaId, tahun, semester, kelas, status) {
-  ensureAcademicSchema_();
-  const sh = sheet('RiwayatKelas');
+function addRiwayatKelas_(siswaId, tahun, semester, kelas, status, targetEmail) {
+  if (!targetEmail) ensureAcademicSchema_();
+  const sh = sheet('RiwayatKelas', targetEmail ? { email: targetEmail } : undefined);
   const rows = sh.getDataRange().getValues();
   const st = String(status || 'AKTIF').toUpperCase();
 
@@ -871,6 +888,96 @@ function addRiwayatKelas_(siswaId, tahun, semester, kelas, status) {
     now
   ]);
   return true;
+}
+
+/**
+ * _syncSiswaTambahKeRiwayat_(data, tahun, semester, kelas, targetEmail)
+ * Ikutkan MasterSiswa + RiwayatKelas setiap kali siswa ditambah lewat
+ * "Kelola Siswa" (guruTambahSiswaKeKelas/superadminTambahSiswaKeKelas) —
+ * sebelumnya Kelola Siswa HANYA menulis ke sheet SISWA, jadi siswa yang
+ * ditambah lewat sana tidak pernah tercatat di RiwayatKelas sama sekali.
+ * Akibatnya fitur yang baca RiwayatKelas sebagai sumber utama (terutama
+ * Promosi Siswa, lihat promoteSiswaWizard()) tidak tahu-menahu soal siswa
+ * ini dan tidak ikut mempromosikannya ke tahun ajaran berikutnya. Gagal
+ * sync di sini TIDAK BOLEH membatalkan Tambah Siswa yang sudah berhasil
+ * ke SISWA — makanya dibungkus try/catch, fail-soft.
+ * targetEmail: diisi SuperAdmin saat menambah siswa ATAS NAMA guru lain —
+ * tanpa ini sheet('MasterSiswa')/sheet('RiwayatKelas') di dalam
+ * getOrCreateMasterSiswa_/addRiwayatKelas_ bakal resolve ke spreadsheet
+ * SuperAdmin SENDIRI (ikut konteks eksekusi), bukan spreadsheet guru
+ * target — salah sasaran. Kosongkan untuk guru yang menambah siswa di
+ * akunnya sendiri.
+ */
+function _syncSiswaTambahKeRiwayat_(data, tahun, semester, kelas, targetEmail) {
+  try {
+    if (!tahun || !semester || !kelas) return;
+    if (!targetEmail) ensureAcademicSchema_();
+    const master = getOrCreateMasterSiswa_({
+      nis : data && data.nis  || '',
+      nama: data && data.nama || '',
+      jk  : data && data.jk   || ''
+    }, targetEmail);
+    addRiwayatKelas_(master.id, tahun, semester, kelas, 'AKTIF', targetEmail);
+  } catch (e) {
+    try { logError_('SYNC_SISWA_TAMBAH_RIWAYAT', e); } catch (e2) {}
+  }
+}
+
+/**
+ * _syncSiswaKeluarKeRiwayat_(nis, nama, tahun, semester, kelas, targetEmail)
+ * Kebalikan dari _syncSiswaTambahKeRiwayat_ — dipanggil saat siswa
+ * DIKELUARKAN lewat Kelola Siswa (guruHapusSiswaDariKelas/
+ * superadminHapusSiswaDariKelas), yang cuma menghapus baris di sheet
+ * SISWA. Tanpa ini, RiwayatKelas tetap mencatat siswa itu AKTIF di kelas
+ * tersebut ("ghost") — jadi saat Promosi Siswa jalan (promoteSiswaWizard,
+ * sumber utamanya RiwayatKelas), siswa yang SUDAH DIKELUARKAN guru bisa
+ * ikut ter-promosi ke tahun ajaran berikutnya seolah masih aktif. Dicari
+ * via NIS dulu (utama), nama sebagai fallback kalau NIS kosong — sama
+ * konvensi pencocokan dengan _siswaAktifSet_ di api_nilai.js. Kalau siswa
+ * ini memang tidak pernah tercatat di MasterSiswa/RiwayatKelas (cuma ada
+ * di SISWA, mis. ditambah murni lewat Kelola Siswa SEBELUM fix ini ada),
+ * fungsi ini aman tidak melakukan apa-apa. targetEmail: lihat catatan di
+ * _syncSiswaTambahKeRiwayat_ — kosongkan untuk guru yang mengeluarkan
+ * siswa di akunnya sendiri, isi email guru target kalau dipanggil dari
+ * sisi SuperAdmin.
+ */
+function _syncSiswaKeluarKeRiwayat_(nis, nama, tahun, semester, kelas, targetEmail) {
+  try {
+    const nisTrim  = String(nis || '').trim();
+    const namaTrim = String(nama || '').trim().toLowerCase();
+    if (!nisTrim && !namaTrim) return;
+    if (!tahun || !semester || !kelas) return;
+    if (!targetEmail) ensureAcademicSchema_();
+
+    const opts = targetEmail ? { email: targetEmail } : undefined;
+    const shMaster = sheet('MasterSiswa', opts);
+    if (!shMaster) return;
+    const master = shMaster.getDataRange().getValues();
+    let siswaId = '';
+    for (let i = 1; i < master.length; i++) {
+      const mNis  = String(master[i][1] || '').trim();
+      const mNama = String(master[i][3] || '').trim().toLowerCase();
+      if (nisTrim && mNis && mNis === nisTrim) { siswaId = master[i][0]; break; }
+      if (!siswaId && namaTrim && mNama && mNama === namaTrim) siswaId = master[i][0];
+    }
+    if (!siswaId) return;
+
+    const shRiwayat = sheet('RiwayatKelas', opts);
+    if (!shRiwayat) return;
+    const rows = shRiwayat.getDataRange().getValues();
+    const now = new Date();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][1] || '') !== String(tahun)) continue;
+      if (String(rows[i][2] || '').toLowerCase().trim() !== String(semester).toLowerCase().trim()) continue;
+      if (String(rows[i][3] || '') !== String(siswaId)) continue;
+      if (String(rows[i][4] || '').trim() !== String(kelas).trim()) continue;
+      const curStatus = String(rows[i][5] || '').toUpperCase();
+      if (curStatus === 'ALUMNI' || curStatus === 'MUTASI_KELUAR') continue;
+      shRiwayat.getRange(i + 1, 6, 1, 2).setValues([['MUTASI_KELUAR', now]]);
+    }
+  } catch (e) {
+    try { logError_('SYNC_SISWA_KELUAR_RIWAYAT', e); } catch (e2) {}
+  }
 }
 
 /**

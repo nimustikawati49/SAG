@@ -333,9 +333,11 @@ function guruTambahSiswaKeKelas(kelas, data) {
     sh = getSpreadsheet_().insertSheet('SISWA');
     sh.appendRow(['Kelas', 'no_absen', 'NIS', 'nama_lengkap', 'jk', 'owner_email', 'tahun_pelajaran']);
   }
-  const tahunAktif = getSetting().tahun_pelajaran || '';
+  const setting = getSetting();
+  const tahunAktif = setting.tahun_pelajaran || '';
   sh.appendRow([kls, data.no_absen || '', data.nis || '', nama, data.jk || '', auth.email, tahunAktif]);
   invalidateCache_('SISWA');
+  _syncSiswaTambahKeRiwayat_({ nis: data.nis, nama, jk: data.jk }, tahunAktif, setting.semester || '', kls);
   logAudit('TAMBAH_SISWA', kls, nama);
   return { ok: true };
 }
@@ -356,9 +358,12 @@ function guruHapusSiswaDariKelas(kelas, rowNumber, namaKonfirmasi) {
   if (namaKonfirmasi && nama.trim() !== String(namaKonfirmasi).trim()) {
     throw new Error('Baris tidak cocok (data mungkin sudah berubah di tempat lain) — muat ulang daftar siswa.');
   }
+  const nis = String(rowVals[2] || '');
 
   sh.deleteRow(row);
   invalidateCache_('SISWA');
+  const setting = getSetting();
+  _syncSiswaKeluarKeRiwayat_(nis, nama, setting.tahun_pelajaran || '', setting.semester || '', kls);
   logAudit('HAPUS_SISWA', kls, nama);
   return { ok: true };
 }
