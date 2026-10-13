@@ -2420,7 +2420,7 @@
       <li><b>Total Nilai</b> (nilai murni) = 40% Rata Total + 30% PTS + 30% ASAS/ASAT</li>
       <li><b>Nilai Akhir</b> = Total Nilai yang sudah disesuaikan lewat <b>Katrol</b> (lihat kartu "⚙️ Pengaturan Nilai" di bawah untuk detail rumusnya)</li>
     </ul>
-    <b>Cetak / Export:</b> tersedia pilihan nilai murni atau katrol, kolom mana saja yang ditampilkan, ukuran kertas A4/F4 dengan orientasi potrait/landscape (header tabel berulang otomatis tiap halaman), dan export ke Excel.
+    <b>Cetak / Export:</b> tersedia pilihan nilai murni atau katrol, kolom mana saja yang ditampilkan, ukuran kertas A4/F4 dengan orientasi potrait/landscape (header tabel berulang otomatis tiap halaman). Kalau cuma butuh datanya (bukan hasil cetak), bisa export ke Excel atau langsung ke Google Sheets.
   </details>
 
   <!-- Filter -->
@@ -2780,15 +2780,22 @@
       </p>
     </div>
 
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button class="ghost" id="btnPreviewCetak" onclick="previewCetakNilai()">👁️ Preview</button>
       <button id="btnDoCetak" onclick="doCetakNilai()" disabled title="Lakukan preview terlebih dahulu">🖨️ Print / Simpan PDF</button>
-      <button class="ghost" id="btnDoExcel" onclick="exportNilaiExcelUI()" disabled title="Lakukan preview terlebih dahulu">📊 Export Excel</button>
-      <button class="ghost" id="btnDoGSheet" onclick="exportNilaiGoogleSheetUI()" disabled title="Lakukan preview terlebih dahulu">📄 Simpan ke Google Sheets</button>
       <button class="ghost" onclick="closeCetakNilai()">Batal</button>
     </div>
     <div id="cetakPreviewStatus" style="margin-top:8px;font-size:12px;font-weight:600;color:#b45309">
       ⚠️ Preview belum diverifikasi
+    </div>
+
+    <div style="margin-top:16px;padding-top:14px;border-top:1px dashed #d1d5db">
+      <p class="muted" style="font-size:11.5px;margin-bottom:8px">
+        Atau mau datanya saja (bukan hasil cetak), misalnya untuk direkap manual — pilih salah satu:</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="ghost" id="btnDoExcel" onclick="exportNilaiExcelUI()" disabled title="Lakukan preview terlebih dahulu">📊 Export Excel</button>
+        <button class="ghost" id="btnDoGSheet" onclick="exportNilaiGoogleSheetUI()" disabled title="Lakukan preview terlebih dahulu">📄 Simpan ke Google Sheets</button>
+      </div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:10px">
       Saran: cek dulu di <b>Preview</b> sebelum dibagikan ke siswa.</p>

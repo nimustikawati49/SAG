@@ -1393,9 +1393,9 @@ function renderTabelNilai() {
         <th rowspan="2">PTS</th>
         <th rowspan="2">${pasPat}</th>
         ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>' : ''}
-        <th rowspan="2">Rata Total</th>
-        <th rowspan="2" style="background:#4338ca">Total Nilai</th>
-        <th rowspan="2" style="background:#be123c">Nilai Akhir</th>
+        <th rowspan="2" style="background:#6b7280" title="Otomatis — rata-rata dari Rata Tugas &amp; Rata UH, belum termasuk PTS/${pasPat}">Rata Total ℹ️</th>
+        <th rowspan="2" style="background:#4338ca" title="Otomatis (nilai murni, sebelum Katrol) — 40% Rata Total + 30% PTS + 30% ${pasPat}">Total Nilai ℹ️</th>
+        <th rowspan="2" style="background:#be123c" title="Otomatis — Total Nilai yang sudah disesuaikan Katrol, ini nilai yang dipakai untuk rapor/predikat">Nilai Akhir ℹ️</th>
       </tr>
       <tr>
         <th>TGS1</th><th>TGS2</th><th>TGS3</th>
