@@ -155,9 +155,6 @@ footer .copy{
       overflow-x:hidden;
       min-height:100vh;
     }
-    body.auth-wait #mainMenu{
-      display:none !important;
-    }
     .container{max-width:1600px;margin:auto}
     h2,h3{margin:0 0 6px;font-weight:700}
     .muted{color:var(--muted);font-size:13px}
@@ -1218,10 +1215,9 @@ body.dark .nav-mobile{
   /* Reset body padding */
   body { padding:0 !important; }
 
-  /* Hide OLD header + horizontal menu */
+  /* Hide OLD header (mainMenu horizontal lama sudah dihapus dari markup) */
   .header-wrapper,
   .divider   { display:none !important; }
-  #mainMenu  { display:none !important; }
 
   /* =========================================================
      SIDEBAR ROOT

@@ -1246,6 +1246,21 @@ function exportSemester(semester){
     .exportJurnalExcelBySemester(semester);
 }
 
+/**
+ * _toggleExportJurnalMode_()
+ * Satu kartu "Export Rekap Jurnal" sekarang menampung 2 mode (semester/
+ * bulan) yang sebelumnya 2 bagian terpisah dengan <hr> masing-masing —
+ * digabung supaya tidak terlihat seperti 2 fitur export jurnal yang beda,
+ * padahal sumber datanya sama (JURNAL), cuma beda filter periode.
+ */
+function _toggleExportJurnalMode_(){
+  const mode = document.querySelector('input[name="exportJurnalMode"]:checked')?.value || 'semester';
+  const semBlock   = document.getElementById('exportJurnalSemesterBlock');
+  const bulanBlock = document.getElementById('exportJurnalBulanBlock');
+  if (semBlock)   semBlock.style.display   = (mode === 'semester') ? 'flex' : 'none';
+  if (bulanBlock) bulanBlock.style.display = (mode === 'bulan')    ? 'flex' : 'none';
+}
+
 function cekTombolSemester(){
   google.script.run.withSuccessHandler(res=>{
     const bG = document.getElementById('btnSemGanjil');

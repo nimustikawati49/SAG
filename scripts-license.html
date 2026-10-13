@@ -27,12 +27,6 @@ function bootApp(){
     window._currentUserRole  = 'guest';
   }
 
-  // ===== TAMPILKAN MENU UTAMA =====
-  const menu = document.getElementById('mainMenu');
-  if (menu) {
-    menu.style.display = 'flex';
-  }
-
   // ===== SUPERADMIN =====
   if (auth.role === 'superadmin') {
 

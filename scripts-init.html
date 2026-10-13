@@ -1,5 +1,43 @@
 <script>
 /* =================================================================
+   INGAT STATUS BUKA/TUTUP <details> — beberapa kartu panduan/kelola
+   (Dashboard, Setting, dll.) default TERBUKA supaya guru baru langsung
+   lihat, tapi begitu guru sudah terbiasa dan tahu isinya, kartu itu
+   tetap terbuka lagi dari awal setiap kali tab dibuka/direload — bikin
+   tampilan terasa penuh terus padahal sudah ditutup manual sebelumnya.
+   <details data-remember="KEY"> di sini mengingat status buka/tutup
+   TERAKHIR per elemen (localStorage, per browser/perangkat) dan
+   menerapkannya lagi saat elemen itu dirender ulang — guru cukup tutup
+   sekali, tidak perlu tutup berulang-ulang tiap kunjungan.
+   ================================================================= */
+(function(){
+  function applyRemembered_(el){
+    var saved = null;
+    try { saved = localStorage.getItem('detailsOpen_' + el.dataset.remember); } catch(e) {}
+    if (saved === '1') el.open = true;
+    else if (saved === '0') el.open = false;
+    // Belum pernah disimpan -> biarkan default HTML apa adanya (open/tidak).
+  }
+  function bindDetails_(el){
+    if (el.dataset.rememberBound === '1') return;
+    el.dataset.rememberBound = '1';
+    applyRemembered_(el);
+    el.addEventListener('toggle', function(){
+      try { localStorage.setItem('detailsOpen_' + el.dataset.remember, el.open ? '1' : '0'); } catch(e) {}
+    });
+  }
+  function scanDetails_(){
+    document.querySelectorAll('details[data-remember]').forEach(bindDetails_);
+  }
+  scanDetails_();
+  // Kartu yang dirender belakangan (mis. lewat innerHTML dinamis) ikut
+  // kepantau juga kalau suatu saat ada <details data-remember> baru.
+  try {
+    new MutationObserver(function(){ scanDetails_(); }).observe(document.body, { childList: true, subtree: true });
+  } catch (e) {}
+})();
+
+/* =================================================================
    SAFETY NET — modal overlay yang "nyangkut" terbuka
    Beberapa modal full-screen (academicWizardModal, dll.) bisa saja
    gagal tertutup di jalur error tertentu, atau tersisa terbuka dari
@@ -378,8 +416,6 @@ function initApp(){
     if (mainArea) {
       mainArea.style.visibility = 'visible';
     }
-    var menu = document.getElementById('mainMenu');
-    if (menu) menu.style.display = 'none';
   } catch(e){}
 
   // Update greeting immediately (uses local clock, no backend needed)

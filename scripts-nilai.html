@@ -574,15 +574,27 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
         '<div class="muted" style="font-size:11px">' + label + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:' + color + '">' + value + '</div>' +
       '</div>';
-    summaryHtml += '<div class="muted" style="font-size:11px;margin:4px 0">📊 Statistik Nilai Murni (sebelum Katrol):</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px">' +
+    summaryHtml += '<div class="card" style="margin-bottom:14px">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:10px">📊 Statistik Nilai Murni (sebelum Katrol)</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:6px">' +
         statCard('Rata-rata Kelas', rataMurni.toFixed(2), '#6C63FF') +
         statCard('Nilai Tertinggi', Math.max(...kktpVals).toFixed(2), '#22c55e') +
         statCard('Nilai Terendah', Math.min(...kktpVals).toFixed(2), '#ef4444') +
-        statCard('Tuntas (≥ KKM)', tuntasMurni, '#22c55e') +
+        statCard('Tuntas (≥ KKM ' + kkmMurni + ')', tuntasMurni, '#22c55e') +
         statCard('Belum Tuntas', kktpVals.length - tuntasMurni, '#ef4444') +
         statCard('% KKTP Kelas', rataMurni.toFixed(0) + '%<div class="muted" style="font-size:9.5px;font-weight:400">' + kktpBand.status + ' (' + kktpBand.kode + ')</div>', kktpBand.color) +
-      '</div>';
+      '</div>' +
+      // Klarifikasi eksplisit di titik tampilnya, bukan cuma di deskripsi
+      // Pengaturan Nilai — "Tuntas/Belum Tuntas" di atas pakai KKM yang
+      // guru atur sendiri, SEDANGKAN "% KKTP Kelas" & daftar remedial di
+      // bawah pakai rentang predikat A-D yang baku (86-100/66-85/41-65/
+      // 0-40) — DUA ukuran berbeda, bisa saja hasilnya tidak sama persis.
+      '<div class="muted" style="font-size:10.5px;line-height:1.5">' +
+        'ℹ️ <b>Tuntas/Belum Tuntas</b> di atas pakai KKM (' + kkmMurni + ', bisa diubah di Pengaturan Nilai) — ' +
+        '<b>% KKTP Kelas</b> &amp; daftar remedial di bawah pakai rentang predikat baku A-D ' +
+        '(86-100/66-85/41-65/0-40), tidak terikat KKM. Keduanya dua ukuran berbeda.' +
+      '</div>' +
+    '</div>';
 
     // Daftar siswa perlu remedial (Belum Mencapai Ketuntasan, Nilai Murni)
     // + tombol salin ke WA — dipindah ke sini (dari Dashboard) supaya
@@ -601,7 +613,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
     if (remedialList.length) {
       summaryHtml += '<div style="background:#fef2f2;border-radius:10px;padding:12px 14px;margin-bottom:14px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-          '<b style="font-size:13px;color:#991b1b">⚠️ ' + remedialList.length + ' siswa perlu remedial (Belum Mencapai Ketuntasan, urut nilai terendah):</b>' +
+          '<b style="font-size:13px;color:#991b1b">⚠️ ' + remedialList.length + ' siswa perlu remedial (predikat C/D, urut nilai terendah):</b>' +
           '<button class="ghost" onclick="_salinRemedialRiwayat_()" id="btnSalinRemedialRiwayat" style="font-size:12px">📋 Salin Daftar Nama (untuk WA)</button>' +
         '</div>' +
         '<ul style="margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.6">' +
@@ -624,7 +636,10 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
       '</div>';
   }
 
-  let html = summaryHtml + '<div class="table-wrap"><table><thead><tr>' +
+  let html = summaryHtml +
+    '<div class="card" style="margin-bottom:0">' +
+    '<div style="font-weight:700;font-size:13px;margin-bottom:10px">📝 Detail Nilai per Siswa</div>' +
+    '<div class="table-wrap"><table><thead><tr>' +
     '<th>No</th><th>NIS</th><th class="left">Nama Siswa</th>' +
     '<th>Tugas Mandiri</th><th>Tugas Kelompok</th>' +
     '<th>UH1</th><th>UH2</th><th>UH3</th>' +
@@ -650,7 +665,7 @@ function _renderMonitoringNilaiTable_(rows, semester, kkm, kelasNm, mapelNm) {
     '</tr>';
   });
 
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
   wrap.innerHTML = html;
 }
 
