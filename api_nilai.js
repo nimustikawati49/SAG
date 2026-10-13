@@ -498,6 +498,83 @@ function getNilaiBundle(kelas, mapel, tahun, semester) {
 }
 
 /**
+ * exportNilaiKeGoogleSheet(payload)
+ * Alternatif untuk export Excel client-side (lihat exportNilaiExcelUI di
+ * scripts-nilai.html) — dipakai saat unduhan file diblokir browser/
+ * perangkat (mis. Chromebook sekolah dengan kebijakan unduhan dibatasi,
+ * keluhan guru: "export Excel tidak berhasil, tidak ada tanda-tanda apa
+ * pun"). Dibuat SATU spreadsheet Google Sheets baru langsung di Drive
+ * guru lewat SpreadsheetApp.create() — proses ini TIDAK melalui mekanisme
+ * unduhan file browser sama sekali (beda dengan XLSX.writeFile yang
+ * memicu unduhan blob), jadi tidak bisa diblokir kebijakan unduhan.
+ * Guru cukup buka link hasilnya seperti membuka Google Sheets biasa.
+ * meta/colHdr/dataRows sudah dibangun di client (_buildNilaiExportTable_)
+ * supaya rumus katrol & isi tabel SELALU identik dengan jalur Excel —
+ * fungsi ini cuma menulis apa adanya ke sheet baru, tidak menghitung ulang.
+ */
+function exportNilaiKeGoogleSheet(payload) {
+  const auth = authAdmin_();
+  payload = payload || {};
+  const meta     = Array.isArray(payload.meta) ? payload.meta : [];
+  const colHdr   = Array.isArray(payload.colHdr) ? payload.colHdr : [];
+  const dataRows = Array.isArray(payload.dataRows) ? payload.dataRows : [];
+  if (!colHdr.length || !dataRows.length) throw new Error('Tidak ada data nilai untuk diekspor.');
+
+  const kelas = String(payload.kelas || 'Nilai').trim();
+  const judul = String(payload.judul || 'Daftar Nilai').trim();
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm');
+
+  const ss = SpreadsheetApp.create(judul + ' - ' + kelas + ' - ' + stamp);
+  const sh = ss.getSheets()[0];
+  const sheetName = kelas.replace(/[\\\/*?:[\]]/g, '').slice(0, 99);
+  sh.setName(sheetName || 'Nilai');
+
+  const numCols = colHdr.length;
+  const allRows = meta
+    .map(r => { const row = r.slice(); while (row.length < numCols) row.push(''); return row; })
+    .concat([colHdr], dataRows);
+  sh.getRange(1, 1, allRows.length, numCols).setValues(allRows);
+
+  const headerRow = meta.length + 1;
+  sh.getRange(headerRow, 1, 1, numCols).setFontWeight('bold').setBackground('#dde0f0');
+  sh.setFrozenRows(headerRow);
+  try { sh.autoResizeColumns(1, numCols); } catch (e) {}
+
+  // PENTING: SpreadsheetApp.create() di deployment ini berjalan sebagai
+  // SCRIPT OWNER (SuperAdmin, "Execute as: Me" — lihat catatan panjang di
+  // DriveConnect.js soal masalah yang sama persis untuk auto-provisioning
+  // spreadsheet guru), BUKAN sebagai guru yang sedang memakai fitur ini —
+  // jadi file baru ini otomatis dimiliki SuperAdmin, guru TIDAK PUNYA akses
+  // sama sekali kalau tidak diberi eksplisit di sini. addEditor dicoba dulu
+  // (akses presisi, cuma guru ybs), fallback ke link-sharing satu domain
+  // kalau addEditor gagal (sama pola fallback dengan upload Kop Sekolah di
+  // SuperAdmin.js) — supaya guru TETAP bisa buka linknya walau salah satu
+  // cara berbagi diblokir kebijakan Workspace sekolah.
+  const file = DriveApp.getFileById(ss.getId());
+  try {
+    file.addEditor(auth.email);
+  } catch (shareErr) {
+    try {
+      file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.EDIT);
+    } catch (shareErr2) {
+      try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT); } catch (shareErr3) {}
+    }
+  }
+
+  // Pindahkan ke folder export guru kalau memungkinkan (konsisten dengan
+  // folder backup/export lain, lihat getUserResourceFolder_) — cuma
+  // best-effort, file TETAP bisa dibuka guru dari link lewat sharing di
+  // atas apa pun hasilnya di sini.
+  try {
+    const folder = getUserResourceFolder_(auth.email, 'export_folder', 'EXPORT_NILAI');
+    file.moveTo(folder);
+  } catch (e) {}
+
+  logAudit('EXPORT_NILAI_GSHEET', auth.email, kelas + ' | ' + (payload.mapel || '') + ' | ' + judul);
+  return { url: ss.getUrl(), name: ss.getName() };
+}
+
+/**
  * Simpan seluruh nilai siswa (upsert per kelas/mapel/tahun/semester).
  * Menghapus data lama terlebih dahulu, kemudian tulis ulang.
  * @param {object} payload  { kelas, mapel, tahun, semester, setting:{...}, rows:[...] }

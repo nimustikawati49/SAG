@@ -2773,6 +2773,10 @@
         Nilai yang dipilih di atas diskalakan proporsional per kelas (siswa terendah → Nilai Terendah
         Target, siswa tertinggi → Nilai Tertinggi Target, dari Pengaturan Nilai Katrol &amp; KKM) sebelum
         dicetak, plus kolom <b>Ket</b> (Tuntas/Belum Tuntas berdasarkan Nilai Akhir vs KKM).
+        Kalau <b>Export Excel</b> tidak kunjung berhasil terunduh (sering terjadi di Chromebook
+        sekolah yang unduhan filenya dibatasi), coba <b>📄 Simpan ke Google Sheets</b> — datanya sama
+        persis, cuma langsung tersimpan sebagai Google Sheets baru di Drive Anda sendiri lewat link,
+        tanpa proses unduh file sama sekali.
       </p>
     </div>
 
@@ -2780,6 +2784,7 @@
       <button class="ghost" id="btnPreviewCetak" onclick="previewCetakNilai()">👁️ Preview</button>
       <button id="btnDoCetak" onclick="doCetakNilai()" disabled title="Lakukan preview terlebih dahulu">🖨️ Print / Simpan PDF</button>
       <button class="ghost" id="btnDoExcel" onclick="exportNilaiExcelUI()" disabled title="Lakukan preview terlebih dahulu">📊 Export Excel</button>
+      <button class="ghost" id="btnDoGSheet" onclick="exportNilaiGoogleSheetUI()" disabled title="Lakukan preview terlebih dahulu">📄 Simpan ke Google Sheets</button>
       <button class="ghost" onclick="closeCetakNilai()">Batal</button>
     </div>
     <div id="cetakPreviewStatus" style="margin-top:8px;font-size:12px;font-weight:600;color:#b45309">

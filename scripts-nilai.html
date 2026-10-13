@@ -1857,6 +1857,11 @@ function setCetakReady_(ready) {
     btnExcel.disabled = !ready;
     btnExcel.title = ready ? '' : 'Lakukan preview terlebih dahulu';
   }
+  const btnGSheet = document.getElementById('btnDoGSheet');
+  if (btnGSheet) {
+    btnGSheet.disabled = !ready;
+    btnGSheet.title = ready ? '' : 'Lakukan preview terlebih dahulu';
+  }
 }
 
 function bindCetakModalGuard_() {
@@ -2190,6 +2195,37 @@ function doCetakNilai(mode = 'print') {
   }
 }
 
+/**
+ * _buildNilaiExportTable_(rows, def, katrolTarget, kkm, judulTampil, namaSekolah, mapel, kelas)
+ * Bangun baris tabel nilai siap-export (dipakai BERSAMA oleh
+ * exportNilaiExcelUI()/exportNilaiGoogleSheetUI()) — satu sumber kebenaran
+ * supaya kedua jalur export (file Excel lokal vs Google Sheets baru)
+ * selalu menghasilkan data identik, tidak bisa diam-diam beda rumus.
+ */
+function _buildNilaiExportTable_(rows, def, katrolTarget, kkm, judulTampil, namaSekolah, mapel, kelas) {
+  const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
+    ? Math.round(Number(v)) : '-';
+  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
+
+  const meta = [
+    [judulTampil], [],
+    ['Sekolah', namaSekolah || '-'], ['Mata Pelajaran', mapel], ['Kelas', kelas], []
+  ];
+  const colHdr = ['No', 'NIS', 'Nama Siswa', 'L/P', def.label, 'Keterangan'];
+
+  const dataRows = rows.map((r, i) => {
+    const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
+      ? Number(r.nilai_akhir) : null;
+    return [
+      i + 1, r.nis || '', r.nama_siswa || '', r.jk || '-',
+      fmt(nilaiKatrol[i]),
+      (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
+    ];
+  });
+
+  return { meta, colHdr, dataRows };
+}
+
 /** Export ke file Excel via SheetJS (satu kelas, satu komponen) */
 function exportNilaiExcelUI() {
   if (typeof XLSX === 'undefined') { alert('Library XLSX belum siap'); return; }
@@ -2226,28 +2262,11 @@ function exportNilaiExcelUI() {
     // Sekarang guru selalu dapat kabar: berhasil (file turun) atau gagal
     // (alert jelas + tombol kembali normal supaya bisa dicoba lagi).
     try {
-      const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
-        ? Math.round(Number(v)) : '-';
-      const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
       const namaSekolah = settingGuru?.nama_sekolah || '-';
+      const { meta, colHdr, dataRows } = _buildNilaiExportTable_(
+        rows, def, katrolTarget, kkm, judulTampil, namaSekolah, mapel, kelas);
 
       const wb = XLSX.utils.book_new();
-      const meta = [
-        [judulTampil], [],
-        ['Sekolah', namaSekolah], ['Mata Pelajaran', mapel], ['Kelas', kelas], []
-      ];
-      const colHdr = ['No', 'NIS', 'Nama Siswa', 'L/P', def.label, 'Keterangan'];
-
-      const dataRows = rows.map((r, i) => {
-        const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
-          ? Number(r.nilai_akhir) : null;
-        return [
-          i + 1, r.nis || '', r.nama_siswa || '', r.jk || '-',
-          fmt(nilaiKatrol[i]),
-          (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
-        ];
-      });
-
       const sheetData = [...meta, colHdr, ...dataRows];
       const ws = XLSX.utils.aoa_to_sheet(sheetData);
       const sheetName = kelas.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
@@ -2279,6 +2298,91 @@ function exportNilaiExcelUI() {
       .withSuccessHandler(rows => rowsReady(rows || []))
       .withFailureHandler(() => {
         if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
+        alert('Gagal ambil data nilai kelas ' + kelas);
+      })
+      .getNilaiSiswa(kelas, mapel, tahun, semester);
+  }
+}
+
+/**
+ * Export ke Google Sheets BARU milik guru sendiri (bukan unduhan file) —
+ * alternatif untuk exportNilaiExcelUI() di perangkat/browser yang
+ * memblokir unduhan file (mis. Chromebook sekolah dengan kebijakan
+ * unduhan dibatasi, lihat keluhan "export Excel tidak berhasil, tidak
+ * ada tanda-tanda apa pun"). Data dikirim ke server, dibuat SATU
+ * spreadsheet Google Sheets baru di Drive guru lewat SpreadsheetApp.create()
+ * (BUKAN mekanisme unduhan browser sama sekali), lalu linknya dibuka di
+ * tab baru — window.open ke URL biasa tidak pernah diblokir kebijakan
+ * unduhan file, karena memang bukan unduhan.
+ */
+function exportNilaiGoogleSheetUI() {
+  if (!nilaiState.cetakPreviewOk) {
+    alert('Lakukan preview terlebih dahulu sebelum export ke Google Sheets.');
+    return;
+  }
+
+  const kelas = document.getElementById('cetakKelasSelect')?.value || '';
+  if (!kelas) { alert('Pilih kelas'); return; }
+  const komponen = document.querySelector('input[name="cetakKomponen"]:checked')?.value || 'pts';
+  const def = CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts;
+
+  const btn = document.getElementById('btnDoGSheet');
+  const defaultBtnLabel = '📄 Simpan ke Google Sheets';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyiapkan...'; }
+
+  const ctx = _cetakOverride || nilaiState;
+  const { mapel, tahun, semester, setting } = ctx;
+  const kkm = Number(setting.kkm || 70);
+  const katrolTarget = { min: Number(setting.nilai_min_target ?? 60), max: Number(setting.nilai_max_target ?? 95) };
+  const judulCustom = (document.getElementById('cetakJudulInput')?.value || '').trim();
+  const judulTampil = judulCustom || ('DAFTAR NILAI ' + def.label);
+
+  const buildAndExport = (rows, settingGuru) => {
+    try {
+      const namaSekolah = settingGuru?.nama_sekolah || '-';
+      const { meta, colHdr, dataRows } = _buildNilaiExportTable_(
+        rows, def, katrolTarget, kkm, judulTampil, namaSekolah, mapel, kelas);
+
+      google.script.run
+        .withSuccessHandler(result => {
+          if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+          if (!result || !result.url) {
+            alert('Gagal membuat Google Sheets — hasil tidak lengkap dari server.');
+            return;
+          }
+          window.open(result.url, '_blank');
+          closeCetakNilai();
+        })
+        .withFailureHandler(err => {
+          if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+          console.error('[exportNilaiGoogleSheetUI]', err);
+          alert('Gagal membuat Google Sheets: ' + (err && err.message ? err.message : 'penyebab tidak diketahui'));
+        })
+        .exportNilaiKeGoogleSheet({
+          judul: judulTampil, mapel, kelas, semester, tahun,
+          namaSekolah, meta, colHdr, dataRows
+        });
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
+      console.error('[exportNilaiGoogleSheetUI]', e);
+      alert('Gagal menyiapkan data: ' + (e && e.message ? e.message : 'penyebab tidak diketahui'));
+    }
+  };
+
+  const rowsReady = rows => {
+    google.script.run
+      .withSuccessHandler(settingGuru => buildAndExport(rows, settingGuru))
+      .withFailureHandler(() => buildAndExport(rows, {}))
+      .getSetting();
+  };
+
+  if (!_cetakOverride && kelas === nilaiState.kelas) {
+    rowsReady(nilaiState.rows);
+  } else {
+    google.script.run
+      .withSuccessHandler(rows => rowsReady(rows || []))
+      .withFailureHandler(() => {
+        if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
         alert('Gagal ambil data nilai kelas ' + kelas);
       })
       .getNilaiSiswa(kelas, mapel, tahun, semester);
