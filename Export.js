@@ -40,11 +40,18 @@ function exportJurnalExcel(){
   }); 
   const lastRow = row - 1; 
   sh.setColumnWidths(1, 1, 40); sh.setColumnWidths(2, 1, 80); sh.setColumnWidths(3, 1, 60); sh.setColumnWidths(4, 1, 80); sh.setColumnWidths(5, 1, 200); sh.setColumnWidths(6, 1, 160); sh.setColumnWidths(7, 1, 200); sh.setColumnWidths(8, 1, 200); sh.setColumnWidths(9, 1, 260); sh.setColumnWidths(10,1, 60); 
-  sh.getRange(`A6:J${lastRow}`).setWrap(true).setVerticalAlignment('top'); 
-  sh.getRange(`A5:J${lastRow}`).setBorder(true,true,true,true,true,true); 
-  const gid = sh.getSheetId(); 
-  return ss.getUrl().replace(/edit$/, `export?format=xlsx&gid=${gid}`); 
-} 
+  sh.getRange(`A6:J${lastRow}`).setWrap(true).setVerticalAlignment('top');
+  sh.getRange(`A5:J${lastRow}`).setBorder(true,true,true,true,true,true);
+  const gid = sh.getSheetId();
+  // Link ke TAB sheet-nya langsung (bukan export?format=xlsx) — URL export
+  // memaksa browser men-download file (Content-Disposition: attachment),
+  // yang bisa diam-diam diblokir kebijakan perangkat/Workspace (mis.
+  // Chromebook sekolah) tanpa pesan apa pun ke guru. Link biasa cuma buka
+  // tab Google Sheets seperti biasa — kalau guru memang mau file .xlsx,
+  // tinggal File > Download dari dalam Sheets, lewat jalur unduhan Google
+  // sendiri yang lebih jarang diblokir dibanding auto-download saat buka tab.
+  return ss.getUrl() + '#gid=' + gid;
+}
 
 function exportJurnalExcelBySemester(semester){
   assertLicenseActive();
@@ -111,7 +118,9 @@ function exportJurnalExcelBySemester(semester){
   sh.getRange('A5:J'+(row-1)).setBorder(true,true,true,true,true,true);
   sh.getRange('A6:J'+(row-1)).setWrap(true).setVerticalAlignment('top');
   const gid = sh.getSheetId();
-  return ss.getUrl().replace(/edit$/, 'export?format=xlsx&gid='+gid);
+  // Lihat catatan di exportJurnalExcel() — link tab biasa, bukan URL
+  // export?format=xlsx, supaya kebal blokir kebijakan unduhan perangkat.
+  return ss.getUrl() + '#gid=' + gid;
 }
 
 /**
@@ -164,12 +173,14 @@ function exportLaporanAbsensiSiswa(mode, kelas, period) {
   sh.setColumnWidths(4,1,40); sh.setColumnWidths(5,1,60); sh.setColumnWidths(6,1,60);
   sh.setColumnWidths(7,1,60); sh.setColumnWidths(8,1,60); sh.setColumnWidths(9,1,70);
   const gid = sh.getSheetId();
-  return ss.getUrl().replace(/edit$/, 'export?format=xlsx&gid='+gid);
+  // Lihat catatan di exportJurnalExcel() — link tab biasa, bukan URL
+  // export?format=xlsx, supaya kebal blokir kebijakan unduhan perangkat.
+  return ss.getUrl() + '#gid=' + gid;
 }
 
 /**
  * Export jurnal per bulan tertentu (1-12) dan tahun (e.g. 2025)
- * Returns download URL (xlsx)
+ * Returns link ke tab Google Sheets hasil export (bukan URL download)
  */
 function exportJurnalByBulan(bulan, tahun) {
   assertLicenseActive();
@@ -246,7 +257,9 @@ function exportJurnalByBulan(bulan, tahun) {
   sh.getRange('A5:J'+(row-1)).setBorder(true,true,true,true,true,true);
   sh.getRange('A6:J'+(row-1)).setWrap(true).setVerticalAlignment('top');
   const gid = sh.getSheetId();
-  return ss.getUrl().replace(/edit$/, 'export?format=xlsx&gid='+gid);
+  // Lihat catatan di exportJurnalExcel() — link tab biasa, bukan URL
+  // export?format=xlsx, supaya kebal blokir kebijakan unduhan perangkat.
+  return ss.getUrl() + '#gid=' + gid;
 }
 
 // Rich text (bukan teks polos) untuk sel Absensi di PDF — supaya label

@@ -1253,14 +1253,14 @@ function cekTombolSemester(){
     if(bG){
       bG.disabled = !res.adaGanjil;
       bG.title = res.adaGanjil
-        ? 'Download rekap jurnal semester ganjil'
+        ? 'Buka rekap jurnal semester ganjil (Google Sheets)'
         : 'Belum ada jurnal semester ganjil';
       if(!res.adaGanjil) bG.classList.add('ghost');
     }
     if(bE){
       bE.disabled = !res.adaGenap;
       bE.title = res.adaGenap
-        ? 'Download rekap jurnal semester genap'
+        ? 'Buka rekap jurnal semester genap (Google Sheets)'
         : 'Belum ada jurnal semester genap';
       if(!res.adaGenap) bE.classList.add('ghost');
     }

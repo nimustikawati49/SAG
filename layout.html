@@ -748,7 +748,7 @@
         <button onclick="mulaiJurnalBaru_()">➕ Input Jurnal</button>
       </div>
     </div>
-    <p class="muted" style="font-size:12.5px;margin:8px 0 12px">Semua jurnal yang sudah disimpan lewat tab Jurnalku — filter berdasarkan tanggal/kelas/kata kunci materi, edit/duplikat/hapus lewat kolom Aksi, atau download rekap semester/bulanan di bagian bawah.</p>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 12px">Semua jurnal yang sudah disimpan lewat tab Jurnalku — filter berdasarkan tanggal/kelas/kata kunci materi, edit/duplikat/hapus lewat kolom Aksi, atau buka rekap semester/bulanan (Google Sheets) di bagian bawah.</p>
 
     <!-- FILTER BAR -->
     <div id="riwayatFilterBar">
@@ -807,17 +807,17 @@
 
       <hr style="margin:28px 0">
       <h3>📦 Rekap Jurnal Semester</h3>
-      <p class="muted">Download rekap jurnal per semester pada tahun pelajaran yang sama.</p>
+      <p class="muted">Buka rekap jurnal per semester (Google Sheets) pada tahun pelajaran yang sama.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <button id="btnSemGanjil" onclick="exportSemester('ganjil')">⬇️ Download Semester Ganjil</button>
-        <button id="btnSemGenap" onclick="exportSemester('genap')">⬇️ Download Semester Genap</button>
+        <button id="btnSemGanjil" onclick="exportSemester('ganjil')">📄 Semester Ganjil</button>
+        <button id="btnSemGenap" onclick="exportSemester('genap')">📄 Semester Genap</button>
         <p class="muted" id="exportSemesterInfo" style="font-size:12px;margin:0"></p>
         <div id="exportSkeleton" style="display:none;margin-top:12px;width:280px" class="skeleton"></div>
       </div>
 
       <hr style="margin:28px 0">
       <h3>📅 Export Jurnal per Bulan</h3>
-      <p class="muted">Download jurnal untuk bulan dan tahun tertentu dalam format Excel.</p>
+      <p class="muted">Buka jurnal untuk bulan dan tahun tertentu sebagai Google Sheets.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <div>
           <label style="font-size:12px">Bulan</label>
@@ -840,7 +840,7 @@
           <label style="font-size:12px">Tahun</label>
           <input type="number" id="exportBulanTahun" style="width:90px" placeholder="2025" value="">
         </div>
-        <button onclick="doExportByBulan()">⬇️ Download Excel</button>
+        <button onclick="doExportByBulan()">📄 Buka di Google Sheets</button>
       </div>
       <div id="exportBulanInfo" style="margin-top:8px"></div>
 
@@ -929,7 +929,7 @@
         </select>
       </div>
       <button onclick="loadLaporanAbsensi()">🔎 Tampilkan</button>
-      <button class="ghost" onclick="exportLaporanAbsensiExcel()">⬇️ Export Excel</button>
+      <button class="ghost" onclick="exportLaporanAbsensiExcel()">📄 Buka di Google Sheets</button>
     </div>
     <div id="laporanAbsensiWrap">
       <p class="muted">Pilih kelas dan periode lalu klik Tampilkan.</p>
