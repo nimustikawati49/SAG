@@ -67,28 +67,36 @@ function getSiswaByKelas(kelas){
   const auth = getAuth();
   if(!auth.email) return [];
 
-  const fromRiwayat = getSiswaAktifByKelasForUser_(kelas, auth.email);
-  if (fromRiwayat && fromRiwayat.length) return fromRiwayat;
+  // SISWA diutamakan dari RiwayatKelas (dibalik urutannya dari sebelumnya)
+  // — SISWA langsung diupdate tiap guru Tambah/Hapus Siswa lewat Kelola
+  // Siswa (lihat guruTambahSiswaKeKelas/guruHapusSiswaDariKelas di
+  // api_nilai.js), sedangkan RiwayatKelas CUMA tersinkron lewat alur Import
+  // Siswa/Promosi Siswa dan TIDAK ikut berubah saat Kelola Siswa dipakai.
+  // Urutan lama (RiwayatKelas dulu, SISWA fallback) bikin perubahan dari
+  // Kelola Siswa tidak pernah muncul di sini selama RiwayatKelas kelas itu
+  // sudah pernah terisi — guru tambah/keluarkan siswa tapi daftar absen
+  // Jurnal tetap pakai roster lama. Sama persis dengan urutan yang sudah
+  // benar di getLaporanAbsensiSiswa() (lihat di bawah).
+  if (sheet('SISWA')) {
+    const tahunAktif = getSetting().tahun_pelajaran || '';
+    // Cache SISWA sheet (TTL 120s)
+    const data = getSheetCached('SISWA', 120).slice(1);
+    const fromSiswa = data
+      .filter(r =>
+        r[0] === kelas &&
+        String(r[5]).toLowerCase().trim() === auth.email &&
+        _siswaRowMatchesPeriode_(r, tahunAktif)
+      )
+      .map(r => ({
+        no_absen: r[1],
+        nis     : r[2],
+        nama    : r[3],
+        jk      : r[4]
+      }));
+    if (fromSiswa.length) return fromSiswa;
+  }
 
-  if(!sheet('SISWA')) return [];
-
-  const tahunAktif = getSetting().tahun_pelajaran || '';
-
-  // Cache SISWA sheet (TTL 120s)
-  const data = getSheetCached('SISWA', 120).slice(1);
-
-  return data
-    .filter(r =>
-      r[0] === kelas &&
-      String(r[5]).toLowerCase().trim() === auth.email &&
-      _siswaRowMatchesPeriode_(r, tahunAktif)
-    )
-    .map(r => ({
-      no_absen: r[1],
-      nis     : r[2],
-      nama    : r[3],
-      jk      : r[4]
-    }));
+  return getSiswaAktifByKelasForUser_(kelas, auth.email);
 }
 
 function importSiswa(rows){

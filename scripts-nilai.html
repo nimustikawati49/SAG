@@ -2216,36 +2216,53 @@ function exportNilaiExcelUI() {
   const judulTampil = judulCustom || ('DAFTAR NILAI ' + def.label);
 
   const buildAndExport = (rows, settingGuru) => {
-    const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
-      ? Math.round(Number(v)) : '-';
-    const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
-    const namaSekolah = settingGuru?.nama_sekolah || '-';
+    // Seluruh proses dibungkus try/catch/finally — sebelumnya kalau
+    // XLSX.utils.*/writeFile() melempar error (mis. data kosong, atau
+    // unduhan file diblokir browser/perangkat), error itu TIDAK TERTANGKAP
+    // sama sekali: tombol sempat kepencet "⏳ Menyiapkan..." lalu exception
+    // bikin fungsi berhenti di tengah TANPA pernah mengembalikan tombol ke
+    // keadaan semula dan TANPA pesan apa pun ke guru — persis seperti
+    // keluhan "tidak berhasil, tidak ada tanda-tanda apa-apa, stuck".
+    // Sekarang guru selalu dapat kabar: berhasil (file turun) atau gagal
+    // (alert jelas + tombol kembali normal supaya bisa dicoba lagi).
+    try {
+      const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
+        ? Math.round(Number(v)) : '-';
+      const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
+      const namaSekolah = settingGuru?.nama_sekolah || '-';
 
-    const wb = XLSX.utils.book_new();
-    const meta = [
-      [judulTampil], [],
-      ['Sekolah', namaSekolah], ['Mata Pelajaran', mapel], ['Kelas', kelas], []
-    ];
-    const colHdr = ['No', 'NIS', 'Nama Siswa', 'L/P', def.label, 'Keterangan'];
-
-    const dataRows = rows.map((r, i) => {
-      const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
-        ? Number(r.nilai_akhir) : null;
-      return [
-        i + 1, r.nis || '', r.nama_siswa || '', r.jk || '-',
-        fmt(nilaiKatrol[i]),
-        (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
+      const wb = XLSX.utils.book_new();
+      const meta = [
+        [judulTampil], [],
+        ['Sekolah', namaSekolah], ['Mata Pelajaran', mapel], ['Kelas', kelas], []
       ];
-    });
+      const colHdr = ['No', 'NIS', 'Nama Siswa', 'L/P', def.label, 'Keterangan'];
 
-    const sheetData = [...meta, colHdr, ...dataRows];
-    const ws = XLSX.utils.aoa_to_sheet(sheetData);
-    const sheetName = kelas.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
-    XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
+      const dataRows = rows.map((r, i) => {
+        const akhirNum = (r.nilai_akhir !== null && r.nilai_akhir !== undefined && !isNaN(Number(r.nilai_akhir)))
+          ? Number(r.nilai_akhir) : null;
+        return [
+          i + 1, r.nis || '', r.nama_siswa || '', r.jk || '-',
+          fmt(nilaiKatrol[i]),
+          (akhirNum !== null && akhirNum >= kkm) ? 'Tuntas' : 'Belum Tuntas'
+        ];
+      });
 
-    if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
-    XLSX.writeFile(wb, `Nilai_${def.label}_${mapel}_${kelas}_${semester}_${tahun}.xlsx`);
-    closeCetakNilai();
+      const sheetData = [...meta, colHdr, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      const sheetName = kelas.replace(/[\\\/*?:[\]]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
+
+      XLSX.writeFile(wb, `Nilai_${def.label}_${mapel}_${kelas}_${semester}_${tahun}.xlsx`);
+      closeCetakNilai();
+    } catch (e) {
+      console.error('[exportNilaiExcelUI]', e);
+      alert('Gagal membuat file Excel: ' + (e && e.message ? e.message : 'penyebab tidak diketahui') +
+        '\n\nKalau file tidak kunjung terunduh, cek apakah unduhan file diblokir di browser/perangkat ini ' +
+        '(mis. Chromebook sekolah dengan kebijakan unduhan dibatasi), lalu coba lagi.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📊 Export Excel'; }
+    }
   };
 
   const rowsReady = rows => {
