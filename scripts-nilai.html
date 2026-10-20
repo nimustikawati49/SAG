@@ -2156,7 +2156,9 @@ function doCetakNilai(mode = 'print') {
       '.pb{page-break-after:always;height:0}' +
       '.no-print{margin:20px auto;text-align:center;display:block}' +
       '.btn-pr{padding:10px 28px;background:#6C63FF;color:#fff;border:none;border-radius:8px;' +
-      '  cursor:pointer;font-size:14px;font-weight:600}' +
+      '  cursor:pointer;font-size:14px;font-weight:600;margin:4px}' +
+      '.btn-pr.alt{background:#fff;color:#4f46e5;border:1px solid #6C63FF}' +
+      '.btn-pr:disabled{opacity:.6;cursor:wait}' +
       '@media print{' +
       '  .no-print{display:none!important}' +
       '  .preview-note{display:none!important}' +
@@ -2173,6 +2175,13 @@ function doCetakNilai(mode = 'print') {
       pagesHtml +
       '<div class="no-print">' +
         '<button class="btn-pr" onclick="window.print()">🖨️ ' + (isPreview ? 'Konfirmasi Cetak / Simpan PDF' : 'Cetak / Simpan sebagai PDF') + '</button>' +
+        // Preview juga jadi pintu Export — sebelumnya jendela preview cuma
+        // bisa print/PDF, sedangkan tombol Excel/Sheets di modal ikut
+        // terkunci lagi begitu modal dibuka ulang (loop tanpa ujung).
+        (isPreview
+          ? '<button class="btn-pr alt" id="pvBtnExcel">📊 Export Excel</button>' +
+            '<button class="btn-pr alt" id="pvBtnGSheet">📄 Simpan ke Google Sheets</button>'
+          : '') +
       '</div>' +
       '</body></html>';
 
@@ -2183,8 +2192,37 @@ function doCetakNilai(mode = 'print') {
     if (!w) { alert('Popup diblokir browser. Aktifkan popup dan coba lagi.'); return; }
     w.document.write(html);
     w.document.close();
-    if (isPreview) setCetakReady_(true);
-    closeCetakNilai();
+    if (isPreview) {
+      // Modal Cetak SENGAJA tidak ditutup setelah preview: closeCetakNilai()
+      // me-reset _cetakOverride (jalur Riwayat Nilai) dan membuka ulang modal
+      // me-reset status preview — dua-duanya bikin tombol Export Excel /
+      // Google Sheets tidak pernah bisa dipakai. Modal tetap terbuka di
+      // belakang (pilihan kelas/komponen/judul tetap utuh) dan tombol export
+      // juga disediakan langsung di jendela preview.
+      setCetakReady_(true);
+      const pvBind_ = (id, fn, srcBtnId) => {
+        const b = w.document.getElementById(id);
+        if (!b) return;
+        b.onclick = () => {
+          b.disabled = true;
+          const label = b.textContent;
+          b.textContent = '⏳ Menyiapkan...';
+          fn();
+          // Kembalikan tombol preview begitu tombol modal selesai (enabled lagi).
+          const t = setInterval(() => {
+            const src = document.getElementById(srcBtnId);
+            if (w.closed || !src || !src.disabled) {
+              clearInterval(t);
+              try { b.disabled = false; b.textContent = label; } catch (e) {}
+            }
+          }, 400);
+        };
+      };
+      pvBind_('pvBtnExcel', exportNilaiExcelUI, 'btnDoExcel');
+      pvBind_('pvBtnGSheet', exportNilaiGoogleSheetUI, 'btnDoGSheet');
+    } else {
+      closeCetakNilai();
+    }
   };
 
   const rowsReady = rows => {
@@ -2288,7 +2326,8 @@ function exportNilaiExcelUI() {
       XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Nilai');
 
       XLSX.writeFile(wb, `Nilai_${def.label}_${mapel}_${kelas}_${semester}_${tahun}.xlsx`);
-      closeCetakNilai();
+      // Modal dibiarkan terbuka — guru mungkin lanjut Simpan ke Google
+      // Sheets / Print dari jendela preview yang sama.
     } catch (e) {
       console.error('[exportNilaiExcelUI]', e);
       alert('Gagal membuat file Excel: ' + (e && e.message ? e.message : 'penyebab tidak diketahui') +
@@ -2365,8 +2404,12 @@ function exportNilaiGoogleSheetUI() {
             alert('Gagal membuat Google Sheets — hasil tidak lengkap dari server.');
             return;
           }
-          window.open(result.url, '_blank');
-          closeCetakNilai();
+          // window.open di callback async sering diblokir popup-blocker —
+          // kalau gagal, tetap berikan linknya supaya guru bisa membukanya.
+          const tabBaru = window.open(result.url, '_blank');
+          if (!tabBaru) {
+            prompt('✅ Google Sheets berhasil dibuat di Drive Anda.\nTab baru diblokir browser — salin link ini lalu buka:', result.url);
+          }
         })
         .withFailureHandler(err => {
           if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
