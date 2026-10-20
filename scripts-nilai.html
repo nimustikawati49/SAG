@@ -2101,7 +2101,13 @@ function doCetakNilai(mode = 'print') {
       : (namaSekolah ? '<p class="sekolah">' + namaSekolah + '</p>' : '');
 
     const tbl = buildNilaiTableHtml_(kelas, rows, { komponen, kkm, katrolTarget });
+    // Dibungkus tabel "pg-wrap": thead/tfoot berisi spacer kosong yang
+    // diulang browser di SETIAP halaman cetak — pengganti margin @page
+    // (yang sengaja dibuat 0 supaya header/footer bawaan browser: tanggal,
+    // judul tab, URL, nomor halaman, tidak ikut tercetak).
     const pagesHtml =
+      '<table class="pg-wrap"><thead><tr><td><div class="pg-space"></div></td></tr></thead>' +
+      '<tfoot><tr><td><div class="pg-space"></div></td></tr></tfoot><tbody><tr><td>' +
       '<div class="page">' +
         headerHtml +
         '<p class="judul-cetak">' + judulTampil + '</p>' +
@@ -2120,13 +2126,22 @@ function doCetakNilai(mode = 'print') {
             '<p>NIP. ' + nip + '</p>' +
           '</div>' +
         '</div>' +
-      '</div>';
+      '</div>' +
+      '</td></tr></tbody></table>';
 
     const cetakStyle =
-      '@page{size:' + pageW + 'mm ' + pageH + 'mm;margin:10mm}' +
+      // margin:0 → browser tidak punya ruang untuk mencetak header/footer
+      // bawaannya (tanggal, judul, URL, "1/1"). Jarak tepi kertas diganti
+      // .pg-space (atas/bawah, tiap halaman) + padding .page (kiri/kanan).
+      '@page{size:' + pageW + 'mm ' + pageH + 'mm;margin:0}' +
+      '.pg-wrap{width:100%;border-collapse:collapse}' +
+      '.pg-wrap>thead>tr>td,.pg-wrap>tfoot>tr>td,.pg-wrap>tbody>tr>td{padding:0;border:none;vertical-align:top}' +
+      '.pg-space{height:10mm}' +
       '*{margin:0;padding:0;box-sizing:border-box}' +
       'body{font-family:Arial,sans-serif;font-size:11px;background:#fff;color:#000}' +
-      '.page{padding:18px 22px;width:' + pageW + 'mm;max-width:' + pageW + 'mm;margin:0 auto}' +
+      // Padding layar = padding cetak, supaya tinggi yang diukur skrip
+      // "muat 1 halaman" di bawah sama dengan hasil cetaknya.
+      '.page{padding:0 14mm;width:' + pageW + 'mm;max-width:' + pageW + 'mm;margin:0 auto}' +
       '.preview-note{max-width:' + pageW + 'mm;margin:12px auto 0;background:#fff7ed;border:1px solid #fdba74;' +
       '  color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px}' +
       'h1{display:none}' +
@@ -2150,7 +2165,10 @@ function doCetakNilai(mode = 'print') {
       '.nilai tr{page-break-inside:avoid}' +
       '.nilai .tl{text-align:left;min-width:120px}' +
       '.note-missing{color:#dc2626;font-weight:700}' +
-      '.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px}' +
+      // Blok tanda tangan jangan terbelah dua halaman (tanggal di hal. 1,
+      // nama/NIP di hal. 2) — pindah utuh ke halaman berikutnya bila perlu.
+      '.ttd{margin-top:28px;display:flex;justify-content:flex-end;padding-right:30px;' +
+      '  page-break-inside:avoid;break-inside:avoid}' +
       '.box{text-align:center;width:200px}' +
       '.garis{border-bottom:1px solid #000;margin:44px 0 4px}' +
       '.pb{page-break-after:always;height:0}' +
@@ -2164,7 +2182,7 @@ function doCetakNilai(mode = 'print') {
       '  .preview-note{display:none!important}' +
       '  .pb{height:0}' +
       '  body{font-size:10px}' +
-      '  .page{padding:10px 14px;width:auto;max-width:none}' +
+      '  .page{padding:0 14mm;width:auto;max-width:none}' +
       '}';
 
     const html = '<!DOCTYPE html><html lang="id"><head>' +
@@ -2174,6 +2192,7 @@ function doCetakNilai(mode = 'print') {
       (isPreview ? '<div class="preview-note no-print"><b>Mode Preview</b> — Periksa data sebelum dibagikan ke siswa.</div>' : '') +
       pagesHtml +
       '<div class="no-print">' +
+        '<div id="fitNote" style="font-size:12px;color:#555;margin-bottom:8px"></div>' +
         '<button class="btn-pr" onclick="window.print()">🖨️ ' + (isPreview ? 'Konfirmasi Cetak / Simpan PDF' : 'Cetak / Simpan sebagai PDF') + '</button>' +
         // Preview juga jadi pintu Export — sebelumnya jendela preview cuma
         // bisa print/PDF, sedangkan tombol Excel/Sheets di modal ikut
@@ -2183,6 +2202,25 @@ function doCetakNilai(mode = 'print') {
             '<button class="btn-pr alt" id="pvBtnGSheet">📄 Simpan ke Google Sheets</button>'
           : '') +
       '</div>' +
+      // Muat 1 halaman: ukur tinggi isi (skala 100%), bandingkan dengan
+      // tinggi kertas yang dipilih (A4/F4, potrait/landscape) dikurangi
+      // spacer atas-bawah 2×10mm. Kalau kelebihan, perkecil proporsional
+      // (zoom) — lebar .page diperlebar 1/s supaya setelah di-zoom tetap
+      // selebar kertas. Batas bawah 60% supaya tulisan masih terbaca; kelas
+      // yang sangat besar tetap lanjut ke halaman berikutnya.
+      '<script>(function(){' +
+        'var PW=' + pageW + ',PH=' + pageH + ',MIN=0.6,MM=96/25.4;' +
+        'function fit(){' +
+          'var pg=document.querySelector(".page"),note=document.getElementById("fitNote");if(!pg)return;' +
+          'pg.style.zoom="";pg.style.width="";pg.style.maxWidth="";' +
+          'var avail=(PH-20)*MM,h=pg.getBoundingClientRect().height;' +
+          'if(h<=avail){if(note)note.textContent="Muat 1 halaman (ukuran 100%).";return;}' +
+          'var s=Math.max(MIN,(avail/h)*0.97);' +
+          'pg.style.width=(PW/s)+"mm";pg.style.maxWidth="none";pg.style.zoom=s;' +
+          'if(note)note.textContent=(s>MIN?"Diperkecil otomatis ke ":"Diperkecil ke batas minimum ")+Math.round(s*100)+"% supaya "+(s>MIN?"muat 1 halaman.":"tetap terbaca (lebih dari 1 halaman).");' +
+        '}' +
+        'fit();window.addEventListener("load",fit);' +
+      '})();<\/script>' +
       '</body></html>';
 
     if (btn) { btn.disabled = false; btn.textContent = defaultBtnLabel; }
