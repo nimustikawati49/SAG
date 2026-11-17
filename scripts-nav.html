@@ -165,24 +165,42 @@ function openAkunModal_() {
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;' +
       'align-items:center;justify-content:center;z-index:1000002;padding:16px';
     m.innerHTML =
-      '<div class="akun-box" style="background:#fff;color:#1f2937;width:100%;max-width:400px;border-radius:16px;' +
-        'padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,.35);font-size:14px;line-height:1.55">' +
+      '<div class="akun-box" style="background:#fff;color:#1f2937;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;' +
+        'border-radius:16px;padding:20px 20px 16px;box-shadow:0 24px 60px rgba(0,0,0,.35);font-size:14px;line-height:1.55">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<b style="font-size:16px">👤 Akun Google</b>' +
+          '<b style="font-size:16px">👤 Masuk dengan Akun Lain</b>' +
           '<button type="button" onclick="closeAkunModal_()" aria-label="Tutup" style="background:#f3f4f6;color:#111;' +
             'border:none;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;padding:0">×</button>' +
         '</div>' +
-        '<div style="font-size:12.5px;color:#6b7280;margin-bottom:14px">Sedang masuk sebagai:<br>' +
+        '<div style="font-size:12.5px;color:inherit;opacity:.72;margin-bottom:12px">Sedang masuk sebagai:<br>' +
           '<b id="akunModalEmail" style="color:#4f46e5;word-break:break-all">—</b></div>' +
+        '<div style="font-size:12px;background:#fef3c7;color:#92400e;border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
+          'SAG (Google Apps Script) <b>hanya bisa dibuka bila satu akun Google saja yang masuk</b> di browser. ' +
+          'Kalau ada dua akun, muncul “Sorry, unable to open the file”. Di <b>HP &amp; Chromebook</b> akun tersimpan ' +
+          'di perangkat sehingga tidak bisa dikeluarkan dari web — pakai <b>Tab Samaran</b>.</div>' +
+
+        // CARA 1 — Tab Samaran (paling pasti; satu-satunya cara di HP/Chromebook)
+        '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">📱 Cara 1 — Tab Samaran (HP, Chromebook, laptop)</div>' +
+        '<button type="button" id="akunBtnSalin" onclick="salinLinkSag_()" style="display:block;width:100%;' +
+          'background:#6C63FF;color:#fff;border:none;font-weight:700;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:14px">' +
+          '📋 Salin Link SAG</button>' +
+        '<input id="akunLinkSag" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;margin:6px 0 6px;' +
+          'font-size:11px;padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;color:#374151;background:#f9fafb">' +
+        '<ol style="font-size:11.8px;color:inherit;opacity:.85;margin:0 0 14px;padding-left:18px;line-height:1.6">' +
+          '<li>Di Chrome, buka menu <b>⋮</b> → <b>Tab Samaran baru</b> (Incognito). Di laptop: <b>Ctrl+Shift+N</b>.</li>' +
+          '<li>Tempel link di kolom alamat, lalu buka.</li>' +
+          '<li>Masuk dengan akun Google yang ingin dipakai.</li>' +
+          '<li>Selesai — tutup Tab Samaran untuk keluar; akun di HP tidak terganggu.</li>' +
+        '</ol>' +
+
+        // CARA 2 — keluar dari semua akun (hanya efektif di laptop/PC biasa)
+        '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">💻 Cara 2 — Keluar semua akun (laptop/PC)</div>' +
         '<a id="akunBtnKeluar" target="_top" rel="noopener" style="display:block;text-decoration:none;text-align:center;' +
-          'background:#6C63FF;color:#fff;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:10px">' +
+          'background:#fee2e2;color:#b91c1c;font-weight:700;padding:10px 14px;border-radius:10px;margin-bottom:6px">' +
           '🚪 Keluar &amp; Pilih Akun Lain</a>' +
-        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 4px;line-height:1.6">' +
-          '1. Semua akun Google di browser ini akan <b>keluar</b> (Gmail, Drive, dll. juga ikut keluar).<br>' +
-          '2. Pilih akun yang ingin dipakai (atau <b>Gunakan akun lain</b>), lalu masukkan sandinya.<br>' +
-          '3. SAG terbuka lagi dengan akun tersebut.<br>' +
-          '<span style="color:#b45309">⚠️ Masuk dengan <b>satu akun saja</b> — jangan menambah akun kedua ' +
-          'di browser yang sama, karena SAG akan menolak membuka (“Sorry, unable to open the file”).</span></div>' +
+        '<div style="font-size:11.5px;color:inherit;opacity:.72;margin:0 2px 2px;line-height:1.6">' +
+          'Semua akun Google di browser ini keluar (Gmail, Drive, dll. ikut keluar), lalu masuk dengan <b>satu</b> akun. ' +
+          'Kalau setelah itu tetap muncul dua akun / error, pakai Cara 1.</div>' +
       '</div>';
     m.addEventListener('click', e => { if (e.target === m) closeAkunModal_(); });
     document.body.appendChild(m);
@@ -195,7 +213,35 @@ function openAkunModal_() {
   }
   document.getElementById('akunModalEmail').textContent = window._currentUserEmail || '(belum terdeteksi)';
   document.getElementById('akunBtnKeluar').href = _urlKeluarAkun_();
+  document.getElementById('akunLinkSag').value = _sagAppUrl_();
+  const bs = document.getElementById('akunBtnSalin');
+  if (bs) bs.textContent = '📋 Salin Link SAG';
   m.style.display = 'flex';
+}
+
+// Salin link SAG untuk ditempel di Tab Samaran. Aplikasi berjalan di
+// iframe Apps Script, jadi navigator.clipboard bisa ditolak — fallback
+// ke execCommand('copy'), lalu terakhir biarkan guru menyalin manual
+// dari kotak link yang sudah terseleksi.
+function salinLinkSag_() {
+  const inp = document.getElementById('akunLinkSag');
+  const btn = document.getElementById('akunBtnSalin');
+  const url = _sagAppUrl_();
+  const done = ok => {
+    if (btn) btn.textContent = ok ? '✅ Link tersalin — buka Tab Samaran lalu tempel' : '👆 Tekan lama link di bawah → Salin';
+    if (!ok && inp) { inp.focus(); inp.select(); }
+  };
+  const viaExec = () => {
+    try {
+      inp.value = url; inp.focus(); inp.select(); inp.setSelectionRange(0, url.length);
+      done(document.execCommand('copy'));
+    } catch (e) { done(false); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => done(true), viaExec);
+  } else {
+    viaExec();
+  }
 }
 
 function closeAkunModal_() {
