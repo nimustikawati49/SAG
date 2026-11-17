@@ -123,31 +123,38 @@ function restoreSidebarState_() {
 }
 
 /* =========================================================
-   AKUN — Ganti Akun / Keluar Akun
+   AKUN — Keluar Akun lalu pilih akun Google lain
    Supaya satu perangkat bisa dipakai dengan akun Google lain (mis.
    perangkat guru bermasalah, pinjam perangkat rekan). Aplikasi ini
    berjalan di dalam iframe Apps Script: dulu doLogout_() mengubah
    window.location (iframe-nya saja) → halaman Google menolak tampil
    di iframe, jadi tombol Keluar tidak pernah benar-benar bekerja.
    Sekarang pakai <a target="_top"> supaya SELURUH tab yang pindah.
+
+   Sengaja TIDAK ada "ganti akun tanpa keluar": Apps Script web app
+   selalu memakai akun Google PERTAMA di browser — kalau dua akun
+   masuk bersamaan dan yang dipilih bukan yang pertama, muncul
+   "Sorry, unable to open the file at present". Jadi semua akun
+   dikeluarkan dulu, baru masuk dengan SATU akun pilihan.
    ========================================================= */
-const SAG_APP_URL_FALLBACK_ = 'https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbwVY9gAfnWh7vaMd8ijSPVrUeT4jWo5-2u98qJsbbtEwvvw4cc6ZK51dt721hajUo7LRA/exec';
+const SAG_DEPLOY_ID_FALLBACK_ = 'AKfycbwVY9gAfnWh7vaMd8ijSPVrUeT4jWo5-2u98qJsbbtEwvvw4cc6ZK51dt721hajUo7LRA';
 
+// Link NETRAL (tanpa /a/<domain>/): Google sendiri yang mengarahkan ke
+// alamat domain milik akun yang dipilih. Link ber-domain (bentuk yang
+// dikembalikan ScriptApp.getService().getUrl()) mengunci ke satu domain
+// → akun dari domain lain kena "Sorry, unable to open the file".
 function _sagAppUrl_() {
-  const u = String(window.SAG_APP_URL || '').trim();
-  return /^https:\/\/script\.google\.com\//.test(u) ? u : SAG_APP_URL_FALLBACK_;
+  const m = String(window.SAG_APP_URL || '').match(/\/s\/([A-Za-z0-9_-]{20,})\/(exec|dev)/);
+  const id = m ? m[1] : SAG_DEPLOY_ID_FALLBACK_;
+  return 'https://script.google.com/macros/s/' + id + '/exec';
 }
 
-// Pilih akun lain TANPA mengeluarkan akun yang sedang masuk.
-function _urlGantiAkun_() {
-  return 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(_sagAppUrl_());
-}
-
-// Keluarkan SEMUA akun Google di browser ini, lalu langsung tampilkan
-// pemilih akun dan kembali ke aplikasi. Semua URL di rantai ini milik
-// Google, jadi parameter continue-nya diterima.
+// Keluarkan SEMUA akun Google di browser ini, lalu tampilkan halaman
+// masuk / pemilih akun dan kembali ke aplikasi. Semua URL di rantai ini
+// milik Google, jadi parameter continue-nya diterima.
 function _urlKeluarAkun_() {
-  return 'https://accounts.google.com/Logout?continue=' + encodeURIComponent(_urlGantiAkun_());
+  const chooser = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(_sagAppUrl_());
+  return 'https://accounts.google.com/Logout?continue=' + encodeURIComponent(chooser);
 }
 
 function openAkunModal_() {
@@ -167,17 +174,15 @@ function openAkunModal_() {
         '</div>' +
         '<div style="font-size:12.5px;color:#6b7280;margin-bottom:14px">Sedang masuk sebagai:<br>' +
           '<b id="akunModalEmail" style="color:#4f46e5;word-break:break-all">—</b></div>' +
-        '<a id="akunBtnGanti" target="_top" rel="noopener" style="display:block;text-decoration:none;text-align:center;' +
-          'background:#6C63FF;color:#fff;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:6px">' +
-          '🔄 Ganti Akun</a>' +
-        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 12px">Pilih / tambah akun Google lain. ' +
-          'Akun yang sekarang tetap masuk di browser ini.</div>' +
         '<a id="akunBtnKeluar" target="_top" rel="noopener" style="display:block;text-decoration:none;text-align:center;' +
-          'background:#fee2e2;color:#b91c1c;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:6px">' +
-          '🚪 Keluar Akun</a>' +
-        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 4px">Keluar dari <b>semua</b> akun Google di browser ini ' +
-          '(Gmail, Drive, dll. juga ikut keluar), lalu pilih akun untuk masuk lagi. ' +
-          'Pakai ini kalau <b>Ganti Akun</b> tetap membuka akun yang lama, atau di perangkat milik orang lain.</div>' +
+          'background:#6C63FF;color:#fff;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:10px">' +
+          '🚪 Keluar &amp; Pilih Akun Lain</a>' +
+        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 4px;line-height:1.6">' +
+          '1. Semua akun Google di browser ini akan <b>keluar</b> (Gmail, Drive, dll. juga ikut keluar).<br>' +
+          '2. Pilih akun yang ingin dipakai (atau <b>Gunakan akun lain</b>), lalu masukkan sandinya.<br>' +
+          '3. SAG terbuka lagi dengan akun tersebut.<br>' +
+          '<span style="color:#b45309">⚠️ Masuk dengan <b>satu akun saja</b> — jangan menambah akun kedua ' +
+          'di browser yang sama, karena SAG akan menolak membuka (“Sorry, unable to open the file”).</span></div>' +
       '</div>';
     m.addEventListener('click', e => { if (e.target === m) closeAkunModal_(); });
     document.body.appendChild(m);
@@ -189,7 +194,6 @@ function openAkunModal_() {
     box.style.color = dark ? '#e5e7eb' : '#1f2937';
   }
   document.getElementById('akunModalEmail').textContent = window._currentUserEmail || '(belum terdeteksi)';
-  document.getElementById('akunBtnGanti').href  = _urlGantiAkun_();
   document.getElementById('akunBtnKeluar').href = _urlKeluarAkun_();
   m.style.display = 'flex';
 }
@@ -199,7 +203,7 @@ function closeAkunModal_() {
   if (m) m.style.display = 'none';
 }
 
-/** Tombol "Keluar" di sidebar — sekarang membuka pilihan Ganti/Keluar Akun */
+/** Tombol "Keluar" di sidebar — membuka jendela Keluar & Pilih Akun Lain */
 function doLogout_() {
   openAkunModal_();
 }
