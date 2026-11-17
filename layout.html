@@ -208,9 +208,9 @@
       <span class="sb-icon">🌙</span>
       <span class="sb-label">Dark Mode</span>
     </button>
-    <button onclick="doLogout_()" class="sb-logout" data-tooltip="Keluar">
+    <button onclick="doLogout_()" class="sb-logout" data-tooltip="Ganti Akun / Keluar Akun">
       <span class="sb-icon">🚪</span>
-      <span class="sb-label">Keluar</span>
+      <span class="sb-label">Ganti / Keluar Akun</span>
     </button>
   </div>
 
@@ -2312,6 +2312,7 @@
     </p>
     <div style="margin-top:20px">
       <button onclick="closeLicenseModal()" style="width:100%">✅ Mengerti</button>
+      <button class="ghost" onclick="closeLicenseModal();openAkunModal_()" style="width:100%;margin-top:8px">🔄 Masuk dengan akun lain</button>
     </div>
   </div>
 </div>

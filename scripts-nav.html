@@ -122,11 +122,86 @@ function restoreSidebarState_() {
   }
 }
 
-/** Logout – arahkan ke halaman logout Google sesungguhnya */
-function doLogout_() {
-  if (confirm('Keluar dari aplikasi?\nAnda akan diarahkan ke halaman logout Google.')) {
-    window.location.href = 'https://accounts.google.com/Logout';
+/* =========================================================
+   AKUN — Ganti Akun / Keluar Akun
+   Supaya satu perangkat bisa dipakai dengan akun Google lain (mis.
+   perangkat guru bermasalah, pinjam perangkat rekan). Aplikasi ini
+   berjalan di dalam iframe Apps Script: dulu doLogout_() mengubah
+   window.location (iframe-nya saja) → halaman Google menolak tampil
+   di iframe, jadi tombol Keluar tidak pernah benar-benar bekerja.
+   Sekarang pakai <a target="_top"> supaya SELURUH tab yang pindah.
+   ========================================================= */
+const SAG_APP_URL_FALLBACK_ = 'https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbwVY9gAfnWh7vaMd8ijSPVrUeT4jWo5-2u98qJsbbtEwvvw4cc6ZK51dt721hajUo7LRA/exec';
+
+function _sagAppUrl_() {
+  const u = String(window.SAG_APP_URL || '').trim();
+  return /^https:\/\/script\.google\.com\//.test(u) ? u : SAG_APP_URL_FALLBACK_;
+}
+
+// Pilih akun lain TANPA mengeluarkan akun yang sedang masuk.
+function _urlGantiAkun_() {
+  return 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(_sagAppUrl_());
+}
+
+// Keluarkan SEMUA akun Google di browser ini, lalu langsung tampilkan
+// pemilih akun dan kembali ke aplikasi. Semua URL di rantai ini milik
+// Google, jadi parameter continue-nya diterima.
+function _urlKeluarAkun_() {
+  return 'https://accounts.google.com/Logout?continue=' + encodeURIComponent(_urlGantiAkun_());
+}
+
+function openAkunModal_() {
+  let m = document.getElementById('akunModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'akunModal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;' +
+      'align-items:center;justify-content:center;z-index:1000002;padding:16px';
+    m.innerHTML =
+      '<div class="akun-box" style="background:#fff;color:#1f2937;width:100%;max-width:400px;border-radius:16px;' +
+        'padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,.35);font-size:14px;line-height:1.55">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+          '<b style="font-size:16px">👤 Akun Google</b>' +
+          '<button type="button" onclick="closeAkunModal_()" aria-label="Tutup" style="background:#f3f4f6;color:#111;' +
+            'border:none;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;padding:0">×</button>' +
+        '</div>' +
+        '<div style="font-size:12.5px;color:#6b7280;margin-bottom:14px">Sedang masuk sebagai:<br>' +
+          '<b id="akunModalEmail" style="color:#4f46e5;word-break:break-all">—</b></div>' +
+        '<a id="akunBtnGanti" target="_top" rel="noopener" style="display:block;text-decoration:none;text-align:center;' +
+          'background:#6C63FF;color:#fff;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:6px">' +
+          '🔄 Ganti Akun</a>' +
+        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 12px">Pilih / tambah akun Google lain. ' +
+          'Akun yang sekarang tetap masuk di browser ini.</div>' +
+        '<a id="akunBtnKeluar" target="_top" rel="noopener" style="display:block;text-decoration:none;text-align:center;' +
+          'background:#fee2e2;color:#b91c1c;font-weight:700;padding:11px 14px;border-radius:10px;margin-bottom:6px">' +
+          '🚪 Keluar Akun</a>' +
+        '<div style="font-size:11.5px;color:#6b7280;margin:0 2px 4px">Keluar dari <b>semua</b> akun Google di browser ini ' +
+          '(Gmail, Drive, dll. juga ikut keluar), lalu pilih akun untuk masuk lagi. ' +
+          'Pakai ini kalau <b>Ganti Akun</b> tetap membuka akun yang lama, atau di perangkat milik orang lain.</div>' +
+      '</div>';
+    m.addEventListener('click', e => { if (e.target === m) closeAkunModal_(); });
+    document.body.appendChild(m);
   }
+  const box = m.querySelector('.akun-box');
+  if (box) {
+    const dark = document.body.classList.contains('dark');
+    box.style.background = dark ? '#1f2937' : '#fff';
+    box.style.color = dark ? '#e5e7eb' : '#1f2937';
+  }
+  document.getElementById('akunModalEmail').textContent = window._currentUserEmail || '(belum terdeteksi)';
+  document.getElementById('akunBtnGanti').href  = _urlGantiAkun_();
+  document.getElementById('akunBtnKeluar').href = _urlKeluarAkun_();
+  m.style.display = 'flex';
+}
+
+function closeAkunModal_() {
+  const m = document.getElementById('akunModal');
+  if (m) m.style.display = 'none';
+}
+
+/** Tombol "Keluar" di sidebar — sekarang membuka pilihan Ganti/Keluar Akun */
+function doLogout_() {
+  openAkunModal_();
 }
 
 /**

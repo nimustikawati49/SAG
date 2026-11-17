@@ -6,6 +6,10 @@
 /**************** WEB APP ENTRY POINT ****************/
 function doGet(e) {
   const tmpl = HtmlService.createTemplateFromFile('index');
+  // URL web app ini (deployment yang sedang dibuka) — dipakai tombol
+  // Ganti Akun / Keluar Akun untuk kembali ke aplikasi setelah memilih
+  // akun Google lain (lihat openAkunModal_() di scripts-nav.html).
+  try { tmpl.appUrl = ScriptApp.getService().getUrl() || ''; } catch (err) { tmpl.appUrl = ''; }
   return tmpl.evaluate()
     .setTitle('Sistem Akademik Guru')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)

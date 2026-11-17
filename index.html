@@ -78,6 +78,7 @@ function qs(name, def = null){
 
 <script>
 window.JurnalApp = window.JurnalApp || {};
+window.SAG_APP_URL = <?!= JSON.stringify(typeof appUrl === 'string' ? appUrl : '') ?>;
 </script>
 
 <?!= include('scripts-dashboard') ?>
