@@ -1521,7 +1521,10 @@ function nilaiHitungKatrolBatch_UI() {
       r.nilai_katrol = k;
       const rem = (r.nilai_remedial !== null && r.nilai_remedial !== '' && !isNaN(Number(r.nilai_remedial)))
         ? Number(r.nilai_remedial) : null;
-      r.nilai_akhir = rem !== null ? Math.round(Math.max(k, rem) * 100) / 100 : k;
+      // Nilai Akhir = bilangan bulat, dibulatkan SETELAH ambil tertinggi
+      // (katrol vs remedial). Harus identik dengan hitungKatrolBatch_()
+      // di api_nilai.js (yang dipakai saat Simpan/Import/Recalc).
+      r.nilai_akhir = Math.round(rem !== null ? Math.max(k, rem) : k);
     }
 
     // Update DOM cells
@@ -1531,7 +1534,7 @@ function nilaiHitungKatrolBatch_UI() {
       if (val === null || val === undefined) { el.innerHTML = '<span>-</span>'; return; }
       const n = Number(val);
       const red = colorKKM && n < kkm;
-      el.innerHTML = `<span ${red ? 'style="color:red;font-weight:700"' : ''}>${isNaN(n) ? '-' : n.toFixed(2)}</span>`;
+      el.innerHTML = `<span ${red ? 'style="color:red;font-weight:700"' : ''}>${isNaN(n) ? '-' : (Number.isInteger(n) ? n : n.toFixed(2))}</span>`;
     };
     updCell('nAkhir_'  + i, r.nilai_akhir, true);
 
@@ -1976,17 +1979,25 @@ function bukaCetakNilaiDariRiwayat_() {
  * @param {{min:number,max:number}} target
  * @returns {Array} nilai hasil katrol, null kalau raw-nya kosong
  */
-function _katrolKomponen_(rawVals, target) {
+function _katrolKomponen_(rawVals, target, step) {
   const nums = rawVals.filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v))).map(Number);
   if (!nums.length) return rawVals.map(() => null);
   const minA = Math.min(...nums), maxA = Math.max(...nums);
+  // Hasil katrol dibulatkan ke KELIPATAN `step` sesuai jumlah soal
+  // (PTS 25 soal → kelipatan 4, ASAS/ASAT 50 soal → kelipatan 2, skor
+  // maks 100): ke kelipatan terdekat, tepat di tengah → naik. Lalu
+  // dijaga tetap di dalam rentang target (kelipatan terkecil ≥ target
+  // min, terbesar ≤ target max) — mis. target maks 95 → PTS maks 92,
+  // ASAS/ASAT maks 94, tidak pernah melebihi target.
+  const s  = Number(step) > 0 ? Number(step) : 1;
+  const lo = Math.ceil(target.min / s - 1e-9) * s;
+  const hi = Math.max(lo, Math.floor(target.max / s + 1e-9) * s);
   return rawVals.map(v => {
     if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
     const n = Number(v);
     const k = (maxA === minA) ? target.min : ((n - minA) / (maxA - minA)) * (target.max - target.min) + target.min;
-    // Bulat utuh (bukan desimal) — nilai PTS/ASAS/ASAT yang dicetak/export
-    // memang dimaksudkan tampil sebagai angka bulat.
-    return Math.round(k);
+    const r = Math.floor(k / s + 0.5 + 1e-9) * s;
+    return Math.min(hi, Math.max(lo, r));
   });
 }
 
@@ -1997,10 +2008,11 @@ function _katrolKomponen_(rawVals, target) {
 // sebaliknya. Kunci 'sas' sengaja dipertahankan (bukan diganti 'asas')
 // supaya tidak perlu ubah value radio button di layout.html — cuma
 // label tampilannya yang diganti jadi ASAS.
+// step = kelipatan nilai katrol (PTS 25 soal → 4, ASAS/ASAT 50 soal → 2).
 const CETAK_KOMPONEN_MAP_ = {
-  pts : { field: 'pts', label: 'PTS' },
-  sas : { field: 'pas', label: 'ASAS' },
-  asat: { field: 'pat', label: 'ASAT' }
+  pts : { field: 'pts', label: 'PTS',  step: 4 },
+  sas : { field: 'pas', label: 'ASAS', step: 2 },
+  asat: { field: 'pat', label: 'ASAT', step: 2 }
 };
 
 /**
@@ -2015,7 +2027,7 @@ const CETAK_KOMPONEN_MAP_ = {
 function buildNilaiTableHtml_(kelasNm, rows, opts) {
   const { komponen, katrolTarget } = opts;
   const def = CETAK_KOMPONEN_MAP_[komponen] || CETAK_KOMPONEN_MAP_.pts;
-  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
+  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget, def.step);
 
   // Polos — tanpa anotasi "Rendah"/warna/Ket (T/BT), cuma angka atau
   // "Belum mengumpulkan" kalau memang belum ada nilainya sama sekali.
@@ -2296,7 +2308,7 @@ function doCetakNilai(mode = 'print') {
 function _buildNilaiExportTable_(rows, def, katrolTarget, kkm, judulTampil, namaSekolah, mapel, kelas) {
   const fmt = v => (v !== null && v !== undefined && !isNaN(Number(v)))
     ? Math.round(Number(v)) : '-';
-  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget);
+  const nilaiKatrol = _katrolKomponen_(rows.map(r => r[def.field]), katrolTarget, def.step);
 
   const meta = [
     [judulTampil], [],

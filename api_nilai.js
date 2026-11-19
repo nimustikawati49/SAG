@@ -146,9 +146,10 @@ function hitungKatrolBatch_(rows, minTarget, maxTarget) {
 
     const remedial = r.nilai_remedial !== null && r.nilai_remedial !== undefined && r.nilai_remedial !== ''
       ? Number(r.nilai_remedial) : null;
-    const nilai_akhir = remedial !== null
-      ? Math.round(Math.max(katrol, remedial) * 100) / 100
-      : katrol;
+    // Nilai Akhir = bilangan bulat, dibulatkan SETELAH ambil tertinggi
+    // (katrol vs remedial). Identik dengan nilaiHitungKatrolBatch_UI()
+    // di scripts-nilai.html supaya tampilan & data tersimpan sama.
+    const nilai_akhir = Math.round(remedial !== null ? Math.max(katrol, remedial) : katrol);
 
     return { ...r, nilai_katrol: katrol, nilai_akhir };
   });
@@ -1504,6 +1505,108 @@ function recalcNilai(payload) {
     nilai_katrol  : rnd2_(r.nilai_katrol),
     nilai_akhir   : rnd2_(r.nilai_akhir)
   }));
+}
+
+/* =========================================================
+   MIGRASI SEKALI JALAN — Nilai Akhir lama → bilangan bulat
+   Sejak v136 Nilai Akhir = Math.round(max(nilai_katrol, remedial)).
+   Data yang tersimpan sebelumnya masih 2 desimal; fungsi ini
+   menyesuaikannya di SEMUA spreadsheet data (central + tiap guru di
+   RESOURCE_MAP/DEPLOYMENTS) dengan rumus yang sama persis.
+   - Jalankan dari editor Apps Script oleh SuperAdmin (Run).
+   - Aman diulang: baris yang sudah bulat tidak diubah lagi.
+   - Sebelum mengubah, sheet NILAI_SISWA disalin utuh ke sheet
+     tersembunyi "NILAI_SISWA_SEBELUM_BULAT" (cadangan, sekali saja).
+   - Hanya kolom nilai_akhir yang ditulis; id baris tidak berubah,
+     jadi deteksi konflik edit (getNilaiDataVersion_) tidak terpengaruh.
+   ========================================================= */
+function migrasiNilaiAkhirBulat() {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK: hanya SuperAdmin.');
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Proses lain sedang berjalan, coba lagi sebentar.');
+  try {
+    // 1. Kumpulkan semua spreadsheet data (unik)
+    const ids = {};
+    const central = getCentralSpreadsheet_();
+    ids[central.getId()] = 'Central';
+    const addFrom = (sheetName, pick) => {
+      const sh = central.getSheetByName(sheetName);
+      if (!sh || sh.getLastRow() < 2) return;
+      const data = sh.getDataRange().getValues();
+      const h = data[0].map(x => String(x || '').toLowerCase().trim());
+      data.slice(1).forEach(r => {
+        const o = {}; h.forEach((k, i) => o[k] = r[i]);
+        const got = pick(o);
+        if (got && got.id && !ids[got.id]) ids[got.id] = got.name;
+      });
+    };
+    addFrom('RESOURCE_MAP', o => {
+      const type = String(o.resource_type || '').toLowerCase().trim();
+      const st   = String(o.status || 'active').toLowerCase().trim();
+      if (type !== 'data_spreadsheet' || st !== 'active') return null;
+      return { id: String(o.resource_id || '').trim(), name: String(o.email_guru || o.resource_name || '') };
+    });
+    addFrom('DEPLOYMENTS', o => ({ id: String(o.spreadsheet_id || '').trim(), name: String(o.owner_email || '') }));
+
+    const num = v => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(String(v).replace(',', '.'));
+      return isNaN(n) ? null : n;
+    };
+
+    // 2. Proses tiap spreadsheet
+    const laporan = [];
+    let totalUbah = 0;
+    Object.keys(ids).forEach(id => {
+      const item = { pemilik: ids[id], spreadsheet_id: id, baris: 0, diubah: 0, catatan: '' };
+      try {
+        const ss = SpreadsheetApp.openById(id);
+        const sh = ss.getSheetByName('NILAI_SISWA');
+        if (!sh || sh.getLastRow() < 2) { item.catatan = 'tidak ada data nilai'; laporan.push(item); return; }
+
+        const data = sh.getDataRange().getValues();
+        const h  = data[0].map(x => String(x || '').toLowerCase().trim());
+        const ia = h.indexOf('nilai_akhir'), ik = h.indexOf('nilai_katrol'), ir = h.indexOf('nilai_remedial');
+        if (ia < 0) { item.catatan = 'kolom nilai_akhir tidak ada'; laporan.push(item); return; }
+
+        let ubah = 0;
+        const kolom = data.slice(1).map(r => {
+          const lama = num(r[ia]);
+          const k    = ik >= 0 ? num(r[ik]) : null;
+          const rem  = ir >= 0 ? num(r[ir]) : null;
+          let baru;
+          if (k !== null)         baru = Math.round(rem !== null ? Math.max(k, rem) : k);
+          else if (lama !== null) baru = Math.round(lama);
+          else                    return [r[ia]];          // kosong → biarkan
+          if (lama === null || baru !== lama) { ubah++; return [baru]; }
+          return [r[ia]];
+        });
+        item.baris = kolom.length;
+
+        if (ubah > 0) {
+          if (!ss.getSheetByName('NILAI_SISWA_SEBELUM_BULAT')) {
+            const cadangan = sh.copyTo(ss).setName('NILAI_SISWA_SEBELUM_BULAT');
+            try { cadangan.hideSheet(); } catch (e) {}
+          }
+          sh.getRange(2, ia + 1, kolom.length, 1).setValues(kolom);
+          SpreadsheetApp.flush();
+        }
+        item.diubah = ubah;
+        totalUbah += ubah;
+      } catch (e) {
+        item.catatan = 'GAGAL: ' + (e && e.message ? e.message : e);
+      }
+      laporan.push(item);
+    });
+
+    try { logAudit('MIGRASI_NILAI_AKHIR_BULAT', 'semua', JSON.stringify({ spreadsheet: laporan.length, diubah: totalUbah })); } catch (e) {}
+    laporan.forEach(x => Logger.log([x.pemilik, x.spreadsheet_id, 'baris=' + x.baris, 'diubah=' + x.diubah, x.catatan].join(' | ')));
+    Logger.log('TOTAL baris Nilai Akhir disesuaikan: ' + totalUbah + ' dari ' + laporan.length + ' spreadsheet');
+    return { total_diubah: totalUbah, laporan: laporan };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* =========================================================
