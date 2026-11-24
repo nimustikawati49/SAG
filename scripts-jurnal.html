@@ -395,26 +395,156 @@ function _resetFotoInputs_(){
     const input = document.getElementById(id);
     if(input) input.value = '';
   });
-  ['fotoPreview1','fotoPreview2','fotoPreview3'].forEach(function(id){
-    const img = document.getElementById(id);
-    if(img){ img.src = ''; img.style.display = 'none'; }
-  });
-  ['fotoPlaceholder1','fotoPlaceholder2','fotoPlaceholder3'].forEach(function(id){
-    const ph = document.getElementById(id);
-    if(ph) ph.style.display = 'block';
+  [1,2,3].forEach(function(n){
+    _fotoDraft_[n] = null;          // hanya di memori — draf di perangkat dihapus lewat clearDraft_()
+    _tampilFotoSlot_(n, null);
   });
 }
 
 // Tiap slot foto punya DUA input file: fotoN (galeri) dan fotoNCamera
-// (ikon 📷, capture=environment). Dulu Simpan Jurnal hanya membaca fotoN,
-// jadi foto dari kamera tampil di preview tapi tidak pernah terkirim
-// ("terdeteksi tidak upload foto"). Sekarang: begitu salah satu dipilih,
-// input pasangannya dikosongkan — satu slot = satu foto, yang terakhir
-// dipilih yang dipakai — dan _fotoFileSlot_() membaca keduanya.
+// (ikon 📷, capture=environment). Begitu salah satu dipilih, input
+// pasangannya dikosongkan — satu slot = satu foto, yang terakhir dipilih
+// yang dipakai. _fotoFileSlot_() membaca keduanya, lalu foto DRAF hasil
+// pulihan (lihat bagian DRAF FOTO di bawah) kalau slot itu belum diisi
+// ulang setelah halaman di-refresh.
 function _fotoFileSlot_(n){
   const cam = document.getElementById('foto' + n + 'Camera');
   const gal = document.getElementById('foto' + n);
-  return (cam && cam.files && cam.files[0]) || (gal && gal.files && gal.files[0]) || null;
+  return (cam && cam.files && cam.files[0]) || (gal && gal.files && gal.files[0]) || _fotoDraft_[n] || null;
+}
+
+/* ===================================================================
+   DRAF FOTO — foto dokumentasi (kamera/galeri) ikut tersimpan sebagai
+   draf di perangkat (IndexedDB, per akun guru), supaya setelah halaman
+   di-refresh / HP mengeluarkan tab dari memori, guru tidak perlu foto
+   ulang. Dipulihkan OTOMATIS bersama draf teks (restoreDraft_), dihapus
+   bersama draf teks (clearDraft_: setelah simpan sukses / batal edit).
+   Foto disimpan sudah dikompres (maks 1280px, JPEG 72% — sama dengan
+   kompresi saat upload, jadi tidak ada penurunan kualitas tambahan).
+   Hanya untuk jurnal BARU (bukan mode edit), sama seperti draf teks.
+   ================================================================= */
+const _fotoDraft_ = { 1: null, 2: null, 3: null };
+
+function _fotoDraftDb_(){
+  return new Promise(function(resolve, reject){
+    if(!window.indexedDB) return reject(new Error('IndexedDB tidak tersedia'));
+    const req = indexedDB.open('sagJurnalDraft', 1);
+    req.onupgradeneeded = function(){ req.result.createObjectStore('foto'); };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror   = function(){ reject(req.error); };
+  });
+}
+function _fotoDraftOp_(mode, fn){
+  return _fotoDraftDb_().then(function(db){
+    return new Promise(function(resolve, reject){
+      const tx = db.transaction('foto', mode);
+      const out = fn(tx.objectStore('foto'));
+      tx.oncomplete = function(){ db.close(); resolve(out && out.result); };
+      tx.onerror = tx.onabort = function(){ db.close(); reject(tx.error); };
+    });
+  });
+}
+function _fotoDraftKey_(n){ return getDraftKey_() + '_foto' + n; }
+
+function _kompresFotoBlob_(file){
+  return new Promise(function(resolve){
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = function(){
+      const MAX_W = 1280, QUALITY = 0.72;
+      let w = img.width, h = img.height;
+      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      c.toBlob(function(b){ resolve(b || file); }, 'image/jpeg', QUALITY);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+// Kompresi berjalan async — kalau slot dihapus / jurnal keburu disimpan
+// (clearDraft_) sebelum kompresi selesai, hasilnya TIDAK boleh ditulis
+// lagi (nanti muncul sebagai draf basi di jurnal berikutnya).
+const _fotoDraftGen_ = { 1: 0, 2: 0, 3: 0 };
+function _simpanFotoDraft_(n, file){
+  if(editingJurnalId || !file) return;
+  const gen = ++_fotoDraftGen_[n];
+  _kompresFotoBlob_(file).then(function(blob){
+    if(gen !== _fotoDraftGen_[n] || editingJurnalId) return;
+    return _fotoDraftOp_('readwrite', function(st){ st.put(blob, _fotoDraftKey_(n)); });
+  }).catch(function(e){ console.warn('[DRAF FOTO] gagal simpan', e); });
+}
+function _hapusFotoDraft_(n){
+  _fotoDraftGen_[n]++;
+  _fotoDraftOp_('readwrite', function(st){ st.delete(_fotoDraftKey_(n)); })
+    .catch(function(){});
+}
+function _hapusFotoDraftSemua_(){
+  [1,2,3].forEach(function(n){ _fotoDraft_[n] = null; _hapusFotoDraft_(n); });
+}
+
+function _restoreFotoDraft_(){
+  if(editingJurnalId) return;
+  let jumlah = 0, selesai = 0;
+  [1,2,3].forEach(function(n){
+    _fotoDraftOp_('readonly', function(st){ return st.get(_fotoDraftKey_(n)); })
+      .then(function(blob){
+        // Jangan timpa kalau guru sudah memilih foto baru di slot ini
+        const cam = document.getElementById('foto' + n + 'Camera');
+        const gal = document.getElementById('foto' + n);
+        const sudahIsi = (cam && cam.files && cam.files[0]) || (gal && gal.files && gal.files[0]);
+        if(blob && !sudahIsi && !editingJurnalId){
+          _fotoDraft_[n] = new File([blob], 'foto' + n + '_draft.jpg', { type: blob.type || 'image/jpeg' });
+          _tampilFotoSlot_(n, _fotoDraft_[n]);
+          jumlah++;
+        }
+      })
+      .catch(function(){})
+      .then(function(){
+        if(++selesai === 3 && jumlah && typeof showToast === 'function')
+          showToast('📷 ' + jumlah + ' foto dokumentasi draft dipulihkan', 'info', 3000);
+      });
+  });
+}
+
+// Preview + tombol ✕ (hapus foto slot ini, termasuk drafnya)
+function _tampilFotoSlot_(n, file){
+  const img = document.getElementById('fotoPreview' + n);
+  const ph  = document.getElementById('fotoPlaceholder' + n);
+  if(img){
+    if(file){
+      const url = URL.createObjectURL(file);
+      img.onload = function(){ URL.revokeObjectURL(url); };
+      img.src = url; img.style.display = 'block';
+    } else { img.src = ''; img.style.display = 'none'; }
+  }
+  if(ph) ph.style.display = file ? 'none' : 'block';
+
+  const gal = document.getElementById('foto' + n);
+  const slot = gal ? gal.closest('.gw-foto-slot') : null;
+  if(!slot) return;
+  let btn = slot.querySelector('.foto-hapus-btn');
+  if(!btn){
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'foto-hapus-btn';
+    btn.title = 'Hapus foto ini';
+    btn.textContent = '✕';
+    btn.style.cssText = 'position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:none;' +
+      'background:rgba(220,38,38,.9);color:#fff;font-size:12px;line-height:22px;padding:0;cursor:pointer;z-index:2;display:none';
+    btn.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      ['foto' + n, 'foto' + n + 'Camera'].forEach(function(id){ const el = document.getElementById(id); if(el) el.value = ''; });
+      _fotoDraft_[n] = null;
+      _hapusFotoDraft_(n);
+      _tampilFotoSlot_(n, null);
+    });
+    slot.appendChild(btn);
+  }
+  btn.style.display = file ? 'block' : 'none';
 }
 
 (function _bindFotoSlotPairs_(){
@@ -424,8 +554,16 @@ function _fotoFileSlot_(n){
       const cam = document.getElementById('foto' + n + 'Camera');
       if(!gal || !cam || gal.dataset.pairBound === '1') return;
       gal.dataset.pairBound = '1';
-      gal.addEventListener('change', function(){ if(gal.files && gal.files[0]) cam.value = ''; });
-      cam.addEventListener('change', function(){ if(cam.files && cam.files[0]) gal.value = ''; });
+      const onPick = function(dipilih, pasangan){
+        const f = dipilih.files && dipilih.files[0];
+        if(!f) return;
+        pasangan.value = '';
+        _fotoDraft_[n] = null;          // foto baru menggantikan draf lama
+        _tampilFotoSlot_(n, f);
+        _simpanFotoDraft_(n, f);
+      };
+      gal.addEventListener('change', function(){ onPick(gal, cam); });
+      cam.addEventListener('change', function(){ onPick(cam, gal); });
     });
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
@@ -1709,6 +1847,9 @@ function saveDraft_() {
 }
 
 function restoreDraft_() {
+  // Foto draf dipulihkan dulu, terpisah dari draf teks — guru bisa saja
+  // sudah memotret tapi belum mengetik apa pun (draf teks kosong).
+  try { if (!editingJurnalId) _restoreFotoDraft_(); } catch(e) {}
   try {
     const raw = localStorage.getItem(getDraftKey_());
     if (!raw) return;
@@ -1765,6 +1906,7 @@ function restoreDraft_() {
 
 function clearDraft_() {
   try { localStorage.removeItem(getDraftKey_()); } catch(e) {}
+  try { _hapusFotoDraftSemua_(); } catch(e) {}
 }
 
 // Pasang auto-save listeners setelah DOM siap
