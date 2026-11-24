@@ -391,7 +391,7 @@ function _toggleExistingFoto_(i){
 function _resetFotoInputs_(){
   _existingFoto_ = [];
   _renderExistingFotoBox_();
-  ['foto1','foto2','foto3'].forEach(function(id){
+  ['foto1','foto2','foto3','foto1Camera','foto2Camera','foto3Camera'].forEach(function(id){
     const input = document.getElementById(id);
     if(input) input.value = '';
   });
@@ -399,7 +399,38 @@ function _resetFotoInputs_(){
     const img = document.getElementById(id);
     if(img){ img.src = ''; img.style.display = 'none'; }
   });
+  ['fotoPlaceholder1','fotoPlaceholder2','fotoPlaceholder3'].forEach(function(id){
+    const ph = document.getElementById(id);
+    if(ph) ph.style.display = 'block';
+  });
 }
+
+// Tiap slot foto punya DUA input file: fotoN (galeri) dan fotoNCamera
+// (ikon 📷, capture=environment). Dulu Simpan Jurnal hanya membaca fotoN,
+// jadi foto dari kamera tampil di preview tapi tidak pernah terkirim
+// ("terdeteksi tidak upload foto"). Sekarang: begitu salah satu dipilih,
+// input pasangannya dikosongkan — satu slot = satu foto, yang terakhir
+// dipilih yang dipakai — dan _fotoFileSlot_() membaca keduanya.
+function _fotoFileSlot_(n){
+  const cam = document.getElementById('foto' + n + 'Camera');
+  const gal = document.getElementById('foto' + n);
+  return (cam && cam.files && cam.files[0]) || (gal && gal.files && gal.files[0]) || null;
+}
+
+(function _bindFotoSlotPairs_(){
+  const bind = function(){
+    [1,2,3].forEach(function(n){
+      const gal = document.getElementById('foto' + n);
+      const cam = document.getElementById('foto' + n + 'Camera');
+      if(!gal || !cam || gal.dataset.pairBound === '1') return;
+      gal.dataset.pairBound = '1';
+      gal.addEventListener('change', function(){ if(gal.files && gal.files[0]) cam.value = ''; });
+      cam.addEventListener('change', function(){ if(cam.files && cam.files[0]) gal.value = ''; });
+    });
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
 
 /* ================= KELAS & SISWA ================= */
 let pendingAbsensiData = []; // untuk restore absensi saat editJurnal
@@ -1529,9 +1560,9 @@ async function simpan(){
     // "dipertahankan"), atau hapus sebagian foto lama tanpa upload baru,
     // atau ganti (hapus lama + upload baru) — semua kombinasi selama
     // totalnya tetap 1-3.
-    const fileInputs = ['foto1','foto2','foto3'];
-    const fotoFiles = fileInputs
-      .map(id => document.getElementById(id).files[0])
+    // Baca slot 1-3 dari galeri MAUPUN kamera (lihat _fotoFileSlot_).
+    const fotoFiles = [1,2,3]
+      .map(n => _fotoFileSlot_(n))
       .filter(f => f);
     const fotoDipertahankan = _existingFoto_.filter(f => !f.removed);
     const totalFotoAkhir = fotoDipertahankan.length + fotoFiles.length;
