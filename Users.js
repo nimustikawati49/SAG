@@ -104,8 +104,115 @@ function _autoRegisterTrialUser_(email) {
     }
     var now = new Date();
     sh.appendRow([email, 'admin', 'trial', now]);
+    // WAJIB flush sebelum lock dilepas: tanpa ini tulisan appendRow masih
+    // tertahan di buffer, proses lain (login pertama memicu belasan
+    // panggilan getAuth hampir bersamaan) membaca sheet yang BELUM berisi
+    // baris ini lalu ikut appendRow → satu email jadi beberapa baris.
+    SpreadsheetApp.flush();
     try { logAudit('AUTO_REGISTER_TRIAL', email, 'Trial 30 hari dimulai'); } catch (e2) {}
     return { dibuat: now };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+/**
+ * _gabungAkunGanda_()
+ * Satukan baris USERS yang emailnya sama (sisa bug auto-register lama,
+ * lihat flush di atas) jadi SATU baris — baris paling atas dipertahankan,
+ * sisanya dihapus. Aksi SuperAdmin (aktifkan, ganti role, kode sekolah,
+ * hapus) selama ini cuma mengenai baris PERTAMA yang cocok, jadi baris
+ * ganda bikin status guru terlihat tidak berubah. Aturan gabung:
+ *  - status : active > trial > inactive (ambil yang "paling aktif")
+ *  - role   : kalau ada baris yang bukan 'admin' (kepsek/superadmin,
+ *             berarti pernah diubah SuperAdmin) → pakai itu
+ *  - dibuat : tanggal paling awal (masa trial tidak ter-reset)
+ *  - kolom lain (kode_sekolah, dst): nilai pertama yang tidak kosong
+ * Dipanggil otomatis saat SuperAdmin membuka daftar akun. Aman diulang.
+ */
+function _gabungAkunGanda_() {
+  var sh = _ensureUsersKodeSekolahColumn_();
+  if (!sh || sh.getLastRow() < 3) return 0;
+  // Daftar akun dimuat dari DUA tempat di panel SuperAdmin hampir
+  // bersamaan — penanda cache memastikan cuma SATU proses gabung yang
+  // jalan dalam 2 menit (proses kedua langsung lewat). Kejadian 24-11-2026:
+  // dua proses berjalan berbarengan, yang kedua membaca sheet saat yang
+  // pertama baru setengah menghapus → menghapus nomor baris yang sudah
+  // bergeser (baris akun lain ikut terhapus).
+  var cache = CacheService.getScriptCache();
+  if (cache.get('GABUNG_AKUN_JALAN')) return 0;
+  cache.put('GABUNG_AKUN_JALAN', '1', 120);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return 0;
+  // Sebelum menulis/menghapus, isi baris dibaca ULANG dan dicocokkan
+  // (email + tanggal dibuat) — kalau sudah bergeser/berubah, baris itu
+  // TIDAK disentuh sama sekali.
+  var cocok = function(nomorBaris, asli) {
+    try {
+      var cur = sh.getRange(nomorBaris, 1, 1, 4).getValues()[0];
+      var tgl = function(v) { var d = v ? new Date(v) : null; return d && !isNaN(d) ? d.getTime() : String(v || ''); };
+      return String(cur[0] || '').toLowerCase().trim() === String(asli[0] || '').toLowerCase().trim() &&
+             tgl(cur[3]) === tgl(asli[3]);
+    } catch (e) { return false; }
+  };
+  try {
+    var data = sh.getDataRange().getValues();
+    var grup = {};
+    for (var i = 1; i < data.length; i++) {
+      var em = String(data[i][0] || '').toLowerCase().trim();
+      if (!em) continue;
+      (grup[em] = grup[em] || []).push(i);
+    }
+    var prioStatus = { active: 3, trial: 2, inactive: 1 };
+    var hapus = [], emails = [];
+    Object.keys(grup).forEach(function(em) {
+      var idx = grup[em];
+      if (idx.length < 2) return;
+      var baris = idx.map(function(k) { return data[k]; });
+      var hasil = baris[0].slice();
+      // status
+      var best = String(hasil[2] || '').toLowerCase().trim();
+      baris.forEach(function(r) {
+        var s = String(r[2] || '').toLowerCase().trim();
+        if ((prioStatus[s] || 0) > (prioStatus[best] || 0)) best = s;
+      });
+      hasil[2] = best || hasil[2];
+      // role
+      var roleKhusus = baris.map(function(r) { return String(r[1] || '').toLowerCase().trim(); })
+                            .filter(function(r) { return r && r !== 'admin'; })[0];
+      if (roleKhusus) hasil[1] = roleKhusus;
+      // dibuat paling awal
+      baris.forEach(function(r) {
+        var d = r[3] ? new Date(r[3]) : null;
+        var cur = hasil[3] ? new Date(hasil[3]) : null;
+        if (d && !isNaN(d) && (!cur || isNaN(cur) || d < cur)) hasil[3] = r[3];
+      });
+      // kolom lain: nilai pertama yang tidak kosong
+      for (var c = 4; c < hasil.length; c++) {
+        if (hasil[c] !== '' && hasil[c] !== null) continue;
+        for (var b = 1; b < baris.length; b++) {
+          if (baris[b][c] !== '' && baris[b][c] !== null) { hasil[c] = baris[b][c]; break; }
+        }
+      }
+      if (!cocok(idx[0] + 1, data[idx[0]])) return;   // baris utama sudah berubah → lewati email ini
+      sh.getRange(idx[0] + 1, 1, 1, hasil.length).setValues([hasil]);
+      idx.slice(1).forEach(function(k) { hapus.push({ row: k + 1, asli: data[k] }); });
+      emails.push(em + ' (' + idx.length + ' baris)');
+      if (typeof _invalidateAuthCache_ === 'function') _invalidateAuthCache_(em);
+    });
+    // hapus dari bawah supaya nomor baris di atasnya tidak bergeser —
+    // tiap baris dicek ulang dulu, salah sasaran = dilewati
+    var terhapus = 0;
+    hapus.sort(function(a, b) { return b.row - a.row; }).forEach(function(h) {
+      if (!cocok(h.row, h.asli)) return;
+      sh.deleteRow(h.row);
+      terhapus++;
+    });
+    if (terhapus) {
+      SpreadsheetApp.flush();
+      try { logAudit('GABUNG_AKUN_GANDA', emails.join(', '), terhapus + ' baris ganda dihapus'); } catch (e) {}
+    }
+    return terhapus;
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -121,6 +228,7 @@ function _autoRegisterTrialUser_(email) {
  */
 function getGuruActivationList() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK');
+  try { _gabungAkunGanda_(); } catch (e) { try { logError_('GABUNG_AKUN_GANDA', e); } catch (e2) {} }
   var sh = _ensureUsersKodeSekolahColumn_();
   if (!sh) return [];
   var data = sh.getDataRange().getValues();
