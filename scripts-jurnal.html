@@ -293,7 +293,11 @@ function showTab(id){
   // 🔥 LOAD JURNAL GURU WALI
   if(id === 'jurnalGuruWali'){
     loadJurnalGuruWali();
-    setTimeout(function() { if (typeof gwRestoreDraft_ === 'function') gwRestoreDraft_(); }, 300);
+    setTimeout(function() {
+      if (typeof gwRestoreDraft_ === 'function') gwRestoreDraft_();
+      // Foto draf Guru Wali (scripts-dashboard.html) dipulihkan bersama draf teksnya
+      if (typeof gwRestoreFotoDraft_ === 'function') gwRestoreFotoDraft_();
+    }, 300);
   }
 
   // 🔥 DASHBOARD FIX

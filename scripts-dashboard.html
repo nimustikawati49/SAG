@@ -964,19 +964,81 @@ var _gwFotos = { 1: null, 2: null }; // stored compressed data URLs
 function gwPickFoto_(slot, input){
   const file = input.files[0];
   if(!file) return;
+  const gen = ++_gwFotoDraftGen_[slot];
   _gwCompressFoto_(file, function(dataUrl){
-    _gwFotos[slot] = { data: dataUrl, type: 'image/jpeg', name: file.name };
-    const preview = document.getElementById('gwFotoPreview'+slot);
-    const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
-    const removeBtn   = document.getElementById('gwFotoRemove'+slot);
-    if(preview){ preview.src = dataUrl; preview.style.display = 'block'; }
-    if(placeholder) placeholder.style.display = 'none';
-    if(removeBtn) removeBtn.style.display = 'block';
+    if(gen !== _gwFotoDraftGen_[slot]) return; // slot dihapus/diganti selama kompresi
+    _gwTampilFoto_(slot, { data: dataUrl, type: 'image/jpeg', name: file.name });
+    _gwSimpanFotoDraft_(slot, dataUrl, gen);
   });
   input.value = ''; // biar bisa pilih file yang sama lagi dari sumber lain (kamera/galeri) tanpa perlu ganti nama
 }
 
+function _gwTampilFoto_(slot, foto){
+  _gwFotos[slot] = foto;
+  const preview = document.getElementById('gwFotoPreview'+slot);
+  const placeholder = document.getElementById('gwFotoPlaceholder'+slot);
+  const removeBtn   = document.getElementById('gwFotoRemove'+slot);
+  if(preview){ preview.src = foto.data; preview.style.display = 'block'; }
+  if(placeholder) placeholder.style.display = 'none';
+  if(removeBtn) removeBtn.style.display = 'block';
+}
+
+/* ── DRAF FOTO Jurnal Guru Wali ──
+   Sama seperti draf foto Jurnalku (scripts-jurnal.html, DB IndexedDB
+   'sagJurnalDraft' via _fotoDraftOp_): foto yang sudah dikompres disimpan
+   di perangkat per akun, dipulihkan OTOMATIS bersama draf teks saat tab
+   Guru Wali dibuka (gwRestoreFotoDraft_, dipanggil dari showTab), dihapus
+   saat jurnal berhasil disimpan, tombol × ditekan, atau Reset form.
+   Hanya untuk entri BARU — foto lama di mode Edit tidak disimpan sebagai
+   draf, dan masuk mode Edit/Duplikat tidak menghapus draf entri baru. */
+var _gwFotoDraftGen_ = { 1: 0, 2: 0 };
+function _gwFotoDraftKey_(slot){
+  const base = (typeof gwGetDraftKey_ === 'function') ? gwGetDraftKey_() : ('jurnalWaliDraft_' + (window._currentUserEmail || 'anon'));
+  return base + '_foto' + slot;
+}
+function _gwSimpanFotoDraft_(slot, dataUrl, gen){
+  if(editingJurnalWaliId || typeof _fotoDraftOp_ !== 'function') return;
+  if(gen !== undefined && gen !== _gwFotoDraftGen_[slot]) return; // sudah dihapus/diganti saat kompresi berjalan
+  _fotoDraftOp_('readwrite', function(st){ st.put(dataUrl, _gwFotoDraftKey_(slot)); })
+    .catch(function(e){ console.warn('[DRAF FOTO WALI] gagal simpan', e); });
+}
+function _gwHapusFotoDraft_(slot){
+  _gwFotoDraftGen_[slot]++;
+  if(typeof _fotoDraftOp_ !== 'function') return;
+  _fotoDraftOp_('readwrite', function(st){ st.delete(_gwFotoDraftKey_(slot)); }).catch(function(){});
+}
+function _gwHapusFotoDraftSemua_(){ _gwHapusFotoDraft_(1); _gwHapusFotoDraft_(2); }
+
+function gwRestoreFotoDraft_(){
+  if(editingJurnalWaliId || typeof _fotoDraftOp_ !== 'function') return;
+  let jumlah = 0, selesai = 0;
+  [1,2].forEach(function(slot){
+    _fotoDraftOp_('readonly', function(st){ return st.get(_gwFotoDraftKey_(slot)); })
+      .then(function(dataUrl){
+        // Jangan timpa slot yang sudah terisi (foto baru / mode edit)
+        if(typeof dataUrl === 'string' && dataUrl && !_gwFotos[slot] && !editingJurnalWaliId){
+          _gwTampilFoto_(slot, { data: dataUrl, type: 'image/jpeg', name: 'foto' + slot + '_draft.jpg' });
+          jumlah++;
+        }
+      })
+      .catch(function(){})
+      .then(function(){
+        if(++selesai === 2 && jumlah && typeof showToast === 'function')
+          showToast('📷 ' + jumlah + ' foto jurnal wali draft dipulihkan', 'info', 3000);
+      });
+  });
+}
+
+// Tombol × di slot foto — hapus fotonya DAN drafnya
 function gwRemoveFoto_(slot){
+  _gwKosongkanSlot_(slot);
+  if(!editingJurnalWaliId) _gwHapusFotoDraft_(slot);
+  else _gwFotoDraftGen_[slot]++;   // batalkan kompresi yang mungkin masih berjalan
+}
+
+// Kosongkan tampilan slot saja (draf di perangkat tetap) — dipakai saat
+// masuk mode Edit/Duplikat supaya draf entri baru tidak ikut terhapus.
+function _gwKosongkanSlot_(slot){
   _gwFotos[slot] = null;
   const input   = document.getElementById('gwFotoInput'+slot);
   const inputCam= document.getElementById('gwFotoInput'+slot+'Camera');
@@ -1092,6 +1154,7 @@ async function simpanJurnalWali(){
           showToast(isEdit ? '✅ Jurnal berhasil diperbarui' : '✅ Jurnal berhasil disimpan', 'success');
         }
         gwClearDraft_();
+        _gwHapusFotoDraftSemua_(); // draf foto ikut dihapus setelah simpan sukses
         editingJurnalWaliId = null;
         resetFormGuruWali();
         _setModeEditJurnalWaliUI_(false);
@@ -1128,9 +1191,12 @@ function resetFormGuruWali(){
     tglEl.value = new Date().toISOString().slice(0,10);
     if(typeof autoFillHariWali === 'function') autoFillHariWali(tglEl.value);
   }
-  // reset photo slots
-  gwRemoveFoto_(1);
-  gwRemoveFoto_(2);
+  // reset photo slots — draf foto ikut dihapus HANYA kalau yang direset
+  // form entri baru (bukan batal Edit, supaya draf entri baru tetap ada)
+  const hapusDrafFoto = !editingJurnalWaliId;
+  _gwKosongkanSlot_(1);
+  _gwKosongkanSlot_(2);
+  if(hapusDrafFoto) _gwHapusFotoDraftSemua_();
   // batal mode edit kalau sedang aktif (mis. user klik Reset di tengah edit)
   if(editingJurnalWaliId){
     editingJurnalWaliId = null;
@@ -1199,8 +1265,8 @@ function editJurnalWali_(id){
 
   // Muat foto lama ke slot 1/2 — bisa dihapus lewat tombol × yang sudah
   // ada, atau diganti dengan upload baru (galeri/kamera) di slot yang sama.
-  gwRemoveFoto_(1);
-  gwRemoveFoto_(2);
+  _gwKosongkanSlot_(1);
+  _gwKosongkanSlot_(2);
   const urls = (x.dokumentasi && x.dokumentasi !== '-')
     ? x.dokumentasi.split(',').map(u => u.trim()).filter(Boolean)
     : [];
@@ -1252,8 +1318,8 @@ function duplikatJurnalWali_(id){
 
   // Foto TIDAK ikut diduplikat (sama seperti "Salin dari entri terakhir") —
   // upload foto baru dulu di form kalau perlu, biar tidak dikira foto yang sama dipakai 2 entri.
-  gwRemoveFoto_(1);
-  gwRemoveFoto_(2);
+  _gwKosongkanSlot_(1);
+  _gwKosongkanSlot_(2);
 
   _setModeEditJurnalWaliUI_(false);
   if(tglEl && tglEl.scrollIntoView) tglEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
