@@ -1193,7 +1193,7 @@ function muatDataNilai(forceLocked = false) {
   if (typeof startProgress === 'function') startProgress();
 
   const done = { siswa: isActivePeriode ? false : true, nilai: false, setting: false };
-  let siswaData = [], nilaiData = [], nilaiVersion = 0, settingData = {}, catatanData = {};
+  let siswaData = [], nilaiData = [], nilaiVersion = 0, settingData = {}, catatanData = {}, raporLaluData = {};
 
   const tryRender = () => {
     if (!done.siswa || !done.nilai || !done.setting) return;
@@ -1240,6 +1240,7 @@ function muatDataNilai(forceLocked = false) {
     // Kolom Tugas Kelompok tampil per kolom (TK1/TK2/TK3) kalau sudah ada
     // nilainya atau sudah ditambahkan guru — lihat _tkTampil_().
     nilaiState.catatan = catatanData || {};
+    nilaiState.raporLalu = raporLaluData || {};
 
     // Isi pengaturan ke form — HARUS sebelum nilaiHitungKatrolBatch_UI() di
     // bawah, soalnya fungsi itu baca nilaiMinTarget/nilaiMaxTarget langsung
@@ -1289,6 +1290,7 @@ function muatDataNilai(forceLocked = false) {
       nilaiData = d?.rows || [];
       nilaiVersion = d?.version || 0;
       catatanData = d?.catatan || {};
+      raporLaluData = d?.rapor_lalu || {};
       if (!isActivePeriode) {
         // Roster periode riwayat = siswa yang punya nilai tersimpan di periode ini.
         siswaData = nilaiData
@@ -1303,6 +1305,7 @@ function muatDataNilai(forceLocked = false) {
       nilaiData = [];
       nilaiVersion = 0;
       catatanData = {};
+      raporLaluData = {};
       if (!isActivePeriode) { siswaData = []; done.siswa = true; }
       done.nilai = true;
       tryRender();
@@ -1564,9 +1567,9 @@ function renderTabelNilai() {
         <th rowspan="2">PTS</th>
         <th rowspan="2">${pasPat}</th>
         ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>'
-          + `<th rowspan="2" style="background:#6b7280" title="Otomatis — rata-rata dari Rata Tugas &amp; Rata UH, belum termasuk PTS/${pasPat}">Rata Total ℹ️</th>` : ''}
-        <th rowspan="2" style="background:#4338ca" title="Otomatis (nilai murni, sebelum Katrol) — 40% Rata Total + 30% PTS + 30% ${pasPat}">Nilai Akhir Murni ℹ️</th>
-        <th rowspan="2" style="background:#be123c" title="Otomatis — Nilai Akhir Murni yang sudah disesuaikan Katrol (tertinggi dari katrol/remedial), ini nilai yang dipakai untuk rapor/predikat">Nilai Raport Katrol ℹ️</th>
+          + `<th rowspan="2" style="background:#6b7280" title="Informasi saja — rata-rata dari Rata Tugas &amp; Rata UH (tidak dipakai di rumus Nilai Akhir Murni)">Rata Total ℹ️</th>` : ''}
+        <th rowspan="2" style="background:#4338ca" title="Otomatis (nilai murni, sebelum Katrol) — 30% Rata Tugas + 20% Rata UH + 25% PTS + 25% ${pasPat}">Nilai Akhir Murni ℹ️</th>
+        <th rowspan="2" style="background:#be123c" title="Otomatis — Nilai Akhir Murni setelah Katrol (tertinggi dari katrol/remedial, bulat). Siswa yang semua nilainya lengkap minimal rapor semester lalu + 1 (tanda ↑). Maksimal 94.">Nilai Raport Katrol ℹ️</th>
       </tr>
       <tr>
         ${kompTh('tgs1')}${kompTh('tgs2')}${kompTh('tgs3')}
@@ -1617,6 +1620,7 @@ function renderTabelNilai() {
     </tr>`;
   }).join('');
 
+  nilaiState.rows.forEach((r, i) => _tandaiRaporLalu_(r, i));
   updateNilaiKelengkapanInfo_();
 }
 
@@ -1640,15 +1644,43 @@ function nilaiHitungRow_(r, semester) {
   // Sama persis dengan hitungNilaiRow_() di api_nilai.js: renormalisasi
   // bobot kalau belum semua komponen terisi, supaya preview live di
   // grid ini cocok dengan yang bakal tersimpan server saat Simpan Nilai.
+  // v144: 30% rata Tugas (TGS+TK) + 20% rata UH + 25% PTS + 25% ASAS/ASAT.
   const komponenAsli = [];
-  if (nilai_fix !== null) komponenAsli.push({ v: nilai_fix, w: 0.4 });
-  if (pts_num   !== null) komponenAsli.push({ v: pts_num,   w: 0.3 });
-  if (uas       !== null) komponenAsli.push({ v: uas,       w: 0.3 });
+  if (rata_tugas !== null) komponenAsli.push({ v: rata_tugas, w: 0.30 });
+  if (rata_uh    !== null) komponenAsli.push({ v: rata_uh,    w: 0.20 });
+  if (pts_num    !== null) komponenAsli.push({ v: pts_num,    w: 0.25 });
+  if (uas        !== null) komponenAsli.push({ v: uas,        w: 0.25 });
   const totalBobotAsli = komponenAsli.reduce((a, k) => a + k.w, 0);
   const nilai_asli = totalBobotAsli > 0
     ? komponenAsli.reduce((a, k) => a + k.v * k.w, 0) / totalBobotAsli
     : null;
   return { rata_uh, rata_tugas, nilai_fix, nilai_asli };
+}
+
+/* ---- Aturan Rapor v144 (identik dengan _nilaiRaporFinal_ dkk di api_nilai.js) ---- */
+const NILAI_RAPOR_MAKS_UI_ = 94;
+function _isiNilaiUI_(v) { return v !== null && v !== undefined && v !== '' && !isNaN(Number(v)); }
+function _komponenDinilaiUI_(rows, semester) {
+  const isGenap = String(semester || '').toLowerCase().includes('genap');
+  const daftar = ['tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','uh1','uh2','uh3','pts', isGenap ? 'pat' : 'pas'];
+  return daftar.filter(f => rows.some(r => _isiNilaiUI_(r[f])));
+}
+/** Tooltip rapor semester lalu + tanda ↑ kalau Nilai Rapor naik karena aturan +1 */
+function _tandaiRaporLalu_(r, i) {
+  const el = document.getElementById('nAkhir_' + i);
+  if (!el || !r) return;
+  el.title = (r._raporLalu !== null && r._raporLalu !== undefined)
+    ? 'Rapor semester lalu: ' + r._raporLalu + (r._naikLalu ? ' → dinaikkan jadi rapor lalu + 1 (siswa tuntas)' : '')
+    : 'Belum ada rapor semester lalu di SAG untuk siswa ini';
+  if (r._naikLalu && !el.querySelector('.naik-lalu'))
+    el.insertAdjacentHTML('beforeend', '<sup class="naik-lalu" style="color:#16a34a;font-weight:700"> ↑</sup>');
+}
+function _nilaiRaporFinalUI_(katrol, remedial, raporLalu, tuntas) {
+  let akhir = Math.round(remedial !== null ? Math.max(katrol, remedial) : katrol);
+  if (tuntas && raporLalu !== null && raporLalu !== undefined && !isNaN(raporLalu)) {
+    akhir = Math.max(akhir, Math.round(Number(raporLalu)) + 1);
+  }
+  return Math.min(akhir, NILAI_RAPOR_MAKS_UI_);
 }
 
 /* ---- Batch katrol + nilai_akhir (client-side) ---- */
@@ -1665,8 +1697,11 @@ function nilaiHitungKatrolBatch_UI() {
 
   const minA = Math.min(...valid);
   const maxA = Math.max(...valid);
+  const komponen = _komponenDinilaiUI_(nilaiState.rows, nilaiState.semester);
+  const raporLalu = nilaiState.raporLalu || {};
 
   nilaiState.rows.forEach((r, i) => {
+    r._raporLalu = null; r._naikLalu = false;
     if (r.nilai_asli === null || r.nilai_asli === undefined || isNaN(r.nilai_asli)) {
       r.nilai_katrol = null; r.nilai_akhir = null;
     } else {
@@ -1676,10 +1711,14 @@ function nilaiHitungKatrolBatch_UI() {
       r.nilai_katrol = k;
       const rem = (r.nilai_remedial !== null && r.nilai_remedial !== '' && !isNaN(Number(r.nilai_remedial)))
         ? Number(r.nilai_remedial) : null;
-      // Nilai Akhir = bilangan bulat, dibulatkan SETELAH ambil tertinggi
-      // (katrol vs remedial). Harus identik dengan hitungKatrolBatch_()
+      // Nilai Rapor = bilangan bulat (katrol vs remedial, min. rapor lalu + 1
+      // untuk siswa tuntas, maks 94). Harus identik dengan hitungKatrolBatch_()
       // di api_nilai.js (yang dipakai saat Simpan/Import/Recalc).
-      r.nilai_akhir = Math.round(rem !== null ? Math.max(k, rem) : k);
+      const lalu = raporLalu[String(r.nis || '').trim()];
+      const tuntas = komponen.length > 0 && komponen.every(f => _isiNilaiUI_(r[f]));
+      r.nilai_akhir = _nilaiRaporFinalUI_(k, rem, lalu === undefined ? null : lalu, tuntas);
+      r._raporLalu = lalu === undefined ? null : lalu;
+      r._naikLalu = r.nilai_akhir > _nilaiRaporFinalUI_(k, rem, null, false);
     }
 
     // Update DOM cells
@@ -1692,6 +1731,7 @@ function nilaiHitungKatrolBatch_UI() {
       el.innerHTML = `<span ${red ? 'style="color:red;font-weight:700"' : ''}>${isNaN(n) ? '-' : (Number.isInteger(n) ? n : n.toFixed(2))}</span>`;
     };
     updCell('nAkhir_'  + i, r.nilai_akhir, true);
+    _tandaiRaporLalu_(r, i);
 
     // Row background
     const tr = document.getElementById('nilaiTr_' + i);

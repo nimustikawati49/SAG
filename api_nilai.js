@@ -80,6 +80,8 @@ function hitungNilaiRow_(r) {
   const rata_uh     = avg([r.uh1, r.uh2, r.uh3]);
   const rata_tugas  = avg([r.tgs1, r.tgs2, r.tgs3, r.tgsk1, r.tgsk2, r.tgsk3]);
 
+  // nilai_fix ("Rata Total") = rata Tugas & UH — sejak v144 hanya informasi
+  // (kolom opsional), TIDAK lagi dipakai di rumus Nilai Akhir Murni.
   let nilai_fix = null;
   if (rata_uh !== null && rata_tugas !== null) {
     nilai_fix = (rata_uh + rata_tugas) / 2;
@@ -94,16 +96,18 @@ function hitungNilaiRow_(r) {
   const uas       = isGenap ? parse(r.pat) : parse(r.pas);
   const pts_num   = parse(r.pts);
 
-  // Nilai Total (murni): 40% harian + 30% PTS + 30% ASAS/ASAT — kalau
-  // belum semua komponen terisi (mis. ASAS/ASAT belum diujikan), dihitung
-  // dari komponen yang SUDAH ADA saja dengan bobot dinormalisasi ulang,
-  // supaya ada progres sementara (dipakai KKTP/Ketuntasan Kelas) tanpa
-  // menunggu semester selesai. Kalau ketiganya lengkap, hasilnya PERSIS
-  // sama dengan formula lama (bobot totalnya tetap 1.0).
+  // Nilai Akhir Murni (v144, Sistem Pengolahan Nilai Rapor sekolah):
+  // 30% rata Tugas (formatif: TGS + TK) + 20% rata UH (sumatif materi)
+  // + 25% PTS + 25% ASAS/ASAT. Kalau belum semua komponen terisi (mis.
+  // ASAS/ASAT belum diujikan), dihitung dari komponen yang SUDAH ADA saja
+  // dengan bobot dinormalisasi ulang, supaya ada progres sementara. Kalau
+  // keempatnya lengkap, bobot totalnya tepat 1.0.
+  // HARUS identik dengan nilaiHitungRow_() di scripts-nilai.html.
   const komponenAsli = [];
-  if (nilai_fix !== null) komponenAsli.push({ v: nilai_fix, w: 0.4 });
-  if (pts_num   !== null) komponenAsli.push({ v: pts_num,   w: 0.3 });
-  if (uas       !== null) komponenAsli.push({ v: uas,       w: 0.3 });
+  if (rata_tugas !== null) komponenAsli.push({ v: rata_tugas, w: 0.30 });
+  if (rata_uh    !== null) komponenAsli.push({ v: rata_uh,    w: 0.20 });
+  if (pts_num    !== null) komponenAsli.push({ v: pts_num,    w: 0.25 });
+  if (uas        !== null) komponenAsli.push({ v: uas,        w: 0.25 });
   const totalBobotAsli = komponenAsli.reduce((a, k) => a + k.w, 0);
   const nilai_asli = totalBobotAsli > 0
     ? komponenAsli.reduce((a, k) => a + k.v * k.w, 0) / totalBobotAsli
@@ -119,7 +123,80 @@ function hitungNilaiRow_(r) {
  * @param {number} maxTarget  – nilai katrol tertinggi yg diinginkan
  * @returns {Array} rows + nilai_katrol + nilai_akhir
  */
-function hitungKatrolBatch_(rows, minTarget, maxTarget) {
+/* ---- Aturan Rapor (v144) — identik dengan versi UI di scripts-nilai.html ----
+ * 1. Katrol rentang Min–Max Target (seperti sebelumnya), lalu ambil yang
+ *    tertinggi dari katrol & remedial, dibulatkan ke bilangan bulat.
+ * 2. Siswa TUNTAS (semua komponen yang sudah dinilai di kelasnya terisi)
+ *    yang punya Nilai Rapor semester sebelumnya (mapel sama, guru sama,
+ *    dicocokkan lewat NIS): Nilai Rapor minimal = rapor lalu + 1.
+ * 3. Batas atas Nilai Rapor = 94 (NILAI_RAPOR_MAKS_).
+ */
+const NILAI_RAPOR_MAKS_ = 94;
+const KOMPONEN_TUNTAS_NILAI_ = ['tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','uh1','uh2','uh3','pts'];
+
+function _isiNilai_(v) {
+  return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+}
+/** Komponen yang sudah dinilai (minimal 1 siswa punya nilainya) di batch ini */
+function _komponenDinilai_(rows, semester) {
+  const isGenap = String(semester || '').toLowerCase().includes('genap');
+  const daftar = KOMPONEN_TUNTAS_NILAI_.concat(isGenap ? 'pat' : 'pas');
+  return daftar.filter(f => rows.some(r => _isiNilai_(r[f])));
+}
+function _siswaTuntas_(r, komponen) {
+  return komponen.length > 0 && komponen.every(f => _isiNilai_(r[f]));
+}
+/** Nilai Rapor final dari katrol, remedial, rapor lalu & status tuntas */
+function _nilaiRaporFinal_(katrol, remedial, raporLalu, tuntas) {
+  let akhir = Math.round(remedial !== null ? Math.max(katrol, remedial) : katrol);
+  if (tuntas && raporLalu !== null && raporLalu !== undefined && !isNaN(raporLalu)) {
+    akhir = Math.max(akhir, Math.round(Number(raporLalu)) + 1);
+  }
+  return Math.min(akhir, NILAI_RAPOR_MAKS_);
+}
+
+/** Periode sebelumnya: Genap → Ganjil tahun yang sama; Ganjil → Genap tahun lalu */
+function _tahunKey_(t) {
+  const m = String(t || '').match(/(\d{4})\D+(\d{4})/);
+  return m ? m[1] + '-' + m[2] : String(t || '').trim();
+}
+function _periodeSebelum_(tahun, semester) {
+  const sem = normalizeSemesterServer_(semester);
+  const key = _tahunKey_(tahun);
+  if (sem === 'Genap') return { tahunKey: key, semester: 'Ganjil' };
+  const m = key.match(/^(\d{4})-(\d{4})$/);
+  if (!m) return null;
+  return { tahunKey: (Number(m[1]) - 1) + '-' + (Number(m[2]) - 1), semester: 'Genap' };
+}
+/**
+ * Peta NIS → Nilai Rapor semester sebelumnya (mapel & guru yang sama).
+ * @param {Array[]} data  isi NILAI_SISWA (baris 0 = header)
+ */
+function _raporLaluMap_(data, mapel, tahun, semester, email) {
+  const out = {};
+  const prev = _periodeSebelum_(tahun, semester);
+  if (!prev || !data || data.length < 2) return out;
+  const h = data[0].map(x => String(x || '').toLowerCase().trim());
+  const ix = n => h.indexOf(n);
+  const em = String(email || '').toLowerCase().trim();
+  const mp = String(mapel || '').toLowerCase().trim();
+  data.slice(1).forEach(r => {
+    if (String(r[ix('owner_email')]).toLowerCase().trim() !== em) return;
+    if (String(r[ix('mapel')]).toLowerCase().trim() !== mp) return;
+    if (_tahunKey_(r[ix('tahun')]) !== prev.tahunKey) return;
+    if (normalizeSemesterServer_(r[ix('semester')]) !== prev.semester) return;
+    const nis = String(r[ix('nis')] || '').trim();
+    const v = r[ix('nilai_akhir')];
+    if (!nis || !_isiNilai_(v)) return;
+    const n = Number(v);
+    if (out[nis] === undefined || n > out[nis]) out[nis] = n;
+  });
+  return out;
+}
+
+function hitungKatrolBatch_(rows, minTarget, maxTarget, raporLalu, semester) {
+  raporLalu = raporLalu || {};
+  const komponen = _komponenDinilai_(rows, semester);
   const validAsli = rows
     .map(r => r.nilai_asli)
     .filter(v => v !== null && v !== undefined && !isNaN(v));
@@ -146,10 +223,11 @@ function hitungKatrolBatch_(rows, minTarget, maxTarget) {
 
     const remedial = r.nilai_remedial !== null && r.nilai_remedial !== undefined && r.nilai_remedial !== ''
       ? Number(r.nilai_remedial) : null;
-    // Nilai Akhir = bilangan bulat, dibulatkan SETELAH ambil tertinggi
-    // (katrol vs remedial). Identik dengan nilaiHitungKatrolBatch_UI()
-    // di scripts-nilai.html supaya tampilan & data tersimpan sama.
-    const nilai_akhir = Math.round(remedial !== null ? Math.max(katrol, remedial) : katrol);
+    // Nilai Akhir (Rapor) = bilangan bulat — lihat _nilaiRaporFinal_.
+    // Identik dengan nilaiHitungKatrolBatch_UI() di scripts-nilai.html.
+    const lalu = raporLalu[String(r.nis || '').trim()];
+    const nilai_akhir = _nilaiRaporFinal_(katrol, remedial, lalu === undefined ? null : lalu,
+      _siswaTuntas_(r, komponen));
 
     return { ...r, nilai_katrol: katrol, nilai_akhir };
   });
@@ -495,10 +573,14 @@ function getNilaiBundle(kelas, mapel, tahun, semester) {
   let catatan = {};
   try { catatan = _bacaCatatanNilai_(kelas, mapel, tahun, semester, auth.email); }
   catch (e) { console.warn('[CATATAN_NILAI] gagal baca: ' + (e && e.message)); }
+  let raporLalu = {};
+  try { raporLalu = _raporLaluMap_(sh.getDataRange().getValues(), mapel, tahun, semester, auth.email); }
+  catch (e) { console.warn('[RAPOR_LALU] gagal baca: ' + (e && e.message)); }
   return {
     rows   : getNilaiSiswa(kelas, mapel, tahun, semester),
     version: getNilaiDataVersion_(kelas, mapel, tahun, semester, auth.email, sh),
-    catatan: catatan
+    catatan: catatan,
+    rapor_lalu: raporLalu
   };
 }
 
@@ -708,11 +790,12 @@ function simpanNilaiSiswa(payload) {
     return { ...r, ...calc };
   });
 
-  // 3. Hitung katrol + nilai_akhir (butuh semua nilai_asli)
-  rows = hitungKatrolBatch_(rows, minTarget, maxTarget);
-
-  // 4. Baca semua data lama, pisahkan yang bukan milik filter ini
+  // 3. Hitung katrol + nilai_akhir (butuh semua nilai_asli + rapor semester lalu)
   const allRows = sh.getDataRange().getValues();
+  const raporLalu = _raporLaluMap_(allRows, payload.mapel, payload.tahun, semester, auth.email);
+  rows = hitungKatrolBatch_(rows, minTarget, maxTarget, raporLalu, semester);
+
+  // 4. Pisahkan data lama yang bukan milik filter ini
   const hdr     = allRows[0];
   const ci      = (n) => hdr.indexOf(n);
 
@@ -1577,7 +1660,7 @@ function getKelasYangAdaNilai(mapel, tahun, semester) {
  * @param {object} payload { rows, setting:{min,max}, semester }
  */
 function recalcNilai(payload) {
-  authAdmin_();
+  const auth = authAdmin_();
   const minTarget = Number(payload.setting?.nilai_min_target ?? 60);
   const maxTarget = Number(payload.setting?.nilai_max_target ?? 95);
   const semester  = String(payload.semester || '');
@@ -1586,7 +1669,10 @@ function recalcNilai(payload) {
     const calc = hitungNilaiRow_({ ...r, semester });
     return { ...r, ...calc };
   });
-  rows = hitungKatrolBatch_(rows, minTarget, maxTarget);
+  const raporLalu = (payload.mapel && payload.tahun)
+    ? _raporLaluMap_(sheetNilai_().getDataRange().getValues(), payload.mapel, payload.tahun, semester, auth.email)
+    : {};
+  rows = hitungKatrolBatch_(rows, minTarget, maxTarget, raporLalu, semester);
 
   return rows.map(r => ({
     nis           : r.nis,
@@ -1615,6 +1701,10 @@ function recalcNilai(payload) {
    ========================================================= */
 function migrasiNilaiAkhirBulat() {
   if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK: hanya SuperAdmin.');
+  // Sudah dijalankan 2026-11-19. Sejak v144 rumus Rapor memakai aturan
+  // rapor lalu +1 & batas 94 — menjalankan fungsi lama ini akan
+  // menimpanya. Pakai migrasiRumusNilaiBaru().
+  throw new Error('Sudah digantikan migrasiRumusNilaiBaru() (v144).');
 
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error('Proses lain sedang berjalan, coba lagi sebentar.');
@@ -1697,6 +1787,170 @@ function migrasiNilaiAkhirBulat() {
     laporan.forEach(x => Logger.log([x.pemilik, x.spreadsheet_id, 'baris=' + x.baris, 'diubah=' + x.diubah, x.catatan].join(' | ')));
     Logger.log('TOTAL baris Nilai Akhir disesuaikan: ' + totalUbah + ' dari ' + laporan.length + ' spreadsheet');
     return { total_diubah: totalUbah, laporan: laporan };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* =========================================================
+   MIGRASI v144 — hitung ulang SEMUA nilai tersimpan dengan rumus baru
+   (30% Tugas + 20% UH + 25% PTS + 25% ASAS/ASAT; Rapor = katrol rentang,
+   min. rapor lalu + 1 untuk siswa tuntas, maks 94).
+   - Jalankan dari editor oleh SuperAdmin: cekMigrasiRumusNilaiBaru dulu
+     (hanya hitung, tidak menulis), lalu migrasiRumusNilaiBaru.
+   - Diproses urut waktu (tahun, Ganjil → Genap) supaya aturan +1 memakai
+     rapor semester lalu yang SUDAH dihitung ulang.
+   - Cadangan: sheet tersembunyi NILAI_SISWA_SEBELUM_V144 (sekali saja).
+   - Hanya kolom rata_uh, rata_tugas, nilai_fix, nilai_asli, nilai_katrol,
+     nilai_akhir yang ditulis; nilai komponen & id baris tidak berubah.
+   ========================================================= */
+function _semuaSpreadsheetDataNilai_() {
+  const ids = {};
+  const central = getCentralSpreadsheet_();
+  ids[central.getId()] = 'Central';
+  const addFrom = (sheetName, pick) => {
+    const sh = central.getSheetByName(sheetName);
+    if (!sh || sh.getLastRow() < 2) return;
+    const data = sh.getDataRange().getValues();
+    const h = data[0].map(x => String(x || '').toLowerCase().trim());
+    data.slice(1).forEach(r => {
+      const o = {}; h.forEach((k, i) => o[k] = r[i]);
+      const got = pick(o);
+      if (got && got.id && !ids[got.id]) ids[got.id] = got.name;
+    });
+  };
+  addFrom('RESOURCE_MAP', o => {
+    const type = String(o.resource_type || '').toLowerCase().trim();
+    const st   = String(o.status || 'active').toLowerCase().trim();
+    if (type !== 'data_spreadsheet' || st !== 'active') return null;
+    return { id: String(o.resource_id || '').trim(), name: String(o.email_guru || o.resource_name || '') };
+  });
+  addFrom('DEPLOYMENTS', o => ({ id: String(o.spreadsheet_id || '').trim(), name: String(o.owner_email || '') }));
+  return ids;
+}
+
+function cekMigrasiRumusNilaiBaru() { return migrasiRumusNilaiBaru(true); }
+
+function migrasiRumusNilaiBaru(hanyaCek) {
+  if (!isSuperAdmin()) throw new Error('AKSES_DITOLAK: hanya SuperAdmin.');
+  hanyaCek = hanyaCek === true;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Proses lain sedang berjalan, coba lagi sebentar.');
+  try {
+    const ids = _semuaSpreadsheetDataNilai_();
+    const KOLOM = ['rata_uh', 'rata_tugas', 'nilai_fix', 'nilai_asli', 'nilai_katrol', 'nilai_akhir'];
+    const sama = (a, b) => (a === '' || a === null || a === undefined)
+      ? (b === '' || b === null || b === undefined)
+      : (b !== '' && b !== null && b !== undefined && Math.abs(Number(a) - Number(b)) < 0.005);
+    const laporan = [];
+    let totalUbah = 0, totalNaikLalu = 0;
+
+    Object.keys(ids).forEach(id => {
+      const item = { pemilik: ids[id], spreadsheet_id: id, baris: 0, diubah: 0, naik_lalu: 0, catatan: '' };
+      try {
+        const ss = SpreadsheetApp.openById(id);
+        const sh = ss.getSheetByName('NILAI_SISWA');
+        if (!sh || sh.getLastRow() < 2) { item.catatan = 'tidak ada data nilai'; laporan.push(item); return; }
+        const data = sh.getDataRange().getValues();
+        const h = data[0].map(x => String(x || '').toLowerCase().trim());
+        const ix = n => h.indexOf(n);
+        if (KOLOM.some(k => ix(k) < 0)) { item.catatan = 'kolom tidak lengkap'; laporan.push(item); return; }
+        item.baris = data.length - 1;
+
+        // Setting katrol per kelas/mapel/periode/guru (default = getSettingNilai)
+        const setMap = {};
+        const shSet = ss.getSheetByName('SETTING_NILAI');
+        if (shSet && shSet.getLastRow() >= 2) {
+          const sd = shSet.getDataRange().getValues();
+          const sh0 = sd[0].map(x => String(x || '').toLowerCase().trim());
+          const si = n => sh0.indexOf(n);
+          sd.slice(1).forEach(r => {
+            const k = [r[si('owner_email')], r[si('kelas')], r[si('mapel')], r[si('tahun')], r[si('semester')]]
+              .map(x => String(x).toLowerCase().trim()).join('|');
+            setMap[k] = { min: num_(r[si('nilai_min_target')]) || 60, max: num_(r[si('nilai_max_target')]) || 95 };
+          });
+        }
+
+        // Kelompokkan baris per guru+kelas+mapel+tahun+semester
+        const grup = {};
+        for (let i = 1; i < data.length; i++) {
+          const r = data[i];
+          const k = [r[ix('owner_email')], r[ix('kelas')], r[ix('mapel')], r[ix('tahun')], r[ix('semester')]]
+            .map(x => String(x).toLowerCase().trim()).join('|');
+          (grup[k] = grup[k] || []).push(i);
+        }
+        const urutan = Object.keys(grup).sort((a, b) => {
+          const ra = data[grup[a][0]], rb = data[grup[b][0]];
+          const ta = _tahunKey_(ra[ix('tahun')]), tb = _tahunKey_(rb[ix('tahun')]);
+          if (ta !== tb) return ta < tb ? -1 : 1;
+          const sa = normalizeSemesterServer_(ra[ix('semester')]) === 'Genap' ? 1 : 0;
+          const sb = normalizeSemesterServer_(rb[ix('semester')]) === 'Genap' ? 1 : 0;
+          return sa - sb;
+        });
+
+        let ubah = 0, naik = 0;
+        urutan.forEach(k => {
+          const idxs = grup[k];
+          const r0 = data[idxs[0]];
+          const semester = String(r0[ix('semester')] || '');
+          const kelas = String(r0[ix('kelas')] || '');
+          const set = setMap[k] || (() => {
+            const kkm = KKM_DEFAULT_PER_TINGKAT_[_extractTingkatNilai_(kelas)] || 70;
+            return { min: kkm, max: 95 };
+          })();
+          const rows = idxs.map(i => {
+            const o = {}; h.forEach((c, j) => o[c] = data[i][j]);
+            return { ...o, ...hitungNilaiRow_({ ...o, semester }), _i: i };
+          });
+          const lalu = _raporLaluMap_(data, r0[ix('mapel')], r0[ix('tahun')], semester, r0[ix('owner_email')]);
+          const hasil = hitungKatrolBatch_(rows, set.min, set.max, lalu, semester);
+          hasil.forEach(r => {
+            const baris = data[r._i];
+            const baru = {
+              rata_uh: rnd2_(r.rata_uh), rata_tugas: rnd2_(r.rata_tugas), nilai_fix: rnd2_(r.nilai_fix),
+              nilai_asli: rnd2_(r.nilai_asli), nilai_katrol: rnd2_(r.nilai_katrol),
+              nilai_akhir: (r.nilai_akhir === null || r.nilai_akhir === undefined) ? '' : r.nilai_akhir
+            };
+            // Siswa tanpa nilai sama sekali: biarkan apa adanya
+            if (baru.nilai_asli === '') return;
+            // Hitung berapa siswa yang naik karena aturan rapor lalu +1
+            const rem = _isiNilai_(r.nilai_remedial) ? Number(r.nilai_remedial) : null;
+            const tanpaAturan = _nilaiRaporFinal_(r.nilai_katrol, rem, null, false);
+            if (baru.nilai_akhir !== '' && baru.nilai_akhir > tanpaAturan) naik++;
+            if (KOLOM.some(c => !sama(baru[c], baris[ix(c)]))) {
+              ubah++;
+              KOLOM.forEach(c => { baris[ix(c)] = baru[c]; });   // data diperbarui di memori → dipakai semester berikutnya
+            }
+          });
+        });
+
+        if (ubah > 0 && !hanyaCek) {
+          if (!ss.getSheetByName('NILAI_SISWA_SEBELUM_V144')) {
+            const cadangan = sh.copyTo(ss).setName('NILAI_SISWA_SEBELUM_V144');
+            try { cadangan.hideSheet(); } catch (e) {}
+          }
+          KOLOM.forEach(c => {
+            const col = ix(c);
+            sh.getRange(2, col + 1, data.length - 1, 1).setValues(data.slice(1).map(r => [r[col]]));
+          });
+          SpreadsheetApp.flush();
+        }
+        item.diubah = ubah; item.naik_lalu = naik;
+        totalUbah += ubah; totalNaikLalu += naik;
+      } catch (e) {
+        item.catatan = 'GAGAL: ' + (e && e.message ? e.message : e);
+      }
+      laporan.push(item);
+    });
+
+    if (!hanyaCek) {
+      try { logAudit('MIGRASI_RUMUS_NILAI_V144', 'semua', JSON.stringify({ spreadsheet: laporan.length, diubah: totalUbah })); } catch (e) {}
+    }
+    laporan.forEach(x => Logger.log([x.pemilik, x.spreadsheet_id, 'baris=' + x.baris, 'diubah=' + x.diubah,
+      'naik_rapor_lalu=' + x.naik_lalu, x.catatan].join(' | ')));
+    Logger.log((hanyaCek ? '[CEK SAJA, belum ditulis] ' : '') + 'TOTAL baris dihitung ulang: ' + totalUbah +
+      ' | memakai aturan rapor lalu +1: ' + totalNaikLalu + ' | spreadsheet: ' + laporan.length);
+    return { hanya_cek: hanyaCek, total_diubah: totalUbah, naik_rapor_lalu: totalNaikLalu, laporan: laporan };
   } finally {
     lock.releaseLock();
   }
