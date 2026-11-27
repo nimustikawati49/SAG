@@ -492,10 +492,103 @@ function getNilaiSiswa(kelas, mapel, tahun, semester) {
 function getNilaiBundle(kelas, mapel, tahun, semester) {
   const auth = authAdmin_();
   const sh   = sheetNilai_();
+  let catatan = {};
+  try { catatan = _bacaCatatanNilai_(kelas, mapel, tahun, semester, auth.email); }
+  catch (e) { console.warn('[CATATAN_NILAI] gagal baca: ' + (e && e.message)); }
   return {
     rows   : getNilaiSiswa(kelas, mapel, tahun, semester),
-    version: getNilaiDataVersion_(kelas, mapel, tahun, semester, auth.email, sh)
+    version: getNilaiDataVersion_(kelas, mapel, tahun, semester, auth.email, sh),
+    catatan: catatan
   };
+}
+
+/* ==================== CATATAN KOMPONEN NILAI ====================
+ * Guru bisa memberi catatan singkat per kolom komponen (mis. TGS1 =
+ * "Membuat flowchart menanak nasi") supaya ingat tugas inti apa yang
+ * diberikan. Lingkup: per kelas + mapel + tahun + semester + guru.
+ * Untuk Tugas Kelompok (tgsk1-3), adanya baris di sheet ini juga berarti
+ * "kolom TK ini sudah ditambahkan guru" — kolom tetap tampil walau nilainya
+ * belum diisi. Catatan hanya tampil di Input Nilai (tidak ikut dicetak).
+ * ================================================================ */
+const KOMPONEN_CATATAN_NILAI_ = ['tgs1','tgs2','tgs3','tgsk1','tgsk2','tgsk3','uh1','uh2','uh3'];
+
+function sheetCatatanNilai_() {
+  const ss = getSpreadsheet_();
+  let sh = ss.getSheetByName('CATATAN_NILAI');
+  if (!sh) {
+    sh = ss.insertSheet('CATATAN_NILAI');
+    sh.appendRow(['kelas', 'mapel', 'tahun', 'semester', 'komponen', 'catatan', 'owner_email', 'updated_at']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function _cocokCatatanNilai_(r, kelas, mapel, tahun, semester, email) {
+  return String(r[0]).trim() === String(kelas).trim()
+    && String(r[1]).trim() === String(mapel).trim()
+    && String(r[2]).trim() === String(tahun).trim()
+    && String(r[3]).trim() === String(semester).trim()
+    && String(r[6]).toLowerCase().trim() === email;
+}
+
+/** @returns {Object} { komponen: catatan } — kunci ada = kolom sudah ditambahkan */
+function _bacaCatatanNilai_(kelas, mapel, tahun, semester, email) {
+  const ss = getSpreadsheet_();
+  const sh = ss.getSheetByName('CATATAN_NILAI');
+  const out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 8).getValues().forEach(r => {
+    if (!_cocokCatatanNilai_(r, kelas, mapel, tahun, semester, email)) return;
+    const k = String(r[4]).toLowerCase().trim();
+    if (KOMPONEN_CATATAN_NILAI_.indexOf(k) !== -1) out[k] = String(r[5] || '');
+  });
+  return out;
+}
+
+function getCatatanNilai(kelas, mapel, tahun, semester) {
+  const auth = authAdmin_();
+  return _bacaCatatanNilai_(kelas, mapel, tahun, semester, auth.email);
+}
+
+/**
+ * Simpan / hapus catatan satu komponen.
+ * obj = { kelas, mapel, tahun, semester, komponen, catatan, hapus }
+ * hapus:true → baris catatan dihapus (untuk TK: kolomnya ikut disembunyikan).
+ * Baris dicari ulang di dalam lock & dicocokkan isinya sebelum diubah/dihapus.
+ */
+function simpanCatatanNilai(obj) {
+  const auth = authAdmin_();
+  obj = obj || {};
+  const komponen = String(obj.komponen || '').toLowerCase().trim();
+  if (KOMPONEN_CATATAN_NILAI_.indexOf(komponen) === -1) throw new Error('Komponen tidak dikenal: ' + komponen);
+  if (!obj.kelas || !obj.mapel || !obj.tahun || !obj.semester) throw new Error('Kelas/mapel/periode belum lengkap');
+  const catatan = String(obj.catatan || '').trim().slice(0, 300);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = sheetCatatanNilai_();
+    const last = sh.getLastRow();
+    const rows = last >= 2 ? sh.getRange(2, 1, last - 1, 8).getValues() : [];
+    const cocok = [];
+    rows.forEach((r, i) => {
+      if (_cocokCatatanNilai_(r, obj.kelas, obj.mapel, obj.tahun, obj.semester, auth.email)
+        && String(r[4]).toLowerCase().trim() === komponen) cocok.push(i + 2);
+    });
+
+    if (obj.hapus) {
+      for (let j = cocok.length - 1; j >= 0; j--) sh.deleteRow(cocok[j]);
+    } else if (cocok.length) {
+      sh.getRange(cocok[0], 6, 1, 3).setValues([[catatan, auth.email, new Date()]]);
+      for (let j = cocok.length - 1; j >= 1; j--) sh.deleteRow(cocok[j]);  // bersihkan dobel
+    } else {
+      sh.appendRow([obj.kelas, obj.mapel, obj.tahun, obj.semester, komponen, catatan, auth.email, new Date()]);
+    }
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return _bacaCatatanNilai_(obj.kelas, obj.mapel, obj.tahun, obj.semester, auth.email);
 }
 
 /**

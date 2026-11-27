@@ -736,16 +736,164 @@ let nilaiState = {
   focusKomponen  : 'all',    // 'all' | 'uh1' | 'tgs1' | dll
   setting        : {},       // hasil getSettingNilai (kkm, nilai_min_target, dst)
   cetakPreviewOk : false,
-  colVis         : { tgsk: false, rataDetail: false } // kolom opsional yang boleh disembunyikan
+  colVis         : { rataDetail: false }, // kolom opsional yang boleh disembunyikan
+  catatan        : {}        // { tgs1: 'Membuat flowchart', tgsk1: '', ... } — lihat CATATAN_NILAI di api_nilai.js
 };
 
 /** Dipanggil dari checkbox "Tampilkan kolom" di atas Tabel Nilai */
 function toggleNilaiKolom_() {
-  const tgskEl = document.getElementById('nilaiColTGSK');
   const rataEl = document.getElementById('nilaiColRataDetail');
-  nilaiState.colVis.tgsk       = !!(tgskEl && tgskEl.checked);
   nilaiState.colVis.rataDetail = !!(rataEl && rataEl.checked);
   renderTabelNilai();
+}
+
+/* ===================================================================
+   CATATAN KOMPONEN + TUGAS KELOMPOK DINAMIS
+   - Tiap kolom TGS1-3, TK1-3, UH1-3 bisa diberi catatan tugas inti
+     (klik 📝 di judul kolom). Catatan hanya tampil di Input Nilai.
+   - Kolom Tugas Kelompok tidak tampil default. Guru klik "➕ Tambah Tugas
+     Kelompok" → pilih TK ke-1/2/3 + catatan → kolom muncul. Kolom TK juga
+     otomatis tampil kalau sudah ada nilainya; hilang kalau kosong & belum
+     ditambahkan. Hapus kolom hanya boleh kalau nilainya masih kosong.
+   =================================================================== */
+const _LABEL_KOMPONEN_NILAI_ = {
+  tgs1: 'TGS1 (Tugas Mandiri 1)', tgs2: 'TGS2 (Tugas Mandiri 2)', tgs3: 'TGS3 (Tugas Mandiri 3)',
+  tgsk1: 'TK1 (Tugas Kelompok 1)', tgsk2: 'TK2 (Tugas Kelompok 2)', tgsk3: 'TK3 (Tugas Kelompok 3)',
+  uh1: 'UH1 (Ulangan Harian 1)', uh2: 'UH2 (Ulangan Harian 2)', uh3: 'UH3 (Ulangan Harian 3)'
+};
+const _SINGKAT_KOMPONEN_NILAI_ = { tgs1:'TGS1', tgs2:'TGS2', tgs3:'TGS3', tgsk1:'TK1', tgsk2:'TK2', tgsk3:'TK3', uh1:'UH1', uh2:'UH2', uh3:'UH3' };
+
+function _escNilai_(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _tkAdaNilai_(n) {
+  const k = 'tgsk' + n;
+  return nilaiState.rows.some(r => r[k] !== null && r[k] !== undefined && r[k] !== '');
+}
+/** Nomor TK (1-3) yang kolomnya ditampilkan: sudah ditambahkan guru ATAU sudah ada nilainya */
+function _tkTampil_() {
+  const cat = nilaiState.catatan || {};
+  return [1, 2, 3].filter(n => Object.prototype.hasOwnProperty.call(cat, 'tgsk' + n) || _tkAdaNilai_(n));
+}
+
+function _tutupModalCatatanNilai_() {
+  const el = document.getElementById('nilaiCatatanModal');
+  if (el) el.remove();
+}
+function _bukaModalCatatanNilai_(innerHtml) {
+  _tutupModalCatatanNilai_();
+  const wrap = document.createElement('div');
+  wrap.id = 'nilaiCatatanModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  wrap.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:18px 20px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:13.5px">' + innerHtml + '</div>';
+  wrap.addEventListener('click', e => { if (e.target === wrap) _tutupModalCatatanNilai_(); });
+  document.body.appendChild(wrap);
+  const ta = wrap.querySelector('textarea');
+  if (ta) setTimeout(() => ta.focus(), 50);
+  return wrap;
+}
+
+function _kirimCatatanNilai_(komponen, catatan, hapus, btn, pesanOk) {
+  if (!nilaiState.kelas || !nilaiState.mapel) { alert('Muat data kelas terlebih dahulu.'); return; }
+  if (btn) { btn.disabled = true; btn.dataset.lbl = btn.textContent; btn.textContent = '⏳ Menyimpan...'; }
+  google.script.run
+    .withSuccessHandler(map => {
+      nilaiState.catatan = map || {};
+      _tutupModalCatatanNilai_();
+      renderTabelNilai();
+      if (typeof showToast === 'function') showToast(pesanOk || '✅ Catatan disimpan', 'success');
+    })
+    .withFailureHandler(e => {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.lbl || 'Simpan'; }
+      alert('Gagal menyimpan: ' + (e && e.message ? e.message : e));
+    })
+    .simpanCatatanNilai({
+      kelas: nilaiState.kelas, mapel: nilaiState.mapel, tahun: nilaiState.tahun, semester: nilaiState.semester,
+      komponen: komponen, catatan: catatan, hapus: !!hapus
+    });
+}
+
+/** Klik 📝 di judul kolom → isi/ubah catatan tugas inti */
+function bukaCatatanKomponen_(komponen) {
+  const cat = nilaiState.catatan || {};
+  const isi = cat[komponen] || '';
+  const isTK = /^tgsk/.test(komponen);
+  const n = Number(komponen.slice(-1));
+  let hapusHtml = '';
+  if (isTK) {
+    const adaNilai = _tkAdaNilai_(n);
+    const terdaftar = Object.prototype.hasOwnProperty.call(cat, komponen);
+    hapusHtml = adaNilai
+      ? '<div class="muted" style="font-size:11.5px;margin-top:10px">Kolom TK' + n + ' tidak bisa dihapus karena sudah ada nilainya. Kosongkan dulu nilainya & simpan kalau memang ingin menghapus kolom.</div>'
+      : (terdaftar ? '<button type="button" id="btnHapusTK" class="ghost" style="margin-top:10px;color:#b91c1c;border-color:#fca5a5">🗑 Hapus kolom TK' + n + '</button>' : '');
+  }
+  const wrap = _bukaModalCatatanNilai_(
+    '<div style="font-weight:700;font-size:15px;margin-bottom:4px">📝 Catatan ' + _escNilai_(_LABEL_KOMPONEN_NILAI_[komponen] || komponen) + '</div>' +
+    '<div class="muted" style="font-size:12px;margin-bottom:10px">Tugas inti yang diberikan ke siswa — ' + _escNilai_(nilaiState.kelas) + ', ' + _escNilai_(nilaiState.mapel) + ', ' + _escNilai_(nilaiState.semester) + ' ' + _escNilai_(nilaiState.tahun) + '. Hanya tampil di Input Nilai.</div>' +
+    '<textarea id="taCatatanKomp" rows="3" maxlength="300" style="width:100%;box-sizing:border-box" placeholder="mis. Membuat flowchart menanak nasi">' + _escNilai_(isi) + '</textarea>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">' +
+      '<button type="button" class="ghost" id="btnBatalCatatan">Batal</button>' +
+      '<button type="button" id="btnSimpanCatatan">💾 Simpan Catatan</button>' +
+    '</div>' + hapusHtml);
+  wrap.querySelector('#btnBatalCatatan').onclick = _tutupModalCatatanNilai_;
+  const btnS = wrap.querySelector('#btnSimpanCatatan');
+  btnS.onclick = () => {
+    const v = wrap.querySelector('#taCatatanKomp').value.trim();
+    // Kolom TGS/UH tanpa catatan → hapus barisnya saja. TK tetap disimpan
+    // (walau kosong) supaya kolomnya tidak hilang.
+    _kirimCatatanNilai_(komponen, v, !v && !isTK, btnS);
+  };
+  const btnH = wrap.querySelector('#btnHapusTK');
+  if (btnH) btnH.onclick = () => {
+    if (_tkAdaNilai_(n)) { alert('Kolom TK' + n + ' sudah ada nilainya, tidak bisa dihapus.'); return; }
+    if (!confirm('Hapus kolom TK' + n + ' beserta catatannya?')) return;
+    if (nilaiState.focusKomponen === komponen) nilaiState.focusKomponen = 'all';
+    _kirimCatatanNilai_(komponen, '', true, btnH, '🗑 Kolom TK' + n + ' dihapus');
+  };
+}
+
+/** Tombol "➕ Tambah Tugas Kelompok" */
+function bukaTambahTugasKelompok_() {
+  if (!nilaiState.kelas || !nilaiState.mapel) { alert('Muat data kelas terlebih dahulu.'); return; }
+  const tampil = _tkTampil_();
+  const sisa = [1, 2, 3].filter(n => tampil.indexOf(n) === -1);
+  if (!sisa.length) { alert('Ketiga kolom Tugas Kelompok (TK1–TK3) sudah ditambahkan.'); return; }
+  const wrap = _bukaModalCatatanNilai_(
+    '<div style="font-weight:700;font-size:15px;margin-bottom:10px">➕ Tambah Tugas Kelompok</div>' +
+    '<label style="font-size:12.5px;font-weight:600">Tugas kelompok ke-</label>' +
+    '<select id="selTKBaru" style="width:100%;margin:4px 0 10px">' +
+      sisa.map(n => '<option value="' + n + '">Tugas Kelompok ' + n + ' (TK' + n + ')</option>').join('') +
+    '</select>' +
+    '<label style="font-size:12.5px;font-weight:600">Catatan tugas kelompok</label>' +
+    '<textarea id="taCatatanTK" rows="3" maxlength="300" style="width:100%;box-sizing:border-box;margin-top:4px" placeholder="mis. Presentasi kelompok: jenis-jenis perangkat keras"></textarea>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button type="button" class="ghost" id="btnBatalTK">Batal</button>' +
+      '<button type="button" id="btnTambahTK">➕ Tambah</button>' +
+    '</div>');
+  wrap.querySelector('#btnBatalTK').onclick = _tutupModalCatatanNilai_;
+  const btn = wrap.querySelector('#btnTambahTK');
+  btn.onclick = () => {
+    const n = wrap.querySelector('#selTKBaru').value;
+    _kirimCatatanNilai_('tgsk' + n, wrap.querySelector('#taCatatanTK').value.trim(), false, btn,
+      '✅ Kolom TK' + n + ' ditambahkan');
+  };
+}
+
+/** Daftar catatan di atas tabel (mudah dibaca di HP, judul kolom sempit) */
+function _renderDaftarCatatanNilai_(tkTampil) {
+  const box = document.getElementById('nilaiCatatanList');
+  if (!box) return;
+  const cat = nilaiState.catatan || {};
+  const urut = ['tgs1','tgs2','tgs3'].concat(tkTampil.map(n => 'tgsk' + n), ['uh1','uh2','uh3']);
+  const isiList = urut.filter(k => cat[k]);
+  if (!isiList.length) {
+    box.innerHTML = '<span class="muted">📝 Klik ikon 📝 di judul kolom (TGS, TK, UH) untuk mencatat tugas inti yang diberikan.</span>';
+    return;
+  }
+  box.innerHTML = '<b style="color:#374151">📝 Catatan tugas:</b> ' + isiList.map(k =>
+    '<span onclick="bukaCatatanKomponen_(\'' + k + '\')" style="cursor:pointer;display:inline-block;margin:2px 8px 2px 0;' +
+    'background:#eef2ff;color:#3730a3;padding:2px 8px;border-radius:999px" title="Klik untuk ubah"><b>' +
+    _SINGKAT_KOMPONEN_NILAI_[k] + '</b>: ' + _escNilai_(cat[k]) + '</span>').join('');
 }
 
 function setNilaiAutosaveInfo_(text, color) {
@@ -873,16 +1021,8 @@ function applyNilaiDraftToState_(draft, opts = {}) {
     nilaiState.isDirty = true;
     nilaiState.lastAutosaveAt = Number(draft.savedAt || Date.now());
     nilaiHitungKatrolBatch_UI();
-    // Draft yang dipulihkan mungkin bawa nilai tugas kelompok yang belum ada di data
-    // sebelumnya — pastikan kolomnya ikut tampil supaya tidak ketutupan.
-    if (!nilaiState.colVis.tgsk && nilaiState.rows.some(r =>
-      (r.tgsk1 !== null && r.tgsk1 !== undefined && r.tgsk1 !== '') ||
-      (r.tgsk2 !== null && r.tgsk2 !== undefined && r.tgsk2 !== '') ||
-      (r.tgsk3 !== null && r.tgsk3 !== undefined && r.tgsk3 !== ''))) {
-      nilaiState.colVis.tgsk = true;
-      const tgskEl = document.getElementById('nilaiColTGSK');
-      if (tgskEl) tgskEl.checked = true;
-    }
+    // Draft yang dipulihkan mungkin bawa nilai tugas kelompok — kolom TK yang
+    // ada nilainya otomatis tampil (_tkTampil_), tidak perlu diatur di sini.
     setNilaiEditMode_(false);
     updateStatistikUI_nilai();
     const infoText = opts.infoText || ('Autosave: draft dipulihkan (' + restored + ' siswa)');
@@ -1053,7 +1193,7 @@ function muatDataNilai(forceLocked = false) {
   if (typeof startProgress === 'function') startProgress();
 
   const done = { siswa: isActivePeriode ? false : true, nilai: false, setting: false };
-  let siswaData = [], nilaiData = [], nilaiVersion = 0, settingData = {};
+  let siswaData = [], nilaiData = [], nilaiVersion = 0, settingData = {}, catatanData = {};
 
   const tryRender = () => {
     if (!done.siswa || !done.nilai || !done.setting) return;
@@ -1097,15 +1237,9 @@ function muatDataNilai(forceLocked = false) {
       Object.assign(r, calc);
     });
 
-    // Deteksi otomatis: kalau ada nilai tugas kelompok tersimpan, langsung tampilkan
-    // kolomnya supaya tidak ketutupan; kalau belum ada, sembunyikan dulu biar ringkas.
-    const adaTgsk = nilaiState.rows.some(r =>
-      (r.tgsk1 !== null && r.tgsk1 !== undefined && r.tgsk1 !== '') ||
-      (r.tgsk2 !== null && r.tgsk2 !== undefined && r.tgsk2 !== '') ||
-      (r.tgsk3 !== null && r.tgsk3 !== undefined && r.tgsk3 !== ''));
-    nilaiState.colVis.tgsk = adaTgsk;
-    const tgskEl = document.getElementById('nilaiColTGSK');
-    if (tgskEl) tgskEl.checked = adaTgsk;
+    // Kolom Tugas Kelompok tampil per kolom (TK1/TK2/TK3) kalau sudah ada
+    // nilainya atau sudah ditambahkan guru — lihat _tkTampil_().
+    nilaiState.catatan = catatanData || {};
 
     // Isi pengaturan ke form — HARUS sebelum nilaiHitungKatrolBatch_UI() di
     // bawah, soalnya fungsi itu baca nilaiMinTarget/nilaiMaxTarget langsung
@@ -1154,6 +1288,7 @@ function muatDataNilai(forceLocked = false) {
     .withSuccessHandler(d => {
       nilaiData = d?.rows || [];
       nilaiVersion = d?.version || 0;
+      catatanData = d?.catatan || {};
       if (!isActivePeriode) {
         // Roster periode riwayat = siswa yang punya nilai tersimpan di periode ini.
         siswaData = nilaiData
@@ -1167,6 +1302,7 @@ function muatDataNilai(forceLocked = false) {
     .withFailureHandler(() => {
       nilaiData = [];
       nilaiVersion = 0;
+      catatanData = {};
       if (!isActivePeriode) { siswaData = []; done.siswa = true; }
       done.nilai = true;
       tryRender();
@@ -1308,7 +1444,7 @@ function renderTabelNilai() {
   const sem     = nilaiState.semester || '';
   const kkm     = Number(nilaiState.setting?.kkm || 70);
   const locked  = nilaiState.locked;
-  const focus   = nilaiState.focusKomponen || 'all'; // 'all' or specific key
+  let focus     = nilaiState.focusKomponen || 'all'; // 'all' or specific key
   const isGenap = sem.toLowerCase().includes('genap');
 
   const fmt = v => (v !== null && v !== undefined && v !== '' && !isNaN(Number(v)))
@@ -1325,19 +1461,31 @@ function renderTabelNilai() {
     return n.toFixed(2);
   };
 
-  const showTgsk = !!nilaiState.colVis.tgsk;
+  const tkList   = _tkTampil_();          // mis. [1] atau [1,3]
+  const showTgsk = tkList.length > 0;
   const showRata = !!nilaiState.colVis.rataDetail;
-  // No, NIS, Nama (3) + Tugas Mandiri (3) + UH (3) + PTS + ASAS/ASAT (2) + Rata Total + Total Nilai + Nilai Akhir (3)
-  const totalCols = 14 + (showTgsk ? 3 : 0) + (showRata ? 2 : 0);
+  // Kolom default: No, NIS, Nama (3) + TGS (3) + UH (3) + PTS + ASAS/ASAT (2)
+  // + Nilai Akhir Murni + Nilai Raport Katrol (2). Rata Tugas/UH/Total = opsional.
+  const totalCols = 13 + tkList.length + (showRata ? 3 : 0);
+
+  // Pill fokus komponen TK hanya untuk kolom TK yang tampil
+  document.querySelectorAll('.nil-pill[data-key^="tgsk"]').forEach(b => {
+    b.style.display = tkList.indexOf(Number(b.dataset.key.slice(4))) !== -1 ? '' : 'none';
+  });
+  if (/^tgsk/.test(focus) && tkList.indexOf(Number(focus.slice(4))) === -1) {
+    nilaiState.focusKomponen = focus = 'all';
+    document.querySelectorAll('.nil-pill').forEach(b => b.classList.toggle('nil-pill-active', b.dataset.key === 'all'));
+  }
+  _renderDaftarCatatanNilai_(tkList);
 
   // Lebar kolom proporsional (table-layout:fixed) — supaya tabel selalu pas
   // dengan lebar layar berapa pun jumlah kolom yang sedang ditampilkan.
   const colWeights = [['no', 3], ['nis', 6], ['nama', 15],
     ['tgs1', 4.5], ['tgs2', 4.5], ['tgs3', 4.5]];
-  if (showTgsk) colWeights.push(['tk1', 4.5], ['tk2', 4.5], ['tk3', 4.5]);
+  tkList.forEach(n => colWeights.push(['tk' + n, 4.5]));
   colWeights.push(['uh1', 4.5], ['uh2', 4.5], ['uh3', 4.5], ['pts', 5], ['sas', 5]);
-  if (showRata) colWeights.push(['rataTugas', 5], ['rataUh', 5]);
-  colWeights.push(['rataTotal', 5.5], ['totalNilai', 6], ['nilaiAkhir', 6.5]);
+  if (showRata) colWeights.push(['rataTugas', 5], ['rataUh', 5], ['rataTotal', 5.5]);
+  colWeights.push(['totalNilai', 6.5], ['nilaiAkhir', 6.5]);
   const totalWeight = colWeights.reduce((s, c) => s + c[1], 0);
   const colgroupEl = document.getElementById('tabelNilaiColgroup');
   if (colgroupEl) {
@@ -1397,25 +1545,33 @@ function renderTabelNilai() {
   const tHead = document.getElementById('tabelNilaiThead');
   if (tHead) {
     const pasPat = isGenap ? 'ASAT' : 'ASAS';
+    const cat = nilaiState.catatan || {};
+    // Judul kolom komponen + ikon 📝 (kuning = sudah ada catatan)
+    const kompTh = k => {
+      const isi = cat[k] || '';
+      const tip = isi ? (_SINGKAT_KOMPONEN_NILAI_[k] + ': ' + isi + ' — klik untuk ubah') : 'Klik untuk menambah catatan tugas inti';
+      return '<th style="cursor:pointer;white-space:nowrap" title="' + _escNilai_(tip) + '" onclick="bukaCatatanKomponen_(\'' + k + '\')">' +
+        _SINGKAT_KOMPONEN_NILAI_[k] + '<span style="font-size:10px;margin-left:2px;' + (isi ? '' : 'opacity:.45;filter:grayscale(1)') + '">📝</span></th>';
+    };
     tHead.innerHTML = `
       <tr>
         <th rowspan="2">No</th>
         <th rowspan="2">NIS</th>
         <th rowspan="2" class="ntd-nama" style="color:#fff">Nama Siswa</th>
         <th colspan="3">Tugas Mandiri</th>
-        ${showTgsk ? '<th colspan="3">Tugas Kelompok</th>' : ''}
+        ${showTgsk ? '<th colspan="' + tkList.length + '">Tugas Kelompok</th>' : ''}
         <th colspan="3">Ulangan Harian</th>
         <th rowspan="2">PTS</th>
         <th rowspan="2">${pasPat}</th>
-        ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>' : ''}
-        <th rowspan="2" style="background:#6b7280" title="Otomatis — rata-rata dari Rata Tugas &amp; Rata UH, belum termasuk PTS/${pasPat}">Rata Total ℹ️</th>
-        <th rowspan="2" style="background:#4338ca" title="Otomatis (nilai murni, sebelum Katrol) — 40% Rata Total + 30% PTS + 30% ${pasPat}">Total Nilai ℹ️</th>
-        <th rowspan="2" style="background:#be123c" title="Otomatis — Total Nilai yang sudah disesuaikan Katrol, ini nilai yang dipakai untuk rapor/predikat">Nilai Akhir ℹ️</th>
+        ${showRata ? '<th rowspan="2">Rata Tugas</th><th rowspan="2">Rata UH</th>'
+          + `<th rowspan="2" style="background:#6b7280" title="Otomatis — rata-rata dari Rata Tugas &amp; Rata UH, belum termasuk PTS/${pasPat}">Rata Total ℹ️</th>` : ''}
+        <th rowspan="2" style="background:#4338ca" title="Otomatis (nilai murni, sebelum Katrol) — 40% Rata Total + 30% PTS + 30% ${pasPat}">Nilai Akhir Murni ℹ️</th>
+        <th rowspan="2" style="background:#be123c" title="Otomatis — Nilai Akhir Murni yang sudah disesuaikan Katrol (tertinggi dari katrol/remedial), ini nilai yang dipakai untuk rapor/predikat">Nilai Raport Katrol ℹ️</th>
       </tr>
       <tr>
-        <th>TGS1</th><th>TGS2</th><th>TGS3</th>
-        ${showTgsk ? '<th>TK1</th><th>TK2</th><th>TK3</th>' : ''}
-        <th>UH1</th><th>UH2</th><th>UH3</th>
+        ${kompTh('tgs1')}${kompTh('tgs2')}${kompTh('tgs3')}
+        ${tkList.map(n => kompTh('tgsk' + n)).join('')}
+        ${kompTh('uh1')}${kompTh('uh2')}${kompTh('uh3')}
       </tr>`;
   }
 
@@ -1449,14 +1605,13 @@ function renderTabelNilai() {
       ${inputCell(i, 'tgs1', r.tgs1, true)}
       ${inputCell(i, 'tgs2', r.tgs2, true)}
       ${inputCell(i, 'tgs3', r.tgs3, true)}
-      ${showTgsk ? inputCell(i, 'tgsk1', r.tgsk1, true) + inputCell(i, 'tgsk2', r.tgsk2, true) + inputCell(i, 'tgsk3', r.tgsk3, true) : ''}
+      ${tkList.map(n => inputCell(i, 'tgsk' + n, r['tgsk' + n], true)).join('')}
       ${inputCell(i, 'uh1',  r.uh1,  true)}
       ${inputCell(i, 'uh2',  r.uh2,  true)}
       ${inputCell(i, 'uh3',  r.uh3,  true)}
       ${inputCell(i, 'pts',  r.pts,  true)}
       ${isGenap ? inputCell(i, 'pat', r.pat, true) : inputCell(i, 'pas', r.pas, true)}
-      ${showRata ? calcCell('nRataTGS_' + i, r.rata_tugas) + calcCell('nRataUH_' + i, r.rata_uh) : ''}
-      ${calcCell('nFix_'     + i, r.nilai_fix)}
+      ${showRata ? calcCell('nRataTGS_' + i, r.rata_tugas) + calcCell('nRataUH_' + i, r.rata_uh) + calcCell('nFix_' + i, r.nilai_fix) : ''}
       ${calcCell('nAsli_'    + i, r.nilai_asli)}
       ${calcCell('nAkhir_'   + i, r.nilai_akhir, true)}
     </tr>`;
@@ -2537,7 +2692,13 @@ function exportNilaiGoogleSheetUI() {
 
     const startRow  = parseInt(m[1]);
     const startField = m[2];
-    const startCol  = NILAI_FIELDS.indexOf(startField);
+    // Urutan kolom yang TAMPIL (TK tersembunyi & PAS/PAT semester lain dilewati)
+    const isGenapP = String(nilaiState.semester || '').toLowerCase().includes('genap');
+    const tkOn = (typeof _tkTampil_ === 'function') ? _tkTampil_() : [1, 2, 3];
+    const FIELDS = NILAI_FIELDS.filter(f =>
+      (!/^tgsk/.test(f) || tkOn.indexOf(Number(f.slice(4))) !== -1) &&
+      f !== (isGenapP ? 'pas' : 'pat'));
+    const startCol  = FIELDS.indexOf(startField);
     if (startCol < 0) return;
 
     e.preventDefault();
@@ -2570,7 +2731,7 @@ function exportNilaiGoogleSheetUI() {
       const cols = singleColMode ? [matrix[ri][0]] : matrix[ri];
       for (let ci = 0; ci < cols.length; ci++) {
         const colIdx = singleColMode ? startCol : (startCol + ci);
-        if (colIdx >= NILAI_FIELDS.length) continue;
+        if (colIdx >= FIELDS.length) continue;
 
         const parsed = parseNilaiPaste_(cols[ci]);
         if (parsed === null) {
@@ -2578,7 +2739,7 @@ function exportNilaiGoogleSheetUI() {
           continue;
         }
 
-        const field = NILAI_FIELDS[colIdx];
+        const field = FIELDS[colIdx];
         const useVal = String(parsed);
 
         nilaiOnInput(rowIdx, field, useVal);
